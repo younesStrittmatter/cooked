@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Grid Game</title>
+</head>
+<body>
+<!-- Optional: you can predefine the canvas manually if you want control over size/id -->
+<canvas id="scene" width="512" height="512"></canvas>
+<div>
+    <button id="move-left">Move Left</button>
+    <button id="move-right">Move Right</button>
+</div>
+
+<script type="module" src="/engine/static/engine_ui.js"></script>
+
+<script type="module">
+    import {renderScene} from "/extension/static0/renderer_ui.js";
+    import {sendIntent, fetchState} from "/engine/static/engine_ui.js";
+
+    document.getElementById("move-left").onclick = async () => await sendIntent("left");
+    document.getElementById("move-right").onclick = async () => await sendIntent("right");
+
+    async function update() {
+        const state = await fetchState();
+
+        await renderScene(state);
+    }
+
+    setInterval(update, 200);
+    update()
+</script>
+</body>
+</html>

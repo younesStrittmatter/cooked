@@ -1,0 +1,34 @@
+from engine.game_object import GameObject
+
+
+class Basic2D(GameObject):
+    def __init__(self, id, x, y, w, h, src,
+                 src_x=0, src_y=0, src_w=None, src_h=None,
+                 ):
+        super().__init__(id=id)
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+        self.src = src
+        self.src_x = src_x
+        self.src_y = src_y
+        self.src_w = src_w
+        self.src_h = src_h
+
+    def update(self, actions: dict, delta_time: float):
+        pass
+
+    def serialize(self) -> dict:
+        return {
+            "id": self.id,
+            "x": self.x,
+            "y": self.y,
+            "w": self.w,
+            "h": self.h,
+            "src": self.src,
+            "srcX": self.src_x,
+            "srcY": self.src_y,
+            "srcW": self.src_w,
+            "srcH": self.src_h
+        }
