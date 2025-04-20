@@ -1,11 +1,67 @@
+from abc import abstractmethod
+
 from engine.extensions.topDownGridWorld.grid import Tile
 from engine.extensions.renderer2d.basic_2d import Basic2D
 from engine.extensions.topDownGridWorld.intent.intents import MoveToIntent
 from spoiled_broth.agent.intents import PickUpIntent, ItemExchangeIntent, CuttingBoardIntent, DeliveryIntent
 import random
+import numpy as np
+
+TYPE_TILES = 6
+
+ITEM_LIST = [
+    "tomato", "pumpkin", "cabbage", "plate",
+    "tomato_cut", "pumpkin_cut", "cabbage_cut",
+    "tomato_salad", "pumpkin_salad", "cabbage_salad",
+    "unknown", None  # fallback types
+]
 
 
-class Floor(Tile):
+class SoiledBrothTile(Tile):
+    _type = 0
+
+    def _position_vec(self):
+        return [self.slot_x / self.game.grid.width, self.slot_y / self.game.grid.height]
+
+    def _clickable_vec(self):
+        return [0] if self.clickable is None else [1]
+
+    def _type_vec(self):
+        vec = [0] * TYPE_TILES
+        if hasattr(self, '_type'):
+            vec[self._type] = 1
+        return vec
+
+    def _walkable_vec(self):
+        return [1] if self.is_walkable else [0]
+
+    def _item_vec(self):
+        vec = [0] * len(ITEM_LIST)
+        if hasattr(self, 'item') and self.item in ITEM_LIST:
+            vec[ITEM_LIST.index(self.item)] = 1
+        return vec
+
+    def _progress_vec(self):
+        return [0] * 3
+
+    def to_vector(self):
+        return np.array(
+            self._position_vec() +
+            self._clickable_vec() +
+            self._type_vec() +
+            self._walkable_vec() +
+            self._item_vec() +
+            self._progress_vec(),
+            dtype=np.float32
+        )
+
+    def to_language(self, agent):
+        raise NotImplementedError()
+
+
+class Floor(SoiledBrothTile):
+    _type = 0
+
     def __init__(self, game):
         super().__init__(game=game)
         self.is_walkable = True
@@ -14,7 +70,9 @@ class Floor(Tile):
         self.add_drawable(Basic2D(src='world/basic-floor.png', z_index=0, src_y=src_y))
 
 
-class Wall(Tile):
+class Wall(SoiledBrothTile):
+    _type = 1
+
     def __init__(self, game):
         super().__init__(game=game)
         self.is_walkable = False
@@ -22,7 +80,9 @@ class Wall(Tile):
         self.add_drawable(Basic2D(src='world/basic-wall.png', z_index=0))
 
 
-class Counter(Tile):
+class Counter(SoiledBrothTile):
+    _type = 2
+
     def __init__(self, game):
         super().__init__(game=game)
         self.is_walkable = False
@@ -65,7 +125,9 @@ class Counter(Tile):
         return [MoveToIntent(self), ItemExchangeIntent(self)]
 
 
-class Dispenser(Tile):
+class Dispenser(SoiledBrothTile):
+    _type = 3
+
     def __init__(self, game, item):
         super().__init__(game=game)
         self.is_walkable = False
@@ -86,7 +148,9 @@ class Dispenser(Tile):
         return [MoveToIntent(self), PickUpIntent(self)]
 
 
-class CuttingBoard(Tile):
+class CuttingBoard(SoiledBrothTile):
+    _type = 4
+
     def __init__(self, game):
         super().__init__(game=game)
         self.is_walkable = False
@@ -129,18 +193,30 @@ class CuttingBoard(Tile):
     def get_intent(self, agent):
         return [MoveToIntent(self), CuttingBoardIntent(self)]
 
+    def _progress_vec(self):
+        if self.item is None:
+            return [0, 0, 0]
+        stage = self.cut_stage  # 0–3
+        vec = [0, 0, 0]
+        if 1 <= stage < 2:
+            vec[0] = 1  # early chop
+        elif 2 <= stage < 3:
+            vec[1] = 1  # mid chop
+        elif stage >= 3:
+            vec[2] = 1  # done
+        return vec
 
-class Delivery(Tile):
+
+class Delivery(SoiledBrothTile):
+    _type = 5
+
     def __init__(self, game):
         super().__init__(game=game)
         self.is_walkable = False
         self.add_drawable(Basic2D(src='world/delivery.png', z_index=0))
 
-
-
     def update(self, agent, delta_time):
         super().update(agent, delta_time)
-
 
     def get_intent(self, agent):
         return [MoveToIntent(self), DeliveryIntent(self)]

@@ -22,9 +22,10 @@ class EngineRunner:
     def start(self):
         self.engine_thread.start()
         if self.agent_map:
-            for agent_id in self.agent_map:
+            for agent_id, controller in self.agent_map.items():
                 if hasattr(self.game, "add_agent"):
                     self.game.add_agent(agent_id)
+                controller.agent = self.game.gameObjects[agent_id]
             self.agent_thread = Thread(target=self._run_agents, daemon=True)
             self.agent_thread.start()
 

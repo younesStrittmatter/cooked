@@ -1,6 +1,7 @@
 from engine.app.session_app import SessionApp
 from spoiled_broth.game import SpoiledBroth as Game
-from engine.extensions.topDownGridWorld.ai_controller.random_tile_clicker import RandomTileClicker
+# from engine.extensions.topDownGridWorld.ai_controller.random_tile_clicker import RandomTileClicker
+from spoiled_broth.rl.rl_controller import RLController
 from engine.extensions.renderer2d.renderer_ui import Renderer2DModule
 from pathlib import Path
 
@@ -14,7 +15,7 @@ path_root = Path(__file__).resolve().parent / "spoiled_broth"
 engine_app = SessionApp(
     game_factory=Game,
     ui_modules=[Renderer2DModule()],
-    agent_map={"ai_1": RandomTileClicker('ai_1')},
+    agent_map={"ai_1": RLController('ai_1')},
     path_root=path_root,
     tick_rate=24,
     ai_tick_rate=1,

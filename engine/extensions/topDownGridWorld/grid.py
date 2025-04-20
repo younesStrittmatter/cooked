@@ -1,3 +1,5 @@
+from abc import abstractmethod
+
 from engine.extensions.gridworld import grid
 from PIL import Image
 
@@ -49,3 +51,4 @@ class Tile(grid.Tile):
 
     def get_intent(self, agent):
         return None
+

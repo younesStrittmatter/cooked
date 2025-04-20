@@ -1,11 +1,15 @@
+import numpy as np
+
 from engine.extensions.renderer2d.basic_2d import Basic2D
 from engine.extensions.topDownGridWorld import agent
 import random
+from spoiled_broth.world.tiles import ITEM_LIST
 
 
 class Agent(agent.Agent):
-    def __init__(self, agent_id, grid):
+    def __init__(self, agent_id, grid, game):
         super().__init__(agent_id, grid)
+        self.game = game
         self.path = []
         self.path_index = 0
         self.move_target = None
@@ -98,4 +102,12 @@ class Agent(agent.Agent):
             self.drawables[6].width = 0
             self.drawables[6].height = 0
 
-        # animate
+    def to_vector(self):
+        _pos = [self.slot_x / self.grid.width, self.slot_y / self.grid.height]
+        _item = [0] * len(ITEM_LIST)
+        if self.item in ITEM_LIST:
+            _item[ITEM_LIST.index(self.item)] = 1
+
+        return np.array(
+            _pos + _item + [self.speed] + [self.cut_speed] + [1.0 if self.is_moving else 0.0], dtype=np.float32
+        )
