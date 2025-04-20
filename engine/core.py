@@ -3,20 +3,26 @@ from typing import Dict, Optional
 
 
 class Engine:
-    def __init__(self, game,
-                 tick_rate: int = 20,
-                 run_max_speed: bool = False,
-                 run_fixed_delta: bool = False,
+    def __init__(self,
+                 game,
+                 tick_rate: int,
+                 is_max_speed: bool,
                  ):
         self.game = game
         self.tick_interval = 1.0 / tick_rate
         self.running = False
         self.tick_count = 0
-        self.start_time = time.time()
-        self.last_time = time.time()
-        self.run_max_speed = run_max_speed
-        self.run_fixed_delta = run_fixed_delta
-        self.intent_buffer: Dict[str, str] = {}  # agent_id -> action
+
+        if not is_max_speed:
+            self.start_time = time.time()
+            self.last_time = self.start_time
+        else:
+            self.start_time = 0
+            self.last_time = 0
+
+        self.is_max_speed = is_max_speed
+
+        self.intent_buffer: Dict[str, str] = {}
 
     def submit_intent(self, agent_id: str, action: str):
         self.intent_buffer[agent_id] = action
@@ -28,21 +34,27 @@ class Engine:
 
     def start_loop(self, max_ticks: Optional[int] = None):
         self.running = True
-        self.start_time = time.time()
-        self.last_time = self.start_time
+        if not self.is_max_speed:
+            self.start_time = time.time()
+            self.last_time = self.start_time
+        else:
+            self.start_time = 0
+            self.last_time = 0
+
         while self.running and not self.game.done:
             if max_ticks is not None and self.tick_count >= max_ticks:
                 break
 
-            start_time = time.time()
-            delta_time = start_time - self.last_time
-            self.last_time = start_time
-            if self.run_fixed_delta:
+            if not self.is_max_speed:
+                start_time = time.time()
+                delta_time = start_time - self.last_time
+                self.last_time = start_time
+            else:
                 delta_time = self.tick_interval
 
             self.tick(delta_time)
-            elapsed = time.time() - start_time
-            if not self.run_max_speed:
+            if not self.is_max_speed:
+                elapsed = time.time() - start_time
                 sleep_time = max(0, self.tick_interval - elapsed)
                 time.sleep(sleep_time)
 

@@ -7,7 +7,7 @@ def register_engine_routes(app, session_manager):
         session = session_manager.find_or_create_session()
         session.add_agent(agent_id)
 
-        if session.is_full(session_manager.max_agents):
+        if session.is_full(session_manager.n_players):
             session.start()
 
         return jsonify({
@@ -48,7 +48,6 @@ def register_engine_routes(app, session_manager):
 
             for module in modules:
                 payload.update(module.serialize_for_agent(game, engine, agent_id))
-
             return jsonify(payload)
 
         return jsonify({"error": "Invalid session"}), 404

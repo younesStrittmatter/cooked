@@ -27,7 +27,6 @@ def register_static_routes(app, path_root, ui_modules=None):
     def serve_engine_static(filename):
         return send_from_directory(static_dir_engine, filename)
 
-    # 🔁 Mount each UI module's static files
     for idx, module in enumerate(ui_modules):
         static_path = module.get_static_path() if hasattr(module, "get_static_path") else None
         if static_path:

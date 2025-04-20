@@ -1,8 +1,11 @@
 from abc import abstractmethod
+import secrets
 
 
 class GameObject:
-    def __init__(self, id: str):
+    def __init__(self, id: str = None):
+        if id is None:
+            id = secrets.token_hex(8)
         self.id = id
 
     @abstractmethod
@@ -21,4 +24,4 @@ class GameObject:
 
     @abstractmethod
     def serialize(self) -> dict:
-        pass
+        return {'id': self.id}

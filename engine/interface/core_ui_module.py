@@ -24,20 +24,10 @@ class CoreUIModule(UIModule):
         for _, obj in game.gameObjects.items():
             collect_serialized(obj)
 
-        # for obj in game.gameObjects.values():
-        #
-        #     if hasattr(obj, "serialize_for_agent"):
-        #         data = obj.serialize_for_agent(game, engine, agent_id)
-        #         if isinstance(data, dict):
-        #             objects.append(data)
-        #         elif isinstance(data, list):
-        #             objects.extend(data)
+
         return {'gameObjects': objects}
 
-        res = {}
-        for key, obj in game.gameObjects.items():
-            res[key] = obj.serialize()
-        return res
+
 
     def get_static_path(self):
         return Path(__file__).parent / "static"

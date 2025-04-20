@@ -5,12 +5,13 @@ let canvas = document.getElementById("scene");
 if (!canvas) {
     canvas = document.createElement("canvas");
     canvas.id = "scene";
-    canvas.width = 512;
-    canvas.height = 512;
+    canvas.width = 128;
+    canvas.height = 128;
     document.body.appendChild(canvas);
 }
 
 const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
 const spriteCache = {};
 
 function loadSprite(src) {
@@ -26,20 +27,24 @@ function loadSprite(src) {
     });
 }
 
+
+
 export async function renderScene(state) {
 
     const objects = state['gameObjects'] || [];
+    objects.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     for (const obj of objects) {
 
+
         if (obj.src) {
             const img = await loadSprite(obj.src);
-            const x = obj.x;
-            const y = obj.y;
-            const w = obj.w;
-            const h = obj.h;
+            const x = obj.left;
+            const y = obj.top;
+            const w = obj.width;
+            const h = obj.height;
             const sx = obj.srcX || 0;
             const sy = obj.srcY || 0;
             const sw = obj.srcW || img.width;

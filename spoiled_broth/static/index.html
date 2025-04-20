@@ -3,23 +3,54 @@
 <head>
     <meta charset="UTF-8"/>
     <title>Grid Game</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: black;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #scene {
+            image-rendering: pixelated;
+            display: block;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100vmin;
+            height: 100vmin;
+        }
+    </style>
 </head>
+
 <body>
-<canvas id="scene" width="512" height="512" style="background: black"></canvas>
+<canvas id="scene" width="128" height="128" style="background: black"></canvas>
 <script type="module" src="/engine/static/engine_ui.js"></script>
 
 <script type="module">
     import {renderScene} from "/extension/static0/renderer_ui.js";
     import {sendIntent, fetchState} from "/engine/static/engine_ui.js";
+
     let canvas = document.getElementById("scene");
     const rect = canvas.getBoundingClientRect();
     let state = null;
 
-    canvas.addEventListener("click", async (event) => {
-        // const state = await fetchState();
+    function getClickPosition(event, canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
 
-        const clickX = event.clientX - rect.left;
-        const clickY = event.clientY - rect.top;
+        const x = (event.clientX - rect.left) * scaleX;
+        const y = (event.clientY - rect.top) * scaleY;
+
+        return {x, y};
+    }
+
+    canvas.addEventListener("click", async (event) => {
+
+        const {x: clickX, y: clickY} = getClickPosition(event, canvas);
 
 
         const objects = state['gameObjects'] || [];
@@ -28,11 +59,9 @@
 
 
             if (obj.isClickable) {
-                const withinX = clickX >= obj.x && clickX <= obj.x + obj.w;
-                const withinY = clickY >= obj.y && clickY <= obj.y + obj.h;
-
+                const withinX = clickX >= obj.left && clickX <= obj.left + obj.width;
+                const withinY = clickY >= obj.top && clickY <= obj.top + obj.height;
                 if (withinX && withinY) {
-                    console.log("Clicked on", obj.id);
                     await sendIntent({type: "click", target: obj.id});
                     return;
                 }
@@ -40,13 +69,19 @@
         }
     });
 
-    async function update() {
+    let lastTime = performance.now();
+
+    async function loop(time) {
+        const delta = time - lastTime;
+        lastTime = time;
         state = await fetchState();
+        console.log(state)
         await renderScene(state);
+
+        requestAnimationFrame(loop);
     }
 
-    setInterval(update, 32);
-    update()
+    requestAnimationFrame(loop);
 </script>
 </body>
 </html>
