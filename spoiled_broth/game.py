@@ -80,11 +80,11 @@ def game_to_vector(game, agent_id):
 
 def random_game_state(game, item_list=['tomato', 'plate', 'tomato_cut', 'tomato_salad']):
     chance = random.random()
-    if chance < 0.3: # easy
+    if chance < 0.4: # easy
         _item_list = item_list + ['tomato_salad']
-    elif chance < 0.4: # mid
+    elif chance < 0.6: # mid
         _item_list = [i for i in item_list if not i.endswith('salad')]
-    elif chance < 0.6: # hard
+    elif chance < 0.8: # hard
         _item_list = [i for i in item_list if not (i.endswith('cut') or i.endswith('salad'))] + [None]
     else:
         _item_list = [None]
@@ -96,7 +96,7 @@ def random_game_state(game, item_list=['tomato', 'plate', 'tomato_cut', 'tomato_
                 if random.random() < .6:
                     tile.item = random.choice(_item_list)
             if isinstance(tile, CuttingBoard):
-                if random.random() < .6 and chance < 0.5:
+                if random.random() < .6 and chance < 0.6:
                     tile.item = random.choice(['tomato', None])
 
     # Optionally randomize agent inventory

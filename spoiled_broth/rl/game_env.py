@@ -1,22 +1,20 @@
 import random
 
 from pettingzoo import ParallelEnv
-from pettingzoo.utils import agent_selector
 from gymnasium import spaces
 import numpy as np
 from spoiled_broth.config import *
 
 from spoiled_broth.game import SpoiledBroth, game_to_vector, random_game_state
 
-
 MAX_PLAYERS = 4
 
 NON_CLICKABLE_PENALTY = 0.05
 IDLE_PENALTY = 0.01
 
-REWARD_ITEM_CUT = 0.2
-REWARD_SALAD_CREATED = 0.4 + REWARD_ITEM_CUT  # (+ REWARD_ITEM_CUT sinc creating a salad "loses a cut item")
-REWARD_DELIVERED = 1. + REWARD_SALAD_CREATED  # (+ REWARD_SALAD_CREATED since delivering "loses a salad")
+REWARD_ITEM_CUT = 0.1
+REWARD_SALAD_CREATED = 0.2 + REWARD_ITEM_CUT  # (+ REWARD_ITEM_CUT sinc creating a salad "loses a cut item")
+REWARD_DELIVERED = 5. + REWARD_SALAD_CREATED  # (+ REWARD_SALAD_CREATED since delivering "loses a salad")
 
 
 def init_game(agents):
@@ -52,12 +50,8 @@ class GameEnv(ParallelEnv):
 
         self.possible_agents = ["ai_rl_1", "ai_rl_2"]
         self.agents = self.possible_agents[:]
-        self.agent_selector = agent_selector(self.agents)
-        self._agent_selector = self.agent_selector
 
         self.game, self.action_spaces, self._clickable_mask = init_game(self.agents)
-        for agent_id in self.agents:
-            self.game.add_agent(agent_id)
 
         self.agent_map = {
             agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents
@@ -78,7 +72,7 @@ class GameEnv(ParallelEnv):
         self.cut_last = 0
         self.cut_time_accumulated = 0
         for thing in self.game.gameObjects.values():
-            if hasattr(thing, 'tiles' ):
+            if hasattr(thing, 'tiles'):
                 tiles = thing.tiles
                 for r in tiles:
                     for t in r:
@@ -96,7 +90,6 @@ class GameEnv(ParallelEnv):
                 if thing.item and thing.item.endswith("_cut"):
                     self.cut_last += 1
             if hasattr(thing, "cut_time_accumulated"):
-
                 self.cut_time_accumulated += thing.cut_time_accumulated
 
     def reset(self, seed=None, options=None):
@@ -160,7 +153,7 @@ class GameEnv(ParallelEnv):
         # Submit intents from each agent
 
         # If the agent clicks on a "non-clickable" tile, apply a penalty
-        _non_clickable_penalty = 0.0
+        agent_penalties = {agent_id: 0.0 for agent_id in self.agents}
         for agent_id, action in actions.items():
             # Convert flat index to tile
             grid_w = self.game.grid.width
@@ -171,7 +164,7 @@ class GameEnv(ParallelEnv):
             if tile and tile.clickable is not None:
                 tile.click(agent_id)
             else:
-                _non_clickable_penalty = NON_CLICKABLE_PENALTY
+                agent_penalties[agent_id] = NON_CLICKABLE_PENALTY
 
         # Advance the game state by one step (simulate one tick)
         self.game.step({}, delta_time=1 / cf_AI_TICK_RATE)
@@ -187,23 +180,23 @@ class GameEnv(ParallelEnv):
                     for t in r:
                         if hasattr(t, "item"):
                             if t.item and t.item.endswith("_salad"):
-                                self.salads_last += 1
+                                salads_total += 1
                             if t.item and t.item.endswith("_cut"):
-                                self.cut_last += 1
+                                cut_items += 1
                         if hasattr(t, "cut_time_accumulated"):
-                            self.cut_time_accumulated += t.cut_time_accumulated
+                            cut_time_accumulated += t.cut_time_accumulated
 
             if hasattr(thing, "item"):
                 if thing.item and thing.item.endswith("_salad"):
-                    self.salads_last += 1
+                    salads_total += 1
                 if thing.item and thing.item.endswith("_cut"):
-                    self.cut_last += 1
+                    cut_items += 1
             if hasattr(thing, "cut_time_accumulated"):
-                self.cut_time_accumulated += thing.cut_time_accumulated
+                cut_time_accumulated += thing.cut_time_accumulated
 
         intermediate_rewards = ((salads_total - self.salads_last) * REWARD_SALAD_CREATED
                                 + (cut_items - self.cut_last) * REWARD_ITEM_CUT +
-                                (cut_time_accumulated - self.cut_time_accumulated) * REWARD_ITEM_CUT/8)
+                                (cut_time_accumulated - self.cut_time_accumulated) * REWARD_ITEM_CUT / 8)
 
         # Only give the reward once
         self.salads_last = salads_total
@@ -215,14 +208,13 @@ class GameEnv(ParallelEnv):
         new_score = self.game.gameObjects["score"].score
         reward = ((new_score - self._last_score) * REWARD_DELIVERED
                   + intermediate_rewards
-                  - _non_clickable_penalty
                   - IDLE_PENALTY)
 
         if (new_score - self._last_score) > 0:
             print(f"Agent delivered item, new score: {new_score}")
         self._last_score = new_score
         for agent_id in self.agents:
-            self.rewards[agent_id] = reward
+            self.rewards[agent_id] = reward - agent_penalties[agent_id]
 
         # You can customize these based on game logic later
         self.dones = {agent: False for agent in self.agents}
