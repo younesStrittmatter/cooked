@@ -13,6 +13,11 @@ folder: `spoiled_broth`
   - If you set `max_speed` to `True` the game will run at "max speed" using a fixed delta time (set with tick_rate). This is useful for training agents.
   - The `ai_tick_rate` determines how often the AI will make a decision.
 
+### Training
+In the folder `spoiled_broth/rl` you can find the training scripts.
+- `spoiled_broth/rl/train.py`: This is the main training script. It uses the `spoiled_broth/rl/agent.py` file to create the agent and train it.
+- `spoiled_broth/rl/game_env.py`: This is the "main" game environment used for training. It contains all the logic used for calculating rewards, stepping and so on.
+
 
 
 Python-Version: 3.13

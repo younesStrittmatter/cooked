@@ -50,9 +50,11 @@ class CuttingBoardIntent(_base_intent.Intent):
                 if self.tile.cut_stage >= 3:
                     _a_temp = agent.item
                     agent.item = f'{self.tile.item}_cut'
-                    if _a_temp in ['tomato', 'pumpkin', 'cabbage', None]:
+                    if _a_temp in ['tomato', 'pumpkin', 'cabbage']:
                         self.tile.cut_time_accumulated = 0
                         self.tile.item = _a_temp
+                    else:
+                        self.tile.item = None
                     self.has_ended = True
                 elif agent.item is None:
                     self.has_started = True

@@ -175,6 +175,7 @@ class CuttingBoard(SoiledBrothTile):
 
     def update(self, agent, delta_time):
         super().update(agent, delta_time)
+        self.cut_time_accumulated = min(4, self.cut_time_accumulated)
 
         if self.item is not None:
             self.drawables[2].width = 16

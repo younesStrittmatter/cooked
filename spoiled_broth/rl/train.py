@@ -36,16 +36,16 @@ def main():
 
     # Then convert to VecEnv
     env = ss.pettingzoo_env_to_vec_env_v1(env)
-    env = ss.concat_vec_envs_v1(env, 4, num_cpus=8, base_class="stable_baselines3")
+    env = ss.concat_vec_envs_v1(env, 4, num_cpus=4, base_class="stable_baselines3")
 
     print("🚀 Starting training...")
     try:
         print('loading model')
         model = PPO.load(save_path, env=env)
     except Exception as e:
-        model = PPO("MlpPolicy", env, verbose=1)
+        model = PPO("MlpPolicy", env, ent_coef=.05 ,verbose=1)
     model.learn(
-        total_timesteps=1_000_000,
+        total_timesteps=100_000_000,
         callback=SimpleLoggingCallback(check_freq=10_000, model=model),
     )
 
