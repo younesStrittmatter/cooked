@@ -16,6 +16,8 @@ REWARD_ITEM_CUT = 0.1
 REWARD_SALAD_CREATED = 0.2 + REWARD_ITEM_CUT  # (+ REWARD_ITEM_CUT sinc creating a salad "loses a cut item")
 REWARD_DELIVERED = 5. + REWARD_SALAD_CREATED  # (+ REWARD_SALAD_CREATED since delivering "loses a salad")
 
+STEP_PER_EPISODE = 1000
+
 
 def init_game(agents):
     map_nr = random.randint(1, 4)
@@ -45,7 +47,7 @@ class GameEnv(ParallelEnv):
     def __init__(self):
         super().__init__()
         self._step_counter = 0
-        self._max_steps_per_episode = 100
+        self._max_steps_per_episode = STEP_PER_EPISODE
         self.render_mode = None
 
         self.possible_agents = ["ai_rl_1", "ai_rl_2"]
