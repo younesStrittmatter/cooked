@@ -25,7 +25,7 @@ engine_app = SessionApp(
     #     'ai_6': RandomWalk('ai_6'),
     # },
     path_root=path_root,
-    tick_rate=12,
+    tick_rate=24,
     ai_tick_rate=24,
     n_players=2,
     is_max_speed=False

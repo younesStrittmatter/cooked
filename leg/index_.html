@@ -7,13 +7,13 @@
         html, body {
             margin: 0;
             padding: 0;
-            background: black;
+            background: #333;
             height: 100%;
             overflow: hidden;
         }
 
         #scene {
-            image-rendering: pixelated;
+
             display: block;
             position: absolute;
             top: 50%;
@@ -21,22 +21,25 @@
             transform: translate(-50%, -50%);
             width: 100vmin;
             height: 100vmin;
+
         }
     </style>
 </head>
 
 <body>
-<canvas id="scene" width="128" height="128" style="background: black"></canvas>
+<canvas id="scene" width="512" height="512" style="background: black"></canvas>
 <script type="module" src="/engine/static/engine_ui.js"></script>
 
 
 <script type="module">
-    import {renderScene} from "/extensions/renderer2d/static/renderer_ui.js";
+    import {renderScene, updateMouse} from "/extensions/renderer2d/static/renderer_ui.js";
     import {fetchState} from "/engine/static/engine_ui.js";
 
     async function loop() {
         const state = await fetchState();
+
         await renderScene(state);
+        await updateMouse();
         requestAnimationFrame(loop);
     }
 

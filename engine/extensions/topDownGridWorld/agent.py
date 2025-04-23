@@ -115,7 +115,6 @@ class Agent(GameObject):
             drawable.top = self.y - int(self.grid.tile_size // 2)
 
     def set_intents(self, intents: List[Intent]):
-
         self.intents = intents
 
     def update(self, actions: dict, delta_time: float):

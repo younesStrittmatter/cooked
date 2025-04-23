@@ -50,31 +50,60 @@ canvas.addEventListener("click", async (event) => {
     }
 });
 
-export async function renderScene(prevState, currState, t) {
-    const objects = currState['gameObjects'] || [];
+export async function renderScene(state) {
+    currentState = state;
+    const objects = state['gameObjects'] || [];
+    objects.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+    const rect = canvas.getBoundingClientRect();
+    let scale_x = 1.
+    let scale_y = 1.;
     for (const obj of objects) {
-        if (!obj.src) continue;
+        if (obj.src) {
 
-        const img = await loadSprite(obj.src);
-        const id = obj.id;
+            if (obj.normalize) {
+                scale_x = canvas.width;
+                scale_y = canvas.height;
+            }
+            const img = await loadSprite(obj.src);
+            const objId = obj.id;
+            const targetX = obj.left * scale_x;
+            const targetY = obj.top * scale_y;
+            let prev = prevPositions[objId] || {x: targetX, y: targetY};
 
-        const currX = obj.left * canvas.width;
-        const currY = obj.top * canvas.height;
+            const maxStep = 16; // Max pixels per frame — tweak this
+            let dx = targetX - prev.x;
+            let dy = targetY - prev.y;
 
-        let prevObj = (prevState.gameObjects || []).find(o => o.id === id);
-        const prevX = prevObj ? prevObj.left * canvas.width : currX;
-        const prevY = prevObj ? prevObj.top * canvas.height : currY;
+            const dist = Math.hypot(dx, dy);
 
-        const x = prevX + (currX - prevX) * t;
-        const y = prevY + (currY - prevY) * t;
+// Snap if teleporty
+            if (dist > 50) {
+                prev = {x: targetX, y: targetY};
+                dx = 0;
+                dy = 0;
+            }
 
-        const w = obj.width * canvas.width;
-        const h = obj.height * canvas.height;
+            if (dist > maxStep) {
+                dx = (dx / dist) * maxStep;
+                dy = (dy / dist) * maxStep;
+            }
 
-        ctx.drawImage(img, obj.srcX || 0, obj.srcY || 0, obj.srcW || img.width, obj.srcH || img.height,
-                      Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+            const x = prev.x + dx;
+            const y = prev.y + dy;
+
+            prevPositions[objId] = {x, y};
+            const w = obj.width * scale_x;
+            const h = obj.height * scale_y;
+
+            const sx = obj.srcX || 0;
+            const sy = obj.srcY || 0;
+            const sw = obj.srcW || img.width;
+            const sh = obj.srcH || img.height;
+            ctx.drawImage(img, sx, sy, sw, sh, Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+            scale_x = 1.;
+            scale_y = 1.;
+        }
     }
 }
 

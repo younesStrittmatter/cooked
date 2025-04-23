@@ -27,16 +27,17 @@ def register_static_routes(app, path_root, ui_modules=None):
     def serve_engine_static(filename):
         return send_from_directory(static_dir_engine, filename)
 
-    for idx, module in enumerate(ui_modules):
+    for module in ui_modules:
         static_path = module.get_static_path() if hasattr(module, "get_static_path") else None
         if static_path:
-            route_prefix = f"/extension/static{idx}/<path:filename>"
+            module_name = static_path.parent.name  # Gets e.g., "renderer2d"
+            route_prefix = f"/extensions/{module_name}/static/<path:filename>"
 
             def make_handler(directory):
                 return lambda filename: send_from_directory(directory, filename)
 
             app.add_url_rule(
                 route_prefix,
-                endpoint=f"extension_static_{idx}",
+                endpoint=f"extension_static_{module_name}",
                 view_func=make_handler(static_path)
             )

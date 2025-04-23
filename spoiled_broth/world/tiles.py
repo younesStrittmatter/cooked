@@ -67,7 +67,7 @@ class Floor(SoiledBrothTile):
         self.is_walkable = True
         self.clickable = None
         src_y = random.randint(1, 28) * 16
-        self.add_drawable(Basic2D(src='world/basic-floor.png', z_index=0, src_y=src_y))
+        self.add_drawable(Basic2D(src='world/basic-floor.png', z_index=0, src_y=src_y, normalize=False))
 
 
 class Wall(SoiledBrothTile):
@@ -77,7 +77,7 @@ class Wall(SoiledBrothTile):
         super().__init__(game=game)
         self.is_walkable = False
         self.clickable = None
-        self.add_drawable(Basic2D(src='world/basic-wall.png', z_index=0))
+        self.add_drawable(Basic2D(src='world/basic-wall.png', z_index=0, normalize=False))
 
 
 class Counter(SoiledBrothTile):
@@ -87,8 +87,8 @@ class Counter(SoiledBrothTile):
         super().__init__(game=game)
         self.is_walkable = False
         self.item = None
-        self.add_drawable(Basic2D(src='world/basic-counter.png', z_index=0))
-        self.add_drawable(Basic2D(src='world/item-on-counter.png', z_index=1))
+        self.add_drawable(Basic2D(src='world/basic-counter.png', z_index=0, normalize=False))
+        self.add_drawable(Basic2D(src='world/item-on-counter.png', z_index=1, normalize=False))
         self.drawables[1].width = 0
         self.drawables[1].height = 0
 
@@ -131,7 +131,7 @@ class Dispenser(SoiledBrothTile):
     def __init__(self, game, item):
         super().__init__(game=game)
         self.is_walkable = False
-        self.add_drawable(Basic2D(src='world/basic-counter.png', z_index=0))
+        self.add_drawable(Basic2D(src='world/basic-counter.png', z_index=0, normalize=False))
         self.item = item
         src_y = 0
         if item == 'tomato':
@@ -142,7 +142,7 @@ class Dispenser(SoiledBrothTile):
             src_y = 32
         if item == 'plate':
             src_y = 48
-        self.add_drawable(Basic2D(src='world/item-dispenser.png', z_index=0, src_y=src_y))
+        self.add_drawable(Basic2D(src='world/item-dispenser.png', z_index=0, src_y=src_y, normalize=False))
 
     def get_intent(self, agent):
         return [MoveToIntent(self), PickUpIntent(self)]
@@ -154,9 +154,9 @@ class CuttingBoard(SoiledBrothTile):
     def __init__(self, game):
         super().__init__(game=game)
         self.is_walkable = False
-        self.add_drawable(Basic2D(src='world/basic-counter.png', z_index=0))
-        self.add_drawable(Basic2D(src='world/cutting-board.png', z_index=1))
-        self.add_drawable(Basic2D(src='world/item-on-board.png', z_index=2))
+        self.add_drawable(Basic2D(src='world/basic-counter.png', z_index=0, normalize=False))
+        self.add_drawable(Basic2D(src='world/cutting-board.png', z_index=1, normalize=False))
+        self.add_drawable(Basic2D(src='world/item-on-board.png', z_index=2, normalize=False))
         self.drawables[2].width = 0
         self.drawables[2].height = 0
         self.item = None
@@ -214,7 +214,7 @@ class Delivery(SoiledBrothTile):
     def __init__(self, game):
         super().__init__(game=game)
         self.is_walkable = False
-        self.add_drawable(Basic2D(src='world/delivery.png', z_index=0))
+        self.add_drawable(Basic2D(src='world/delivery.png', z_index=0, normalize=False))
 
     def update(self, agent, delta_time):
         super().update(agent, delta_time)

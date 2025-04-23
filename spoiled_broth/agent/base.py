@@ -22,16 +22,20 @@ class Agent(agent.Agent):
         mustache_n = random.randint(0, 8)
         skin_n = random.randint(0, 8)
 
-        husk_2d = Basic2D(src='agent/cook-husk.png', z_index=1, src_y=0, src_w=16, src_h=16, width=16, height=16)
-        hair_2d = Basic2D(src=f'agent/hair/{hair_n}.png', z_index=2, src_w=16, src_h=16, width=16, height=16)
+        husk_2d = Basic2D(src='agent/cook-husk.png', z_index=1, src_y=0, src_w=16, src_h=16, width=16, height=16,
+                          normalize=False)
+        hair_2d = Basic2D(src=f'agent/hair/{hair_n}.png', z_index=2, src_w=16, src_h=16, width=16, height=16,
+                          normalize=False)
         mustache_2d = Basic2D(src=f'agent/mustache/{mustache_n}.png', z_index=2, src_w=16, src_h=16, width=16,
-                              height=16)
-        head_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2, src_y=0, src_w=16, src_h=16, width=16, height=16)
+                              height=16, normalize=False)
+        head_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2, src_y=0, src_w=16, src_h=16, width=16, height=16,
+                          normalize=False)
         hands_no_item_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2, src_y=16, src_w=16, src_h=16, width=16,
-                                   height=16)
+                                   height=16, normalize=False)
         hands_with_item_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2, src_y=32, src_w=16, src_h=16, width=0,
-                                     height=0)
-        item_held_2d = Basic2D(src='agent/items-held.png', z_index=3, src_y=0, src_w=16, src_h=16, width=0, height=0)
+                                     height=0, normalize=False)
+        item_held_2d = Basic2D(src='agent/items-held.png', z_index=3, src_y=0, src_w=16, src_h=16, width=0, height=0,
+                               normalize=False)
 
         self.src_x = 0
         self.src_x_n = 0

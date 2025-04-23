@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from engine.game_object import GameObject
 
-
 class Clickable2D(GameObject):
     is_clickable = True
 
@@ -14,7 +13,6 @@ class Clickable2D(GameObject):
         self.on_click = on_click
 
     def update(self, actions: dict, delta_time: float):
-
         for agent_id, action in actions.items():
             if action.get("type") == "click" and action.get("target") == self.id:
                 if self.on_click:

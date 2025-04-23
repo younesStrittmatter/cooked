@@ -7,8 +7,7 @@ class BaseGame(ABC):
         self.gameObjects = {}
 
     def step(self, actions: dict, delta_time: float):
-
-        for obj in self.gameObjects.values():
+        for obj in list(self.gameObjects.values()):
             self._update_recursive(obj, actions, delta_time)
 
     def _update_recursive(self, obj, actions: dict, delta_time: float):
