@@ -1,33 +1,25 @@
 from engine.app.session_app import SessionApp
-from coboxing.game import CoBoxing as Game
-from coboxing.ai.random_controller import RandomWalk
-
+from spoiled_broth.game import SpoiledBroth as Game
+from spoiled_broth.rl.rl_controller import RLController
 from engine.extensions.renderer2d.renderer_ui import Renderer2DModule
 from pathlib import Path
-
+from spoiled_broth.config import *
 
 import logging
 
 log = logging.getLogger('werkzeug')
 log.disabled = True
 
-path_root = Path(__file__).resolve().parent / "coboxing"
+path_root = Path(__file__).resolve().parent / "spoiled_broth"
 
 engine_app = SessionApp(
     game_factory=Game,
     ui_modules=[Renderer2DModule()],
-    # agent_map={
-    #     'ai_1': RandomWalk('ai_1'),
-    #     'ai_2': RandomWalk('ai_2'),
-    #     'ai_3': RandomWalk('ai_3'),
-    #     'ai_4': RandomWalk('ai_4'),
-    #     'ai_5': RandomWalk('ai_5'),
-    #     'ai_6': RandomWalk('ai_6'),
-    # },
+    agent_map={"ai_1": RLController('ai_1')},
     path_root=path_root,
-    tick_rate=12,
-    ai_tick_rate=24,
-    n_players=2,
+    tick_rate=24,
+    ai_tick_rate=cf_AI_TICK_RATE,
+    n_players=1,
     is_max_speed=False
 )
 
