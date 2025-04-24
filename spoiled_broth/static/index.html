@@ -31,16 +31,36 @@
 
 
 <script type="module">
-    import {renderScene} from "/extensions/renderer2d/static/renderer_ui.js";
-    import {fetchState} from "/engine/static/engine_ui.js";
+     import {renderScene} from "/extensions/renderer2d/static/renderer_ui.js";
+import {fetchState} from "/engine/static/engine_ui.js";
 
-    async function loop() {
-        const state = await fetchState();
-        await renderScene(state);
-        requestAnimationFrame(loop);
+let previousState = null;
+let currentState = null;
+let lastUpdateTime = 0;
+const tickInterval = 1000 / 24; // 30 FPS logic
+
+// 🎮 Game logic updater
+async function gameTickLoop() {
+    const state = await fetchState();
+
+    previousState = currentState;
+    currentState = state;
+    lastUpdateTime = performance.now();
+    setTimeout(gameTickLoop, tickInterval);
+}
+
+// 🖼️ High-FPS renderer
+function renderLoop(now) {
+    if (previousState && currentState) {
+        const t = Math.min(1, (now - lastUpdateTime) / tickInterval);
+        renderScene(previousState, currentState, t);
     }
+    requestAnimationFrame(renderLoop);
+}
 
-    loop();
+// ✅ Kick off both loops
+gameTickLoop();
+requestAnimationFrame(renderLoop);
 </script>
 
 </body>

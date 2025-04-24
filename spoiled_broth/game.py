@@ -39,7 +39,6 @@ class SpoiledBroth(BaseGame):
             for y in range(self.grid.height):
                 tile = self.grid.tiles[x][y]
                 if tile and tile.is_walkable:
-
                     choices.append(tile)
         start_tile = random.choice(choices)
         agent.x = start_tile.slot_x * self.grid.tile_size + self.grid.tile_size // 2

@@ -40,6 +40,7 @@ canvas.addEventListener("click", async (event) => {
     const objects = currentState?.gameObjects || [];
     for (const obj of objects) {
         if (obj.isClickable) {
+            console.log('click')
             const withinX = clickX >= obj.left && clickX <= obj.left + obj.width;
             const withinY = clickY >= obj.top && clickY <= obj.top + obj.height;
             if (withinX && withinY) {
@@ -52,26 +53,35 @@ canvas.addEventListener("click", async (event) => {
 
 export async function renderScene(prevState, currState, t) {
     const objects = currState['gameObjects'] || [];
+    currentState = currState;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    objects.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
     for (const obj of objects) {
         if (!obj.src) continue;
+        let s_x = canvas.width;
+        let s_y = canvas.height;
+        if (!obj.normalize) {
+            s_x = 1.;
+            s_y = 1.;
+        }
 
         const img = await loadSprite(obj.src);
         const id = obj.id;
 
-        const currX = obj.left * canvas.width;
-        const currY = obj.top * canvas.height;
+        const currX = obj.left * s_x;
+        const currY = obj.top * s_y;
 
         let prevObj = (prevState.gameObjects || []).find(o => o.id === id);
-        const prevX = prevObj ? prevObj.left * canvas.width : currX;
-        const prevY = prevObj ? prevObj.top * canvas.height : currY;
+        const prevX = prevObj ? prevObj.left * s_x : currX;
+        const prevY = prevObj ? prevObj.top * s_y : currY;
 
         const x = prevX + (currX - prevX) * t;
         const y = prevY + (currY - prevY) * t;
 
-        const w = obj.width * canvas.width;
-        const h = obj.height * canvas.height;
+        const w = obj.width * s_x;
+        const h = obj.height * s_y;
 
         ctx.drawImage(img, obj.srcX || 0, obj.srcY || 0, obj.srcW || img.width, obj.srcH || img.height,
                       Math.round(x), Math.round(y), Math.round(w), Math.round(h));

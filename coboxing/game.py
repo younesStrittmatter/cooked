@@ -14,10 +14,11 @@ class CoBoxing(BaseGame):
         self.box = Box(x=.4, y=.4)
         self.target = Target(x=.75, y=.75)
 
-
         self.gameObjects[self.box.id] = self.box
         self.gameObjects[self.target.id] = self.target
         self.order = random.choice([0, 1])
+
+        self.running = True
 
     @property
     def nr_agents(self):
@@ -26,9 +27,6 @@ class CoBoxing(BaseGame):
     @property
     def agents(self):
         return [o for _, o in self.gameObjects.items() if isinstance(o, Agent)]
-
-
-
 
     def add_agent(self, agent_id):
         if self.nr_agents % 2 == self.order:
@@ -40,6 +38,8 @@ class CoBoxing(BaseGame):
         self.gameObjects[agent.id] = agent
 
     def step(self, actions: dict, delta_time: float):
+        if not self.running:
+            return
         agents_pos_before = {}
 
         for agent in self.agents:
@@ -48,8 +48,9 @@ class CoBoxing(BaseGame):
         super().step(actions, delta_time)
         self.collision(agents_pos_before)
 
-        # if self.check_win():
-        #     self.next_level()
+        if self.check_win():
+            self.target.drawable.left = random.random()
+            self.target.drawable.top = random.random()
 
     def check_win(self):
         dx = (self.box.x - self.target.x) ** 2

@@ -18,6 +18,7 @@ async function _init() {
 
 export async function sendIntent(action) {
   await _init();
+
   await fetch("/intent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

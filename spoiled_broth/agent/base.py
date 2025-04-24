@@ -111,7 +111,6 @@ class Agent(agent.Agent):
         _item = [0] * len(ITEM_LIST)
         if self.item in ITEM_LIST:
             _item[ITEM_LIST.index(self.item)] = 1
-
         return np.array(
             _pos + _item + [self.speed] + [self.cut_speed] + [1.0 if self.is_moving else 0.0], dtype=np.float32
         )
