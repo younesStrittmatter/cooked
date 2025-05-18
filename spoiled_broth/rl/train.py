@@ -14,20 +14,17 @@ class SimpleLoggingCallback(BaseCallback):
         self.check_freq = check_freq
         self.model =model
 
-
-
     def _on_step(self) -> bool:
         if self.n_calls % self.check_freq == 0:
             mean_reward = np.mean(self.locals["rewards"])
             print(f"[Step {self.n_calls}] Mean reward: {mean_reward:.3f}")
             if self.model:
                 self.model.save(str(save_path))
-                print(f"✅ Model saved at {save_path}")
+                print(f"Model saved at {save_path}")
         return True
 
-
 def main():
-    print("🔁 Creating environment...")
+    print("Creating environment...")
     env = GameEnv()
 
     # Wrap BEFORE converting to vec_env
@@ -38,7 +35,7 @@ def main():
     env = ss.pettingzoo_env_to_vec_env_v1(env)
     env = ss.concat_vec_envs_v1(env, 4, num_cpus=4, base_class="stable_baselines3")
 
-    print("🚀 Starting training...")
+    print("Starting training...")
     try:
         print('loading model')
         model = PPO.load(save_path, env=env)
@@ -50,7 +47,7 @@ def main():
     )
 
     model.save(str(save_path))
-    print(f"✅ Model saved at {save_path}")
+    print(f"Model saved at {save_path}")
 
 
 if __name__ == "__main__":

@@ -5,11 +5,10 @@ from spoiled_broth.game import game_to_vector
 
 from pathlib import Path
 
-
 class RLController(Controller):
     def __init__(self, agent_id, path="ppo_spoiled_broth.zip"):
         super().__init__(agent_id)
-        model_path = Path(__file__).parent / "saved_models" / path
+        model_path = Path(path) if Path(path).is_absolute() else Path(__file__).parent / "saved_models" / path
 
         self.model = PPO.load(model_path)
         self.agent_id = agent_id

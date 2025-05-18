@@ -43,6 +43,23 @@ class SoiledBrothTile(Tile):
 
     def _progress_vec(self):
         return [0] * 3
+    
+    #def _get_normalized_progress(self):
+    #    """Improved progress vector with proper normalization"""
+    #    if hasattr(self, 'progress'):
+    #        if hasattr(self, 'max_progress'):
+    #            # Normalize current progress
+    #            normalized = min(1.0, self.progress / self.max_progress)
+    #            return [normalized]
+    #        elif hasattr(self, 'progress_steps'):
+    #            # One-hot for discrete progress steps
+    #            vec = [0] * len(self.progress_steps)
+    #            current_step = min(len(self.progress_steps)-1, 
+    #                              bisect.bisect_left(self.progress_steps, self.progress))
+    #            vec[current_step] = 1
+    #            return vec
+    #    # Default no progress
+    #    return [0] * 3  # Maintains same length as original
 
     def to_vector(self):
         return np.array(
@@ -91,6 +108,7 @@ class Counter(SoiledBrothTile):
         self.add_drawable(Basic2D(src='world/item-on-counter.png', z_index=1, normalize=False))
         self.drawables[1].width = 0
         self.drawables[1].height = 0
+        self.salad_by = None  # Register the agent
 
     def update(self, agent, delta_time):
         super().update(agent, delta_time)
@@ -120,6 +138,12 @@ class Counter(SoiledBrothTile):
         else:
             self.drawables[1].width = 0
             self.drawables[1].height = 0
+        
+        # Detect which agent created the salad
+        if self.item in ['tomato_salad', 'pumpkin_salad', 'cabbage_salad'] and self.salad_by is None:
+            for agent_id, action in agent.items():
+                if isinstance(action, dict) and action.get("type") == "click" and action.get("target") == (self.slot_x * 8 + self.slot_y):
+                    self.salad_by = agent_id
 
     def get_intent(self, agent):
         return [MoveToIntent(self), ItemExchangeIntent(self)]
@@ -161,6 +185,7 @@ class CuttingBoard(SoiledBrothTile):
         self.drawables[2].height = 0
         self.item = None
         self.cut_time_accumulated = 0
+        self.cut_by = None  # New field to register the agent
 
     @property
     def cut_stage(self):
@@ -191,6 +216,12 @@ class CuttingBoard(SoiledBrothTile):
             self.drawables[2].width = 0
             self.drawables[2].height = 0
 
+        # Register agent
+        if self.cut_stage >= 3 and self.cut_by is None:
+            for agent_id, action in agent.items():
+                if isinstance(action, dict) and action.get("type") == "click" and action.get("target") == (self.slot_x * 8 + self.slot_y):
+                    self.cut_by = agent_id
+
     def get_intent(self, agent):
         return [MoveToIntent(self), CuttingBoardIntent(self)]
 
@@ -215,9 +246,17 @@ class Delivery(SoiledBrothTile):
         super().__init__(game=game)
         self.is_walkable = False
         self.add_drawable(Basic2D(src='world/delivery.png', z_index=0, normalize=False))
+        self.delivered_by = None  # Register which agent delivered
 
     def update(self, agent, delta_time):
         super().update(agent, delta_time)
+        # Detect delivery only if it has a valid item
+        #print(vars(self))
+        #if self.item in ['tomato_salad', 'pumpkin_salad', 'cabbage_salad'] and self.delivered_by is None:
+        #    for agent_id, action in agent.items():
+        #        if isinstance(action, dict) and action.get("type") == "click" and action.get("target") == (self.slot_x * 8 + self.slot_y):
+        #            self.delivered_by = agent_id
+        #            print(f'{agent_id} delivered')
 
     def get_intent(self, agent):
         return [MoveToIntent(self), DeliveryIntent(self)]

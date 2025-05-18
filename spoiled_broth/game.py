@@ -12,11 +12,6 @@ from pathlib import Path
 import numpy as np
 import random
 
-
-
-
-
-
 class SpoiledBroth(BaseGame):
     def __init__(self, map_nr=None):
         super().__init__()
@@ -48,9 +43,7 @@ class SpoiledBroth(BaseGame):
     def step(self, actions: dict, delta_time: float):
         super().step(actions, delta_time)
 
-
 MAX_PLAYERS = 4  # or import if needed
-
 
 def game_to_vector(game, agent_id):
     grid = game.grid

@@ -11,7 +11,6 @@ class BaseGame(ABC):
             self._update_recursive(obj, actions, delta_time)
 
     def _update_recursive(self, obj, actions: dict, delta_time: float):
-
         if hasattr(obj, 'update'):
             obj.update(actions, delta_time)
         for child in getattr(obj, 'children', []):

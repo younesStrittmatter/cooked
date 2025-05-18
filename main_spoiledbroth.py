@@ -4,6 +4,7 @@ from spoiled_broth.rl.rl_controller import RLController
 from engine.extensions.renderer2d.renderer_ui import Renderer2DModule
 from pathlib import Path
 from spoiled_broth.config import *
+from functools import partial
 
 import logging
 
@@ -11,11 +12,14 @@ log = logging.getLogger('werkzeug')
 log.disabled = True
 
 path_root = Path(__file__).resolve().parent / "spoiled_broth"
+path_model = "PPO_spoiled_broth.zip"
+
+map_nr = 1
 
 engine_app = SessionApp(
-    game_factory=Game,
+    game_factory=partial(Game, map_nr=map_nr),
     ui_modules=[Renderer2DModule()],
-    agent_map={"ai_1": RLController('ai_1')},
+    agent_map={"ai_1": RLController('ai_1', path=path_model)},
     path_root=path_root,
     tick_rate=24,
     ai_tick_rate=cf_AI_TICK_RATE,

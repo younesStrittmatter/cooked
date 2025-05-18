@@ -4,7 +4,6 @@ from pettingzoo import ParallelEnv
 from gymnasium import spaces
 import numpy as np
 from spoiled_broth.config import *
-
 from spoiled_broth.game import SpoiledBroth, game_to_vector, random_game_state
 
 MAX_PLAYERS = 4
@@ -12,14 +11,13 @@ MAX_PLAYERS = 4
 NON_CLICKABLE_PENALTY = 0.05
 IDLE_PENALTY = 0.01
 
-REWARD_ITEM_CUT = 1.
-REWARD_SALAD_CREATED = 2. + REWARD_ITEM_CUT  # (+ REWARD_ITEM_CUT sinc creating a salad "loses a cut item")
-REWARD_DELIVERED = 10. + REWARD_SALAD_CREATED  # (+ REWARD_SALAD_CREATED since delivering "loses a salad")
+REWARD_ITEM_CUT = 0.1
+REWARD_SALAD_CREATED = 0.2 + REWARD_ITEM_CUT
+REWARD_DELIVERED = 5. + REWARD_SALAD_CREATED
 
 STEP_PER_EPISODE = 1000
 
 def init_game(agents, map_nr=1):
-    #map_nr = random.randint(1, 4)
     game = SpoiledBroth(map_nr=map_nr)
     for agent_id in agents:
         game.add_agent(agent_id)
@@ -39,7 +37,6 @@ def init_game(agents, map_nr=1):
 
     return game, action_spaces, _clickable_mask
 
-
 class GameEnv(ParallelEnv):
     metadata = {"render_modes": ["human"], "name": "game_v0"}
 
@@ -53,7 +50,6 @@ class GameEnv(ParallelEnv):
         self.possible_agents = ["ai_rl_1", "ai_rl_2"]
         self.agents = self.possible_agents[:]
 
-        # reward_weights debe ser un dict tipo: {"ai_rl_1": (alpha1, beta1), "ai_rl_2": (alpha2, beta2)}
         default_weights = {agent: (1.0, 0.0) for agent in self.agents}
         self.reward_weights = reward_weights if reward_weights is not None else default_weights
         self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
@@ -71,7 +67,7 @@ class GameEnv(ParallelEnv):
         example_obs = self.observe(self.agents[0])
         obs_size = example_obs.shape[0]
         self.observation_spaces = {
-            agent: spaces.Box(low=0.0, high=50.0, shape=(obs_size,), dtype=np.float32)
+            agent: spaces.Box(low=0.0, high=1.0, shape=(obs_size,), dtype=np.float32)
             for agent in self.agents
         }
 
@@ -85,7 +81,6 @@ class GameEnv(ParallelEnv):
         self.agents = self.possible_agents[:]
 
         self.game, self.action_spaces, self._clickable_mask = init_game(self.agents, map_nr=self.map_nr)
-
         random_game_state(self.game)
 
         self.agent_map = {
@@ -95,30 +90,20 @@ class GameEnv(ParallelEnv):
         self.rewards = {agent: 0 for agent in self.agents}
         self.dones = {agent: False for agent in self.agents}
         self.infos = {
-            agent: {"action_mask": self._clickable_mask.copy()}  # always copy to avoid pointer issues
+            agent: {"action_mask": self._clickable_mask.copy()}
             for agent in self.agents
         }
         self._last_score = 0
 
-        assert isinstance(self.infos, dict), f"infos is not a dict: {self.infos}"
-        assert all(isinstance(v, dict) for v in self.infos.values()), "infos values must be dicts"
-
-        return {
-            agent: self.observe(agent)
-            for agent in self.agents
-        }, self.infos
+        return {agent: self.observe(agent) for agent in self.agents}, self.infos
 
     def observe(self, agent):
         return game_to_vector(self.game, agent)
 
     def step(self, actions):
         self._step_counter += 1
-        # Submit intents from each agent
-
-        # If the agent clicks on a "non-clickable" tile, apply a penalty
         agent_penalties = {agent_id: 0.0 for agent_id in self.agents}
         for agent_id, action in actions.items():
-            # Convert flat index to tile
             grid_w = self.game.grid.width
             x = action % grid_w
             y = action // grid_w
@@ -129,27 +114,18 @@ class GameEnv(ParallelEnv):
             else:
                 agent_penalties[agent_id] = NON_CLICKABLE_PENALTY
 
-        # Create dictionary from actions
         def decode_action(action_int):
             return {"type": "click", "target": int(action_int)}
 
         actions_dict = {agent_id: decode_action(action) for agent_id, action in actions.items()}
-
-        # Advance the game state by one step (simulate one tick)
         self.game.step(actions_dict, delta_time=1 / cf_AI_TICK_RATE)
 
-        # Detect agent that performed the action and reward
         agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
-        
+
         for thing in self.game.gameObjects.values():
             if hasattr(thing, 'tiles'):
                 for row in thing.tiles:
                     for tile in row:
-                        #if hasattr(tile, "delivered_by") and tile.delivered_by:
-                        #    if tile.delivered_by in agent_events:
-                        #        agent_events[tile.delivered_by]["delivered"] += 1
-                        #    tile.delivered_by = None
-
                         if hasattr(tile, "cut_by") and tile.cut_by:
                             if tile.cut_by in agent_events:
                                 agent_events[tile.cut_by]["cut"] += 1
@@ -162,7 +138,6 @@ class GameEnv(ParallelEnv):
                                 self.total_agent_events[tile.salad_created_by]["salad"] += 1
                             tile.salad_created_by = None
 
-        # Delivery
         new_score = self.game.gameObjects["score"].score
         if (new_score - self._last_score) > 0:
             print(f"Agent delivered item, new score: {new_score}")
@@ -171,7 +146,6 @@ class GameEnv(ParallelEnv):
                 self.total_agent_events[agent_id]["delivered"] += 1
             self._last_score = new_score
 
-        # Get reward from delivering items
         pure_rewards = {}
         for agent_id in self.agents:
             pure_rewards[agent_id] = (
@@ -187,10 +161,9 @@ class GameEnv(ParallelEnv):
             if other_agents:
                 avg_other_reward = sum(pure_rewards[a] for a in other_agents) / len(other_agents)
             else:
-                avg_other_reward = 0.0  # in case there is only one agent
+                avg_other_reward = 0.0
             self.rewards[agent_id] = alpha * pure_rewards[agent_id] + beta * avg_other_reward
 
-        # You can customize these based on game logic later
         self.dones = {agent: False for agent in self.agents}
         self.infos = {
             agent: {"action_mask": self._clickable_mask}
@@ -207,7 +180,7 @@ class GameEnv(ParallelEnv):
             self._step_counter = 0
 
         terminations = self.dones
-        truncations = {agent: should_truncate for agent in self.agents}  # or your own logic
+        truncations = {agent: should_truncate for agent in self.agents}
 
         return observations, self.rewards, terminations, truncations, self.infos
 
@@ -219,6 +192,6 @@ class GameEnv(ParallelEnv):
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]
-    
+
     def action_space(self, agent):
         return self.action_spaces[agent]
