@@ -76,6 +76,7 @@ class GameEnv(ParallelEnv):
         }
 
         self.rewards = {agent: 0 for agent in self.agents}
+        self.pure_rewards = {agent: 0 for agent in self.agents}
         self.dones = {agent: False for agent in self.agents}
         self.infos = {agent: {'action_mask': self._clickable_mask} for agent in self.agents}
         self._last_score = 0
@@ -93,6 +94,7 @@ class GameEnv(ParallelEnv):
         }
 
         self.rewards = {agent: 0 for agent in self.agents}
+        self.pure_rewards = {agent: 0 for agent in self.agents}
         self.dones = {agent: False for agent in self.agents}
         self.infos = {
             agent: {"action_mask": self._clickable_mask.copy()}  # always copy to avoid pointer issues
@@ -172,9 +174,8 @@ class GameEnv(ParallelEnv):
             self._last_score = new_score
 
         # Get reward from delivering items
-        pure_rewards = {}
         for agent_id in self.agents:
-            pure_rewards[agent_id] = (
+            self.pure_rewards[agent_id] = (
                 agent_events[agent_id]["delivered"] * REWARD_DELIVERED +
                 agent_events[agent_id]["cut"] * REWARD_ITEM_CUT +
                 agent_events[agent_id]["salad"] * REWARD_SALAD_CREATED -
@@ -185,10 +186,10 @@ class GameEnv(ParallelEnv):
             alpha, beta = self.reward_weights.get(agent_id, (1.0, 0.0))
             other_agents = [a for a in self.agents if a != agent_id]
             if other_agents:
-                avg_other_reward = sum(pure_rewards[a] for a in other_agents) / len(other_agents)
+                avg_other_reward = sum(self.pure_rewards[a] for a in other_agents) / len(other_agents)
             else:
                 avg_other_reward = 0.0  # in case there is only one agent
-            self.rewards[agent_id] = alpha * pure_rewards[agent_id] + beta * avg_other_reward
+            self.rewards[agent_id] = alpha * self.pure_rewards[agent_id] + beta * avg_other_reward
 
         # You can customize these based on game logic later
         self.dones = {agent: False for agent in self.agents}
@@ -209,7 +210,7 @@ class GameEnv(ParallelEnv):
         terminations = self.dones
         truncations = {agent: should_truncate for agent in self.agents}  # or your own logic
 
-        return observations, self.rewards, terminations, truncations, self.infos
+        return observations, self.rewards, self.pure_rewards, terminations, truncations, self.infos
 
     def render(self):
         print(f"[Game Render] Agents: {self.agents}")

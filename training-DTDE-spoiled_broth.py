@@ -123,14 +123,14 @@ def safe_config_dict(d):
 
 config_path = f"{training_dir}/config.txt"
 with open(config_path, "w") as f:
-    f.write("==== Entradas de entrenamiento ====\n")
-    f.write(f"Modelo RL: {rl_model}\n")
-    f.write(f"Mapa: {map_nr}\n")
-    f.write(f"Número de iteraciones: {n_iterations}\n")
-    f.write(f"Guardado cada N iteraciones: {save_every_n_iterations}\n")
-    f.write(f"Recompensas ai_rl_1: {w1_1}, {w1_2}\n")
-    f.write(f"Recompensas ai_rl_2: {w2_1}, {w2_2}\n")
-    f.write("\n==== Configuración completa ====\n")
+    f.write("==== Training parameters ====\n")
+    f.write(f"RL model: {rl_model}\n")
+    f.write(f"Map number: {map_nr}\n")
+    f.write(f"Number of iterations: {n_iterations}\n")
+    f.write(f"Saved every N iterations: {save_every_n_iterations}\n")
+    f.write(f"Reward weights ai_rl_1: {w1_1}, {w1_2}\n")
+    f.write(f"Reward weights ai_rl_2: {w2_1}, {w2_2}\n")
+    f.write("\n==== Complete configuration ====\n")
     f.write(json.dumps(safe_config_dict(config.to_dict()), indent=4))
 
 csv_file_path = f'{training_dir}/reward_data.csv'
