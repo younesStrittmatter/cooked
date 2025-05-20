@@ -70,14 +70,14 @@ config = (
         policies={
             "policy_ai_rl_1": (
                 None,  # Use default PPO policy
-                env_creator({"map_nr": 1}).observation_space("ai_rl_1"),
-                env_creator({"map_nr": 1}).action_space("ai_rl_1"),
+                env_creator({"map_nr": map_nr}).observation_space("ai_rl_1"),
+                env_creator({"map_nr": map_nr}).action_space("ai_rl_1"),
                 {}
             ),
             "policy_ai_rl_2": (
                 None,  # Use default PPO policy
-                env_creator({"map_nr": 1}).observation_space("ai_rl_2"),
-                env_creator({"map_nr": 1}).action_space("ai_rl_2"),
+                env_creator({"map_nr": map_nr}).observation_space("ai_rl_2"),
+                env_creator({"map_nr": map_nr}).action_space("ai_rl_2"),
                 {}
             )
         },

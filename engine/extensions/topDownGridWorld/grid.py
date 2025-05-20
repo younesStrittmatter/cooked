@@ -17,7 +17,29 @@ class Grid(grid.Grid):
                 color = img.getpixel((x, y))
                 tile = color_map[str(color)]['class'](game=game, **color_map[str(color)]['kwargs'])
                 tile.add_to_grid(self, x, y, self.tile_size)
-
+    
+    def init_from_text(self, path, char_map, game):
+        with open(path, "r") as f:
+            lines = [line.rstrip("\n") for line in f.readlines()]
+        
+        # Check that the number of rows matches the grid height
+        if len(lines) != self.height:
+            raise ValueError(f"Text map has {len(lines)} rows but expected {self.height}.")
+        
+        # Check that each row length matches the grid width
+        for i, line in enumerate(lines):
+            if len(line) != self.width:
+                raise ValueError(f"Row {i} in text map has length {len(line)} but expected {self.width}.")
+        
+        # Create tiles according to the characters in the text map
+        for y, line in enumerate(lines):
+            for x, ch in enumerate(line):
+                if ch not in char_map:
+                    raise ValueError(f"Character '{ch}' not in char_map")
+                tile_class = char_map[ch]['class']
+                kwargs = char_map[ch].get('kwargs', {})
+                tile = tile_class(game=game, **kwargs)
+                tile.add_to_grid(self, x, y, self.tile_size)
 
 class Tile(grid.Tile):
     def __init__(self, id=None,

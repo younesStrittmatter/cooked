@@ -273,3 +273,15 @@ COLOR_MAP = {
     '(255, 255, 255)': {'class': Counter, 'kwargs': {}},
     '(255, 0, 255)': {'class': Delivery, 'kwargs': {}},
 }
+
+CHAR_MAP = {
+    'W': {'class': Wall, 'kwargs': {}},
+    ' ': {'class': Floor, 'kwargs': {}},
+    'T': {'class': Dispenser, 'kwargs': {'item': 'tomato'}},
+    'P': {'class': Dispenser, 'kwargs': {'item': 'pumpkin'}},
+    'C': {'class': Dispenser, 'kwargs': {'item': 'cabbage'}},
+    'X': {'class': Dispenser, 'kwargs': {'item': 'plate'}},
+    'B': {'class': CuttingBoard, 'kwargs': {}},
+    'M': {'class': Counter, 'kwargs': {}},
+    'D': {'class': Delivery, 'kwargs': {}},
+}

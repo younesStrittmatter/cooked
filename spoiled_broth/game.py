@@ -4,7 +4,7 @@ from engine.extensions.topDownGridWorld.grid import Grid
 from spoiled_broth.world.tiles import Counter, CuttingBoard
 from spoiled_broth.agent.base import Agent
 
-from spoiled_broth.world.tiles import COLOR_MAP
+from spoiled_broth.world.tiles import COLOR_MAP, CHAR_MAP
 from spoiled_broth.ui.score import Score
 
 from pathlib import Path
@@ -13,16 +13,24 @@ import numpy as np
 import random
 
 class SpoiledBroth(BaseGame):
-    def __init__(self, map_nr=None):
+    def __init__(self, map_id=None):
         super().__init__()
-        if map_nr is None:
-            map_nr = random.randint(1, 4)
-        self.grid = None
-        img_path = Path(__file__).parent / "maps" / f"{map_nr}.png"
+        if map_id is None:
+            map_id = str(random.randint(1, 4))  # default maps
+        
         self.grid = Grid("grid", 8, 8, 16)
-        self.grid.init_from_img(img_path, COLOR_MAP, self)
-        self.score = Score()
+        map_path_img = Path(__file__).parent / "maps" / f"{map_id}.png"
+        map_path_txt = Path(__file__).parent / "maps" / f"{map_id}.txt"
 
+        if map_path_img.exists():
+            # Load map through image
+            self.grid.init_from_img(map_path_img, COLOR_MAP, self)
+        elif map_path_txt.exists():
+            # Load map through text
+            self.grid.init_from_text(map_path_txt, CHAR_MAP, self)
+        else:
+            raise FileNotFoundError(f"Map'{map_id}' not found, neither as image nor as text.")
+        self.score = Score()
         self.gameObjects['grid'] = self.grid
         self.gameObjects['score'] = self.score
 
