@@ -18,9 +18,9 @@ REWARD_DELIVERED = 10. + REWARD_SALAD_CREATED  # (+ REWARD_SALAD_CREATED since d
 
 STEP_PER_EPISODE = 1000
 
-def init_game(agents, map_id=1):
-    #map_id = random.randint(1, 4)
-    game = SpoiledBroth(map_id=map_id)
+def init_game(agents, map_nr=1):
+    #map_nr = random.randint(1, 4)
+    game = SpoiledBroth(map_nr=map_nr)
     for agent_id in agents:
         game.add_agent(agent_id)
 
@@ -43,9 +43,9 @@ def init_game(agents, map_id=1):
 class GameEnv(ParallelEnv):
     metadata = {"render_modes": ["human"], "name": "game_v0"}
 
-    def __init__(self, reward_weights=None, map_id=1):
+    def __init__(self, reward_weights=None, map_nr=1):
         super().__init__()
-        self.map_id = map_id
+        self.map_nr = map_nr
         self._step_counter = 0
         self._max_steps_per_episode = STEP_PER_EPISODE
         self.render_mode = None
@@ -62,7 +62,7 @@ class GameEnv(ParallelEnv):
         print(f'Agent 1: {self.reward_weights["ai_rl_1"]}\n')
         print(f'Agent 2: {self.reward_weights["ai_rl_2"]}\n')
 
-        self.game, self.action_spaces, self._clickable_mask = init_game(self.agents, map_id=self.map_id)
+        self.game, self.action_spaces, self._clickable_mask = init_game(self.agents, map_nr=self.map_nr)
 
         self.agent_map = {
             agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents
@@ -84,7 +84,7 @@ class GameEnv(ParallelEnv):
         self._last_score = 0
         self.agents = self.possible_agents[:]
 
-        self.game, self.action_spaces, self._clickable_mask = init_game(self.agents, map_id=self.map_id)
+        self.game, self.action_spaces, self._clickable_mask = init_game(self.agents, map_nr=self.map_nr)
 
         random_game_state(self.game)
 

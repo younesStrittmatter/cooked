@@ -13,14 +13,14 @@ import numpy as np
 import random
 
 class SpoiledBroth(BaseGame):
-    def __init__(self, map_id=None):
+    def __init__(self, map_nr=None):
         super().__init__()
-        if map_id is None:
-            map_id = str(random.randint(1, 4))  # default maps
+        if map_nr is None:
+            map_nr = str(random.randint(1, 4))  # default maps
         
         self.grid = Grid("grid", 8, 8, 16)
-        map_path_img = Path(__file__).parent / "maps" / f"{map_id}.png"
-        map_path_txt = Path(__file__).parent / "maps" / f"{map_id}.txt"
+        map_path_img = Path(__file__).parent / "maps" / f"{map_nr}.png"
+        map_path_txt = Path(__file__).parent / "maps" / f"{map_nr}.txt"
 
         if map_path_img.exists():
             # Load map through image
@@ -29,7 +29,7 @@ class SpoiledBroth(BaseGame):
             # Load map through text
             self.grid.init_from_text(map_path_txt, CHAR_MAP, self)
         else:
-            raise FileNotFoundError(f"Map'{map_id}' not found, neither as image nor as text.")
+            raise FileNotFoundError(f"Map'{map_nr}' not found, neither as image nor as text.")
         self.score = Score()
         self.gameObjects['grid'] = self.grid
         self.gameObjects['score'] = self.score
@@ -51,7 +51,7 @@ class SpoiledBroth(BaseGame):
     def step(self, actions: dict, delta_time: float):
         super().step(actions, delta_time)
 
-MAX_PLAYERS = 4  # or import if needed
+MAX_PLAYERS = 4 # or import if needed
 
 def game_to_vector(game, agent_id):
     grid = game.grid
