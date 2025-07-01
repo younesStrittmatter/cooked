@@ -9,8 +9,7 @@ from spoiled_broth.game import SpoiledBroth, game_to_vector, random_game_state
 
 MAX_PLAYERS = 4
 
-NON_CLICKABLE_PENALTY = 0.05
-IDLE_PENALTY = 0.01
+COUNTER_PENALTY = 0.1
 
 REWARD_ITEM_CUT = 1.
 REWARD_SALAD_CREATED = 2. + REWARD_ITEM_CUT  # (+ REWARD_ITEM_CUT sinc creating a salad "loses a cut item")
@@ -43,25 +42,27 @@ def get_action_type(tile):
     return type_mapping.get(tile._type, ACTION_TYPE_FLOOR)  # Default to floor for unknown types
 
 def init_game(agents, map_nr=1):
-    #map_nr = random.randint(1, 4)
     game = SpoiledBroth(map_nr=map_nr)
     for agent_id in agents:
         game.add_agent(agent_id)
 
-    grid_size = game.grid.width * game.grid.height
-    action_spaces = {
-        agent: spaces.Discrete(grid_size)
-        for agent in agents
-    }
-    _clickable_mask = np.zeros(game.grid.width * game.grid.height, dtype=np.int8)
+    clickable_indices = []
     for x in range(game.grid.width):
         for y in range(game.grid.height):
             tile = game.grid.tiles[x][y]
             if tile and tile.clickable is not None:
                 index = y * game.grid.width + x
-                _clickable_mask[index] = 1
+                clickable_indices.append(index)
 
-    return game, action_spaces, _clickable_mask
+    action_spaces = {
+        agent: spaces.Discrete(len(clickable_indices))
+        for agent in agents
+    }
+    _clickable_mask = np.zeros(game.grid.width * game.grid.height, dtype=np.int8)
+    for idx in clickable_indices:
+        _clickable_mask[idx] = 1
+
+    return game, action_spaces, _clickable_mask, clickable_indices
 
 
 class GameEnv(ParallelEnv):
@@ -89,14 +90,11 @@ class GameEnv(ParallelEnv):
         self.possible_agents = ["ai_rl_1", "ai_rl_2"]
         self.agents = self.possible_agents[:]
 
-        # reward_weights debe ser un dict tipo: {"ai_rl_1": (alpha1, beta1), "ai_rl_2": (alpha2, beta2)}
         default_weights = {agent: (1.0, 0.0) for agent in self.agents}
         self.reward_weights = reward_weights if reward_weights is not None else default_weights
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
         self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
-        
-        # Add action type tracking
         self.total_action_types = {
             agent_id: {
                 ACTION_TYPE_FLOOR: 0,
@@ -108,7 +106,7 @@ class GameEnv(ParallelEnv):
             } for agent_id in self.agents
         }
 
-        self.game, self.action_spaces, self._clickable_mask = init_game(self.agents, map_nr=self.map_nr)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr)
 
         self.agent_map = {
             agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents
@@ -123,14 +121,14 @@ class GameEnv(ParallelEnv):
 
         self.rewards = {agent: 0 for agent in self.agents}
         self.dones = {agent: False for agent in self.agents}
-        self.infos = {agent: {'action_mask': self._clickable_mask} for agent in self.agents}
+        self.infos = {agent: {} for agent in self.agents}
         self._last_score = 0
 
     def reset(self, seed=None, options=None):
         self._last_score = 0
         self.agents = self.possible_agents[:]
 
-        self.game, self.action_spaces, self._clickable_mask = init_game(self.agents, map_nr=self.map_nr)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr)
 
         random_game_state(self.game)
 
@@ -140,17 +138,12 @@ class GameEnv(ParallelEnv):
 
         self.rewards = {agent: 0 for agent in self.agents}
         self.dones = {agent: False for agent in self.agents}
-        self.infos = {
-            agent: {"action_mask": self._clickable_mask.copy()}  # always copy to avoid pointer issues
-            for agent in self.agents
-        }
+        self.infos = {agent: {} for agent in self.agents}
         self._last_score = 0
 
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
         self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
-        
-        # Reset action type tracking
         self.total_action_types = {
             agent_id: {
                 ACTION_TYPE_FLOOR: 0,
@@ -177,27 +170,29 @@ class GameEnv(ParallelEnv):
         self._step_counter += 1
         # Submit intents from each agent
 
-        # If the agent clicks on a "non-clickable" tile, apply a penalty
-        agent_penalties = {agent_id: 0.0 for agent_id in self.agents}
+        agent_penalties = {agent_id: 0.0 for agent_id in self.agents}  # Used for counter penalty
         for agent_id, action in actions.items():
-            # Convert flat index to tile
+            # Map action to actual clickable tile index
+            tile_index = self.clickable_indices[action]
             grid_w = self.game.grid.width
-            x = action % grid_w
-            y = action // grid_w
+            x = tile_index % grid_w
+            y = tile_index // grid_w
             tile = self.game.grid.tiles[x][y]
 
             # Track action type
             action_type = get_action_type(tile)
             self.total_action_types[agent_id][action_type] += 1
 
-            if tile and tile.clickable is not None:
-                tile.click(agent_id)
-            else:
-                agent_penalties[agent_id] = NON_CLICKABLE_PENALTY
+            # Penalty for clicking on counter without holding something
+            from spoiled_broth.world.tiles import Counter
+            agent_obj = self.game.gameObjects[agent_id]
+            if isinstance(tile, Counter) and agent_obj.item is None:
+                agent_penalties[agent_id] += COUNTER_PENALTY
 
-        # Create dictionary from actions
+            tile.click(agent_id)
+
         def decode_action(action_int):
-            return {"type": "click", "target": int(action_int)}
+            return {"type": "click", "target": int(self.clickable_indices[action_int])}
 
         actions_dict = {agent_id: decode_action(action) for agent_id, action in actions.items()}
 
@@ -248,11 +243,11 @@ class GameEnv(ParallelEnv):
         # Get reward from delivering items
         pure_rewards = {agent_id: 0.0 for agent_id in self.agents}
         for agent_id in self.agents:
+            # Pure rewards: only positive events, no penalties
             pure_rewards[agent_id] = (
                 agent_events[agent_id]["delivered"] * REWARD_DELIVERED +
                 agent_events[agent_id]["cut"] * REWARD_ITEM_CUT +
-                agent_events[agent_id]["salad"] * REWARD_SALAD_CREATED -
-                agent_penalties[agent_id] - IDLE_PENALTY
+                agent_events[agent_id]["salad"] * REWARD_SALAD_CREATED
             )
             self.cumulated_pure_rewards[agent_id] += pure_rewards[agent_id]
 
@@ -263,7 +258,8 @@ class GameEnv(ParallelEnv):
                 avg_other_reward = sum(pure_rewards[a] for a in other_agents) / len(other_agents)
             else:
                 avg_other_reward = 0.0  # in case there is only one agent
-            self.rewards[agent_id] = alpha * pure_rewards[agent_id] + beta * avg_other_reward
+            # Modified rewards: include penalties
+            self.rewards[agent_id] = alpha * (pure_rewards[agent_id] - agent_penalties[agent_id]) + beta * avg_other_reward
             self.cumulated_modified_rewards[agent_id] += self.rewards[agent_id]
 
         # Check if episode should end due to step limit
@@ -275,7 +271,6 @@ class GameEnv(ParallelEnv):
         
         self.infos = {
             agent: {
-                "action_mask": self._clickable_mask,
                 "pure_reward": pure_rewards[agent],
                 "agent_events": agent_events[agent],  # Add agent events to info
                 "action_types": self.total_action_types[agent]  # Add action types to info

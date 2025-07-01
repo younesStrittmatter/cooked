@@ -23,12 +23,14 @@ local = '/mnt/lustre/home/samuloza'
 
 # Hiperparámetros
 NUM_ENVS = 1
-NUM_INNER_STEPS = 150
-NUM_EPOCHS = 20000
-NUM_MINIBATCHES = 15
+NUM_INNER_STEPS = 500
+NUM_EPOCHS = 10000
+NUM_MINIBATCHES = 25
 NUM_AGENTS = 2
 SHOW_EVERY_N_EPOCHS = 1000
 SAVE_EVERY_N_EPOCHS = 500
+USE_LSTM = True
+MODEL_SIZE = [512, 256, 128]
 
 if COOPERATIVE:
     save_dir = f'{local}/data/samuel_lozano/cooked/map_{MAP_NR}/cooperative'
@@ -53,11 +55,13 @@ config = {
     "SAVE_DIR": save_dir,
     # RLlib specific parameters
     "NUM_UPDATES": 10,  # Number of updates of the policy
-    "GAMMA": 0.9,  # Discount factor
+    "GAMMA": 0.97,  # Discount factor
     "GAE_LAMBDA": 0.95,  # GAE-Lambda parameter
     "ENT_COEF": 0.05,  # Entropy coefficient
     "CLIP_EPS": 0.2,  # PPO clip parameter
-    "VF_COEF": 0.5  # Value function coefficient
+    "VF_COEF": 0.5,  # Value function coefficient
+    "MODEL_SIZE": MODEL_SIZE,
+    "USE_LSTM": USE_LSTM,
 }
 
 # Run training

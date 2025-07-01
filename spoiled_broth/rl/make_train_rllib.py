@@ -81,9 +81,9 @@ def make_train_rllib(config):
                 minibatch_size=config["NUM_INNER_STEPS"] // config["NUM_MINIBATCHES"],
                 num_epochs=config["NUM_UPDATES"],
                 model={
-                    "fcnet_hiddens": [512, 256],
+                    "fcnet_hiddens": config["MODEL_SIZE"],
                     "fcnet_activation": "tanh",
-                    "use_lstm": False,
+                    "use_lstm": config["USE_LSTM"],
                     "use_attention": False,
                 }
             )
