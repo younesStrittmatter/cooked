@@ -27,6 +27,7 @@ class ItemExchangeIntent(_base_intent.Intent):
             self.has_ended = True
             if agent.item and self.tile.item and agent.item.endswith('_cut') and self.tile.item == 'plate':
                 self.tile.item = agent.item.split('_')[0] + '_salad'
+                self.tile.salad_by = agent.id
                 agent.item = None
             else:
                 _item = self.tile.item
@@ -50,6 +51,7 @@ class CuttingBoardIntent(_base_intent.Intent):
                 if self.tile.cut_stage >= 3:
                     _a_temp = agent.item
                     agent.item = f'{self.tile.item}_cut'
+                    self.tile.cut_by = agent.id
                     if _a_temp in ['tomato', 'pumpkin', 'cabbage']:
                         self.tile.cut_time_accumulated = 0
                         self.tile.item = _a_temp
@@ -83,6 +85,7 @@ class DeliveryIntent(_base_intent.Intent):
         if not self.has_ended:
             self.has_ended = True
             if agent.item in ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']:
+                self.tile.delivered_by = agent.id
                 agent.item = None
                 agent.score += 1
                 if 'score' in self.tile.game.gameObjects is not None:

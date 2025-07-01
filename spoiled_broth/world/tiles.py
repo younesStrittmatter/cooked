@@ -139,11 +139,7 @@ class Counter(SoiledBrothTile):
             self.drawables[1].width = 0
             self.drawables[1].height = 0
         
-        # Detect which agent created the salad
-        if self.item in ['tomato_salad', 'pumpkin_salad', 'cabbage_salad'] and self.salad_by is None:
-            for agent_id, action in agent.items():
-                if isinstance(action, dict) and action.get("type") == "click" and action.get("target") == (self.slot_x * 8 + self.slot_y):
-                    self.salad_by = agent_id
+        # The salad_by field is now set in ItemExchangeIntent when salad is created
 
     def get_intent(self, agent):
         return [MoveToIntent(self), ItemExchangeIntent(self)]
@@ -216,11 +212,7 @@ class CuttingBoard(SoiledBrothTile):
             self.drawables[2].width = 0
             self.drawables[2].height = 0
 
-        # Register agent
-        if self.cut_stage >= 3 and self.cut_by is None:
-            for agent_id, action in agent.items():
-                if isinstance(action, dict) and action.get("type") == "click" and action.get("target") == (self.slot_x * 8 + self.slot_y):
-                    self.cut_by = agent_id
+        # The cut_by field is now set in CuttingBoardIntent when item is cut
 
     def get_intent(self, agent):
         return [MoveToIntent(self), CuttingBoardIntent(self)]
@@ -250,13 +242,7 @@ class Delivery(SoiledBrothTile):
 
     def update(self, agent, delta_time):
         super().update(agent, delta_time)
-        # Detect delivery only if it has a valid item
-        #print(vars(self))
-        #if self.item in ['tomato_salad', 'pumpkin_salad', 'cabbage_salad'] and self.delivered_by is None:
-        #    for agent_id, action in agent.items():
-        #        if isinstance(action, dict) and action.get("type") == "click" and action.get("target") == (self.slot_x * 8 + self.slot_y):
-        #            self.delivered_by = agent_id
-        #            print(f'{agent_id} delivered')
+        # The delivered_by field is now set in DeliveryIntent when delivery occurs
 
     def get_intent(self, agent):
         return [MoveToIntent(self), DeliveryIntent(self)]

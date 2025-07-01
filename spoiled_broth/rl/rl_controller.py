@@ -22,7 +22,7 @@ class RLController(Controller):
         x = action % grid.width
         y = action // grid.width
         tile = grid.tiles[x][y]
-        print(f'chosen tile: {tile.slot_x, tile.slot_x}')
+        # print(f'chosen tile: {tile.slot_x, tile.slot_x}')  # Removed to reduce console output
 
         if tile and hasattr(tile, "click"):
             return {"type": "click", "target": tile.id}

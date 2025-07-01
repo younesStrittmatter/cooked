@@ -1,5 +1,5 @@
-import random
-
+import csv
+import os
 from pettingzoo import ParallelEnv
 from gymnasium import spaces
 import numpy as np
@@ -16,7 +16,31 @@ REWARD_ITEM_CUT = 1.
 REWARD_SALAD_CREATED = 2. + REWARD_ITEM_CUT  # (+ REWARD_ITEM_CUT sinc creating a salad "loses a cut item")
 REWARD_DELIVERED = 10. + REWARD_SALAD_CREATED  # (+ REWARD_SALAD_CREATED since delivering "loses a salad")
 
-STEP_PER_EPISODE = 1000
+# Action type constants for tracking
+ACTION_TYPE_FLOOR = "floor"
+ACTION_TYPE_WALL = "wall"
+ACTION_TYPE_COUNTER = "counter"
+ACTION_TYPE_DISPENSER = "dispenser"
+ACTION_TYPE_CUTTING_BOARD = "cutting_board"
+ACTION_TYPE_DELIVERY = "delivery"
+ACTION_TYPE_NON_CLICKABLE = "non_clickable"
+
+def get_action_type(tile):
+    """Determine the type of action based on the tile clicked"""
+    if tile is None or not hasattr(tile, '_type'):
+        return ACTION_TYPE_FLOOR  # Default to floor for None/invalid tiles
+    
+    # Map tile types to action types
+    type_mapping = {
+        0: ACTION_TYPE_FLOOR,
+        1: ACTION_TYPE_WALL,
+        2: ACTION_TYPE_COUNTER,
+        3: ACTION_TYPE_DISPENSER,
+        4: ACTION_TYPE_CUTTING_BOARD,
+        5: ACTION_TYPE_DELIVERY
+    }
+    
+    return type_mapping.get(tile._type, ACTION_TYPE_FLOOR)  # Default to floor for unknown types
 
 def init_game(agents, map_nr=1):
     #map_nr = random.randint(1, 4)
@@ -43,12 +67,24 @@ def init_game(agents, map_nr=1):
 class GameEnv(ParallelEnv):
     metadata = {"render_modes": ["human"], "name": "game_v0"}
 
-    def __init__(self, reward_weights=None, map_nr=1):
+    def __init__(
+            self, 
+            reward_weights=None, 
+            map_nr=1, 
+            cooperative=1, 
+            step_per_episode=1000,
+            path="training_stats.csv"
+    ):
         super().__init__()
         self.map_nr = map_nr
+        self.cooperative = cooperative  # Store cooperative mode as instance variable
         self._step_counter = 0
-        self._max_steps_per_episode = STEP_PER_EPISODE
+        self.episode_count = 0
+        self._max_steps_per_episode = step_per_episode
         self.render_mode = None
+        self.write_header = True
+        self.write_csv = False
+        self.csv_path = os.path.join(path, "training_stats.csv")
 
         self.possible_agents = ["ai_rl_1", "ai_rl_2"]
         self.agents = self.possible_agents[:]
@@ -56,11 +92,21 @@ class GameEnv(ParallelEnv):
         # reward_weights debe ser un dict tipo: {"ai_rl_1": (alpha1, beta1), "ai_rl_2": (alpha2, beta2)}
         default_weights = {agent: (1.0, 0.0) for agent in self.agents}
         self.reward_weights = reward_weights if reward_weights is not None else default_weights
+        self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
+        self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
         self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
-
-        print('Weighted rewards:\n')
-        print(f'Agent 1: {self.reward_weights["ai_rl_1"]}\n')
-        print(f'Agent 2: {self.reward_weights["ai_rl_2"]}\n')
+        
+        # Add action type tracking
+        self.total_action_types = {
+            agent_id: {
+                ACTION_TYPE_FLOOR: 0,
+                ACTION_TYPE_WALL: 0,
+                ACTION_TYPE_COUNTER: 0,
+                ACTION_TYPE_DISPENSER: 0,
+                ACTION_TYPE_CUTTING_BOARD: 0,
+                ACTION_TYPE_DELIVERY: 0
+            } for agent_id in self.agents
+        }
 
         self.game, self.action_spaces, self._clickable_mask = init_game(self.agents, map_nr=self.map_nr)
 
@@ -100,6 +146,22 @@ class GameEnv(ParallelEnv):
         }
         self._last_score = 0
 
+        self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
+        self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
+        self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
+        
+        # Reset action type tracking
+        self.total_action_types = {
+            agent_id: {
+                ACTION_TYPE_FLOOR: 0,
+                ACTION_TYPE_WALL: 0,
+                ACTION_TYPE_COUNTER: 0,
+                ACTION_TYPE_DISPENSER: 0,
+                ACTION_TYPE_CUTTING_BOARD: 0,
+                ACTION_TYPE_DELIVERY: 0
+            } for agent_id in self.agents
+        }
+
         assert isinstance(self.infos, dict), f"infos is not a dict: {self.infos}"
         assert all(isinstance(v, dict) for v in self.infos.values()), "infos values must be dicts"
 
@@ -124,6 +186,10 @@ class GameEnv(ParallelEnv):
             y = action // grid_w
             tile = self.game.grid.tiles[x][y]
 
+            # Track action type
+            action_type = get_action_type(tile)
+            self.total_action_types[agent_id][action_type] += 1
+
             if tile and tile.clickable is not None:
                 tile.click(agent_id)
             else:
@@ -145,30 +211,38 @@ class GameEnv(ParallelEnv):
             if hasattr(thing, 'tiles'):
                 for row in thing.tiles:
                     for tile in row:
-                        #if hasattr(tile, "delivered_by") and tile.delivered_by:
-                        #    if tile.delivered_by in agent_events:
-                        #        agent_events[tile.delivered_by]["delivered"] += 1
-                        #    tile.delivered_by = None
-
                         if hasattr(tile, "cut_by") and tile.cut_by:
                             if tile.cut_by in agent_events:
                                 agent_events[tile.cut_by]["cut"] += 1
                                 self.total_agent_events[tile.cut_by]["cut"] += 1
                             tile.cut_by = None
 
-                        if hasattr(tile, "salad_created_by") and tile.salad_created_by:
-                            if tile.salad_created_by in agent_events:
-                                agent_events[tile.salad_created_by]["salad"] += 1
-                                self.total_agent_events[tile.salad_created_by]["salad"] += 1
-                            tile.salad_created_by = None
+                        if hasattr(tile, "salad_by") and tile.salad_by:
+                            if tile.salad_by in agent_events:
+                                agent_events[tile.salad_by]["salad"] += 1
+                                self.total_agent_events[tile.salad_by]["salad"] += 1
+                            tile.salad_by = None
 
         # Delivery
         new_score = self.game.gameObjects["score"].score
         if (new_score - self._last_score) > 0:
             print(f"Agent delivered item, new score: {new_score}")
-            for agent_id in agent_events:
-                agent_events[agent_id]["delivered"] += 1
-                self.total_agent_events[agent_id]["delivered"] += 1
+            if self.cooperative:
+                # Reward all agents for delivery
+                for agent_id in agent_events:
+                    agent_events[agent_id]["delivered"] += 1
+                    self.total_agent_events[agent_id]["delivered"] += 1
+            else:
+                # Only reward the delivering agent(s)
+                for thing in self.game.gameObjects.values():
+                    if hasattr(thing, 'tiles'):
+                        for row in thing.tiles:
+                            for tile in row:
+                                if hasattr(tile, "delivered_by") and tile.delivered_by:
+                                    if tile.delivered_by in agent_events:
+                                        agent_events[tile.delivered_by]["delivered"] += 1
+                                        self.total_agent_events[tile.delivered_by]["delivered"] += 1
+                                    tile.delivered_by = None
             self._last_score = new_score
 
         # Get reward from delivering items
@@ -180,6 +254,7 @@ class GameEnv(ParallelEnv):
                 agent_events[agent_id]["salad"] * REWARD_SALAD_CREATED -
                 agent_penalties[agent_id] - IDLE_PENALTY
             )
+            self.cumulated_pure_rewards[agent_id] += pure_rewards[agent_id]
 
         for agent_id in self.agents:
             alpha, beta = self.reward_weights.get(agent_id, (1.0, 0.0))
@@ -189,13 +264,22 @@ class GameEnv(ParallelEnv):
             else:
                 avg_other_reward = 0.0  # in case there is only one agent
             self.rewards[agent_id] = alpha * pure_rewards[agent_id] + beta * avg_other_reward
+            self.cumulated_modified_rewards[agent_id] += self.rewards[agent_id]
 
-        # You can customize these based on game logic later
-        self.dones = {agent: False for agent in self.agents}
+        # Check if episode should end due to step limit
+        should_truncate = self._step_counter >= self._max_steps_per_episode
+        if should_truncate:
+            self.dones = {agent: True for agent in self.agents}
+            self._step_counter = 0
+            self.write_csv = True
+        
         self.infos = {
-            agent: {"action_mask": self._clickable_mask,
-                    "pure_reward": pure_rewards[agent]
-                    }
+            agent: {
+                "action_mask": self._clickable_mask,
+                "pure_reward": pure_rewards[agent],
+                "agent_events": agent_events[agent],  # Add agent events to info
+                "action_types": self.total_action_types[agent]  # Add action types to info
+            }
             for agent in self.agents
         }
 
@@ -204,12 +288,41 @@ class GameEnv(ParallelEnv):
             for agent in self.agents
         }
 
-        should_truncate = self._step_counter >= self._max_steps_per_episode
-        if should_truncate:
-            self._step_counter = 0
-
         terminations = self.dones
-        truncations = {agent: should_truncate for agent in self.agents}  # or your own logic
+        truncations = {agent: False for agent in self.agents}  # No truncations, only terminations
+
+        # If episode is done, aggregate and log
+        if self.write_csv:
+            row = {
+                    "epoch": self.episode_count
+                }
+            
+            for agent_id in self.agents:
+                row[f"pure_reward_{agent_id}"] = float(self.cumulated_pure_rewards[agent_id])
+                row[f"modified_reward_{agent_id}"] = float(self.cumulated_modified_rewards[agent_id])
+                row[f"delivered_{agent_id}"] = self.total_agent_events[agent_id]["delivered"]
+                row[f"cut_{agent_id}"] = self.total_agent_events[agent_id]["cut"]
+                row[f"salad_{agent_id}"] = self.total_agent_events[agent_id]["salad"]
+
+                # Add action type columns
+                row[f"floor_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_FLOOR]
+                row[f"wall_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_WALL]
+                row[f"counter_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_COUNTER]
+                row[f"dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_DISPENSER]
+                row[f"cutting_board_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_CUTTING_BOARD]
+                row[f"delivery_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_DELIVERY]
+
+            with open(self.csv_path, "a", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=row.keys())
+                if self.write_header:
+                    writer.writeheader()
+                    self.write_header = False
+                writer.writerow(row)
+
+            # Reset log for next episode
+            self.episode_infos_log = {agent: [] for agent in self.agents}
+            self.episode_count += 1
+            self.write_csv = False
 
         return observations, self.rewards, terminations, truncations, self.infos
 

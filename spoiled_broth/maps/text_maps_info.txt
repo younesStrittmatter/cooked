@@ -1,0 +1,35 @@
+# Character Map for Game Objects in Spoiled Broth
+# This file defines how text characters are converted into game objects
+
+# The CHAR_MAP dictionary maps single characters to specific game objects and their configuration:
+
+CHAR_MAP = {
+    'W': {'class': Wall, 'kwargs': {}},           # Creates solid wall objects that block movement
+    ' ': {'class': Floor, 'kwargs': {}},          # Creates walkable floor tiles
+    'T': {'class': Dispenser, 'kwargs': {'item': 'tomato'}},    # Creates an item dispenser that provides tomatoes
+    'P': {'class': Dispenser, 'kwargs': {'item': 'pumpkin'}},   # Creates an item dispenser that provides pumpkins
+    'C': {'class': Dispenser, 'kwargs': {'item': 'cabbage'}},   # Creates an item dispenser that provides cabbages
+    'X': {'class': Dispenser, 'kwargs': {'item': 'plate'}},     # Creates an item dispenser that provides plates
+    'B': {'class': CuttingBoard, 'kwargs': {}},   # Creates a cutting board where ingredients can be processed
+    'M': {'class': Counter, 'kwargs': {}},        # Creates a counter surface where items can be placed
+    'D': {'class': Delivery, 'kwargs': {}},       # Creates a delivery point where completed orders can be submitted
+}
+
+# How It Works:
+# This mapping system allows the game to read text files (like the .txt files in the maps/ directory) 
+# and convert them into actual game objects. For example, if a map file contains:
+#
+# WWWWW
+# W T W
+# W B W  
+# W D W
+# WWWWW
+#
+# It would create a room with:
+# - Walls around the perimeter
+# - A tomato dispenser in the top center
+# - A cutting board in the center
+# - A delivery point in the bottom center
+#
+# This is a common pattern in game development for creating level designs using simple text files 
+# that are easy to edit and understand.

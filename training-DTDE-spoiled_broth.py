@@ -1,171 +1,72 @@
 import os
-import shutil
-import json
-import ray
-from ray.rllib.algorithms.ppo import PPOConfig
-from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
-from ray.rllib.env import PettingZooEnv
-from ray.tune.registry import register_env
-from spoiled_broth.rl.game_env import GameEnv
-from pathlib import Path
-import supersuit as ss
-import numpy as np
 import sys
-import csv
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+from spoiled_broth.rl.make_train_rllib import make_train_rllib
 
-inputs = [line.strip() for line in sys.stdin.readlines()]
+# Leer archivo de entrada
+input_path = sys.argv[1]
+MAP_NR = sys.argv[2]
+LR = float(sys.argv[3])
+COOPERATIVE = int(sys.argv[4])
 
-rl_model = inputs[0]
-map_nr = int(inputs[1])
-n_iterations = int(inputs[2])
-save_every_n_iterations = int(inputs[3])
-w1_1 = float(inputs[4])
-w1_2 = float(inputs[5])
-w2_1 = float(inputs[6])
-w2_2 = float(inputs[7])
+with open(input_path, "r") as f:
+    lines = f.readlines()
+    alpha_1, beta_1 = map(float, lines[0].strip().split())
+    alpha_2, beta_2 = map(float, lines[1].strip().split())
 
-# Define reward weights
 reward_weights = {
-    "ai_rl_1": (w1_1, w1_2),
-    "ai_rl_2": (w2_1, w2_2),
+    "ai_rl_1": (alpha_1, beta_1),
+    "ai_rl_2": (alpha_2, beta_2),
 }
 
-base_save_dir = f"/data/samuel_lozano/cooked/saved_models/map_{map_nr}/"
-Path(base_save_dir).mkdir(parents=True, exist_ok=True)
+local = '/mnt/lustre/home/samuloza'
+#local = 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
 
-def env_creator(config):
-    # Your existing GameEnv class goes here
-    return GameEnv(**config)
+# Hiperparámetros
+NUM_ENVS = 1
+NUM_INNER_STEPS = 150
+NUM_EPOCHS = 20000
+NUM_MINIBATCHES = 15
+NUM_AGENTS = 2
+SHOW_EVERY_N_EPOCHS = 1000
+SAVE_EVERY_N_EPOCHS = 500
 
-# Initialize Ray
-os.environ["RAY_TMPDIR"] = "/data/samuel_lozano/tmp_ray/"
-ray.shutdown()
-ray.init(ignore_reinit_error=True, _temp_dir=os.environ["RAY_TMPDIR"])
+if COOPERATIVE:
+    save_dir = f'{local}/data/samuel_lozano/cooked/map_{MAP_NR}/cooperative'
+else:
+    save_dir = f'{local}/data/samuel_lozano/cooked/map_{MAP_NR}/competitive'
 
-# Register the environment with RLLib
-register_env("spoiled_broth", lambda config: ParallelPettingZooEnv(env_creator(config)))
+os.makedirs(save_dir, exist_ok=True)
 
-# Define separate policies for each agent
-def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
-    return f"policy_{agent_id}"
+# RLlib specific configuration
+config = {
+    "NUM_ENVS": NUM_ENVS,
+    "NUM_INNER_STEPS": NUM_INNER_STEPS,
+    "NUM_MINIBATCHES": NUM_MINIBATCHES,
+    "NUM_EPOCHS": NUM_EPOCHS,
+    "NUM_AGENTS": NUM_AGENTS,
+    "SHOW_EVERY_N_EPOCHS": SHOW_EVERY_N_EPOCHS,
+    "SAVE_EVERY_N_EPOCHS": SAVE_EVERY_N_EPOCHS,
+    "LR": LR,
+    "MAP_NR": MAP_NR,
+    "COOPERATIVE": COOPERATIVE,
+    "REWARD_WEIGHTS": reward_weights,
+    "SAVE_DIR": save_dir,
+    # RLlib specific parameters
+    "NUM_UPDATES": 10,  # Number of updates of the policy
+    "GAMMA": 0.9,  # Discount factor
+    "GAE_LAMBDA": 0.95,  # GAE-Lambda parameter
+    "ENT_COEF": 0.05,  # Entropy coefficient
+    "CLIP_EPS": 0.2,  # PPO clip parameter
+    "VF_COEF": 0.5  # Value function coefficient
+}
 
-# Configuration for multi-agent training
-config = (
-    PPOConfig()
-    .api_stack(
-        enable_rl_module_and_learner=True,
-        enable_env_runner_and_connector_v2=True
-    )
-    .environment(
-        env="spoiled_broth",
-        env_config={
-            "reward_weights": reward_weights,
-            "map_nr": map_nr
-        },
-        clip_actions=True,
-    )
-    .multi_agent(
-        policies={
-            "policy_ai_rl_1": (
-                None,  # Use default PPO policy
-                env_creator({"map_nr": map_nr}).observation_space("ai_rl_1"),
-                env_creator({"map_nr": map_nr}).action_space("ai_rl_1"),
-                {}
-            ),
-            "policy_ai_rl_2": (
-                None,  # Use default PPO policy
-                env_creator({"map_nr": map_nr}).observation_space("ai_rl_2"),
-                env_creator({"map_nr": map_nr}).action_space("ai_rl_2"),
-                {}
-            )
-        },
-        policy_mapping_fn=policy_mapping_fn,
-        policies_to_train=["policy_ai_rl_1", "policy_ai_rl_2"]
-    )
-    .resources(num_gpus=1)  # Set to 1 if you have a GPU
-    .env_runners(num_env_runners=2)
-    .training(
-        train_batch_size=4000,
-        minibatch_size=500,
-        num_epochs=10
-    )
-)
+# Run training
+trainer, current_date = make_train_rllib(config)
 
-# Build algorithm with error handling
-try:
-    algo = config.build_algo()
-    full_run_dir = algo.logdir
-    NAME_RAY = Path(full_run_dir).name
-    print(f"Algorithm built successfully: {NAME_RAY}")
-except Exception as e:
-    print(f"Error building algorithm: {e}")
-    raise
+# Save the final model
+path = os.path.join(config["SAVE_DIR"], f"Training_{current_date}")
+os.makedirs(path, exist_ok=True)
 
-# Save training config
-training_dir = Path(f"{base_save_dir}{NAME_RAY}")
-training_dir.mkdir(parents=True, exist_ok=True)
-shutil.copytree(full_run_dir, training_dir, dirs_exist_ok=True)
-
-def safe_config_dict(d):
-    def make_serializable(o):
-        try:
-            json.dumps(o)
-            return o
-        except TypeError:
-            return str(o)
-
-    return {
-        k: make_serializable(v)
-        for k, v in d.items()
-    }
-
-config_path = f"{training_dir}/config.txt"
-with open(config_path, "w") as f:
-    f.write("==== Training parameters ====\n")
-    f.write(f"RL model: {rl_model}\n")
-    f.write(f"Map number: {map_nr}\n")
-    f.write(f"Number of iterations: {n_iterations}\n")
-    f.write(f"Saved every N iterations: {save_every_n_iterations}\n")
-    f.write(f"Reward weights ai_rl_1: {w1_1}, {w1_2}\n")
-    f.write(f"Reward weights ai_rl_2: {w2_1}, {w2_2}\n")
-    f.write("\n==== Complete configuration ====\n")
-    f.write(json.dumps(safe_config_dict(config.to_dict()), indent=4))
-
-csv_file_path = f'{training_dir}/reward_data.csv'
-with open(csv_file_path, mode='a', newline='') as file:
-    writer = csv.writer(file)
-    writer.writerow(["iteration", "total_reward", "reward_agent_1", "reward_agent_2"])
-
-for i in range(n_iterations): 
-    result = algo.train()
-    reward_agent_1 = result['env_runners']['module_episode_returns_mean'].get('policy_ai_rl_1', 0)
-    reward_agent_2 = result['env_runners']['module_episode_returns_mean'].get('policy_ai_rl_2', 0)
-    total_reward = result['env_runners']['episode_return_mean']
-
-    print(f"Iteration {i}:")
-    print(f"  Agent 1 reward: {reward_agent_1}")
-    print(f"  Agent 2 reward: {reward_agent_2}")
-    print(f"  Total reward: {total_reward}")
-
-    with open(csv_file_path, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow([i, total_reward, reward_agent_1, reward_agent_2])
-
-    # Save checkpoint
-    if i % save_every_n_iterations == 0:
-        checkpoint_obtained = algo.save()
-        checkpoint_path = Path(checkpoint_obtained.checkpoint.path)
-        
-        custom_checkpoint_dir = Path(f"{training_dir}/Checkpoint_{i}")
-        custom_checkpoint_dir.mkdir(parents=True, exist_ok=True)
-
-        for item in checkpoint_path.iterdir():
-            dst = custom_checkpoint_dir / item.name
-            if item.is_dir():
-                shutil.copytree(item, dst, dirs_exist_ok=True)
-            else:
-                shutil.copy2(item, dst)
-
-        print(f"Checkpoint {i} saved in {custom_checkpoint_dir}")
+# Save the final policy
+final_checkpoint = trainer.save(os.path.join(path, "final_checkpoint"))
+print(f"Final checkpoint saved at {final_checkpoint}")
