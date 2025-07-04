@@ -10,10 +10,7 @@ import numpy as np
 TYPE_TILES = 6
 
 ITEM_LIST = [
-    "tomato", "pumpkin", "cabbage", "plate",
-    "tomato_cut", "pumpkin_cut", "cabbage_cut",
-    "tomato_salad", "pumpkin_salad", "cabbage_salad",
-    "unknown", None  # fallback types
+    "tomato", "plate", "tomato_cut", "tomato_salad"
 ]
 
 
@@ -61,16 +58,16 @@ class SoiledBrothTile(Tile):
     #    # Default no progress
     #    return [0] * 3  # Maintains same length as original
 
-    def to_vector(self):
-        return np.array(
-            self._position_vec() +
-            self._clickable_vec() +
-            self._type_vec() +
-            self._walkable_vec() +
-            self._item_vec() +
-            self._progress_vec(),
-            dtype=np.float32
-        )
+    ## LEGACY FROM game_to_vector in game.py
+    #def to_vector(self):
+    #    # Only encode type (as int), item (one-hot for 4), and progress (if relevant)
+    #    # All tiles are clickable, so skip clickable_vec
+    #    # Omit walkable_vec and position_vec for simplicity
+    #    type_val = getattr(self, '_type', 0)
+    #    item_vec = self._item_vec()
+    #    # For cutting board, include progress; else, 0
+    #    progress = self._progress_vec() if hasattr(self, '_progress_vec') else [0]
+    #    return np.array([type_val] + item_vec + progress, dtype=np.float32)
 
     def to_language(self, agent):
         raise NotImplementedError()
@@ -117,24 +114,24 @@ class Counter(SoiledBrothTile):
             self.drawables[1].height = 16
             if self.item == 'tomato':
                 self.drawables[1].src_y = 0
-            if self.item == 'pumpkin':
-                self.drawables[1].src_y = 16
-            if self.item == 'cabbage':
-                self.drawables[1].src_y = 32
+            #if self.item == 'pumpkin':
+            #    self.drawables[1].src_y = 16
+            #if self.item == 'cabbage':
+            #    self.drawables[1].src_y = 32
             if self.item == 'plate':
                 self.drawables[1].src_y = 48
             if self.item == 'tomato_cut':
                 self.drawables[1].src_y = 9 * 16
-            if self.item == 'pumpkin_cut':
-                self.drawables[1].src_y = 10 * 16
-            if self.item == 'cabbage_cut':
-                self.drawables[1].src_y = 11 * 16
+            #if self.item == 'pumpkin_cut':
+            #    self.drawables[1].src_y = 10 * 16
+            #if self.item == 'cabbage_cut':
+            #    self.drawables[1].src_y = 11 * 16
             if self.item == 'tomato_salad':
                 self.drawables[1].src_y = 15 * 16
-            if self.item == 'pumpkin_salad':
-                self.drawables[1].src_y = 16 * 16
-            if self.item == 'cabbage_salad':
-                self.drawables[1].src_y = 17 * 16
+            #if self.item == 'pumpkin_salad':
+            #    self.drawables[1].src_y = 16 * 16
+            #if self.item == 'cabbage_salad':
+            #    self.drawables[1].src_y = 17 * 16
         else:
             self.drawables[1].width = 0
             self.drawables[1].height = 0
@@ -156,10 +153,10 @@ class Dispenser(SoiledBrothTile):
         src_y = 0
         if item == 'tomato':
             src_y = 0
-        if item == 'pumpkin':
-            src_y = 16
-        if item == 'cabbage':
-            src_y = 32
+        #if item == 'pumpkin':
+        #    src_y = 16
+        #if item == 'cabbage':
+        #    src_y = 32
         if item == 'plate':
             src_y = 48
         self.add_drawable(Basic2D(src='world/item-dispenser.png', z_index=0, src_y=src_y, normalize=False))
@@ -203,10 +200,10 @@ class CuttingBoard(SoiledBrothTile):
             self.drawables[2].height = 16
             if self.item == 'tomato':
                 self.drawables[2].src_y = 0
-            if self.item == 'pumpkin':
-                self.drawables[2].src_y = 16
-            if self.item == 'cabbage':
-                self.drawables[2].src_y = 32
+            #if self.item == 'pumpkin':
+            #    self.drawables[2].src_y = 16
+            #if self.item == 'cabbage':
+            #    self.drawables[2].src_y = 32
             self.drawables[2].src_x = self.cut_stage * 16
         else:
             self.drawables[2].width = 0

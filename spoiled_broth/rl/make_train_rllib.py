@@ -30,7 +30,7 @@ def make_train_rllib(config):
             f.write(f"{key}: {val}\n")
 
     # Register the environment with RLLib
-    register_env("spoiled_broth", lambda config: ParallelPettingZooEnv(env_creator(config)))
+    register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator(cfg)))
 
     # Configuration for multi-agent training
     ppo_config = (
@@ -39,6 +39,14 @@ def make_train_rllib(config):
             enable_rl_module_and_learner=True,
             enable_env_runner_and_connector_v2=True
         )
+        .rl_module(
+            model_config={
+                "conv_filters": config["CONV_FILTERS"],
+                "conv_activation": "tanh",
+                "use_lstm": False,
+                "use_attention": False,
+            }
+        )
         .environment(
             env="spoiled_broth",
             env_config={
@@ -46,7 +54,8 @@ def make_train_rllib(config):
                 "map_nr": config["MAP_NR"],
                 "cooperative": config["COOPERATIVE"],
                 "step_per_episode": config["NUM_INNER_STEPS"],
-                "path": config["PATH"]
+                "path": config["PATH"],
+                "grid_size": config.get("GRID_SIZE", (8, 8)),
             },
             clip_actions=True,
         )
@@ -54,22 +63,22 @@ def make_train_rllib(config):
             policies={
                 "policy_ai_rl_1": (
                     None,  # Use default PPO policy
-                    env_creator({"map_nr": config["MAP_NR"]}).observation_space("ai_rl_1"),
-                    env_creator({"map_nr": config["MAP_NR"]}).action_space("ai_rl_1"),
+                    env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space("ai_rl_1"),
+                    env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space("ai_rl_1"),
                     {}
                 ),
                 "policy_ai_rl_2": (
                     None,  # Use default PPO policy
-                    env_creator({"map_nr": config["MAP_NR"]}).observation_space("ai_rl_2"),
-                    env_creator({"map_nr": config["MAP_NR"]}).action_space("ai_rl_2"),
+                    env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space("ai_rl_2"),
+                    env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space("ai_rl_2"),
                     {}
                 )
             },
             policy_mapping_fn=policy_mapping_fn,
             policies_to_train=["policy_ai_rl_1", "policy_ai_rl_2"]
         )
-        .resources(num_gpus=1, num_gpus_per_worker=1)  # Set to 1 if you have a GPU
-        .env_runners(num_env_runners=1)
+        .resources(num_gpus=1)  # Set to 1 if you have a GPU
+        .env_runners(num_env_runners=1, num_gpus_per_env_runner=1)
         .training(
                 train_batch_size=config["NUM_ENVS"] * config["NUM_INNER_STEPS"],
                 lr=config["LR"],
@@ -79,13 +88,7 @@ def make_train_rllib(config):
                 clip_param=config["CLIP_EPS"],
                 vf_loss_coeff=config["VF_COEF"],
                 minibatch_size=config["NUM_INNER_STEPS"] // config["NUM_MINIBATCHES"],
-                num_epochs=config["NUM_UPDATES"],
-                model={
-                    "fcnet_hiddens": config["MODEL_SIZE"],
-                    "fcnet_activation": "tanh",
-                    "use_lstm": config["USE_LSTM"],
-                    "use_attention": False,
-                }
+                num_epochs=config["NUM_UPDATES"]
             )
     )
 
@@ -103,3 +106,5 @@ def make_train_rllib(config):
         if epoch % config["SAVE_EVERY_N_EPOCHS"] == 0:
             checkpoint_path = trainer.save(os.path.join(path, f"checkpoint_{epoch}"))
             print(f"Checkpoint saved at {checkpoint_path}")
+
+    return trainer, current_date

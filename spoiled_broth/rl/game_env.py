@@ -5,7 +5,8 @@ from gymnasium import spaces
 import numpy as np
 from spoiled_broth.config import *
 
-from spoiled_broth.game import SpoiledBroth, game_to_vector, random_game_state
+from spoiled_broth.game import SpoiledBroth, random_game_state, game_to_obs_matrix
+from spoiled_broth.world.tiles import Counter
 
 MAX_PLAYERS = 4
 
@@ -41,8 +42,8 @@ def get_action_type(tile):
     
     return type_mapping.get(tile._type, ACTION_TYPE_FLOOR)  # Default to floor for unknown types
 
-def init_game(agents, map_nr=1):
-    game = SpoiledBroth(map_nr=map_nr)
+def init_game(agents, map_nr=1, grid_size=(8, 8)):
+    game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size)
     for agent_id in agents:
         game.add_agent(agent_id)
 
@@ -74,7 +75,8 @@ class GameEnv(ParallelEnv):
             map_nr=1, 
             cooperative=1, 
             step_per_episode=1000,
-            path="training_stats.csv"
+            path="training_stats.csv",
+            grid_size=(8, 8)
     ):
         super().__init__()
         self.map_nr = map_nr
@@ -86,6 +88,7 @@ class GameEnv(ParallelEnv):
         self.write_header = True
         self.write_csv = False
         self.csv_path = os.path.join(path, "training_stats.csv")
+        self.grid_size = grid_size
 
         self.possible_agents = ["ai_rl_1", "ai_rl_2"]
         self.agents = self.possible_agents[:]
@@ -106,16 +109,17 @@ class GameEnv(ParallelEnv):
             } for agent_id in self.agents
         }
 
-        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size)
 
         self.agent_map = {
             agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents
         }
 
-        example_obs = self.observe(self.agents[0])
-        obs_size = example_obs.shape[0]
+        # --- New observation space: flatten (channels, H, W) + (2, 4) inventory ---
+        obs_matrix, agent_inventory = game_to_obs_matrix(self.game, self.agents[0])
+        obs_size = obs_matrix.size + agent_inventory.size
         self.observation_spaces = {
-            agent: spaces.Box(low=0.0, high=50.0, shape=(obs_size,), dtype=np.float32)
+            agent: spaces.Box(low=0.0, high=1.0, shape=(obs_size,), dtype=np.float32)
             for agent in self.agents
         }
 
@@ -128,7 +132,7 @@ class GameEnv(ParallelEnv):
         self._last_score = 0
         self.agents = self.possible_agents[:]
 
-        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size)
 
         random_game_state(self.game)
 
@@ -164,7 +168,13 @@ class GameEnv(ParallelEnv):
         }, self.infos
 
     def observe(self, agent):
-        return game_to_vector(self.game, agent)
+        # Use the new spatial observation (channels, H, W) and agent inventory
+        obs_matrix, agent_inventory = game_to_obs_matrix(self.game, agent)
+        # Option 1: Return as tuple (recommended for custom RL code)
+        # return (obs_matrix, agent_inventory)
+        # Option 2: Flatten and concatenate for Gym compatibility
+        obs = np.concatenate([obs_matrix.flatten(), agent_inventory.flatten()]).astype(np.float32)
+        return obs
 
     def step(self, actions):
         self._step_counter += 1
@@ -172,6 +182,11 @@ class GameEnv(ParallelEnv):
 
         agent_penalties = {agent_id: 0.0 for agent_id in self.agents}  # Used for counter penalty
         for agent_id, action in actions.items():
+            agent_obj = self.game.gameObjects[agent_id]
+            # Only allow a new action if the agent is not moving and has no unfinished intents
+            if getattr(agent_obj, "is_moving", False) or getattr(agent_obj, "intents", []):
+                continue  # Skip this agent's new action, let it finish its current one
+
             # Map action to actual clickable tile index
             tile_index = self.clickable_indices[action]
             grid_w = self.game.grid.width
@@ -184,8 +199,6 @@ class GameEnv(ParallelEnv):
             self.total_action_types[agent_id][action_type] += 1
 
             # Penalty for clicking on counter without holding something
-            from spoiled_broth.world.tiles import Counter
-            agent_obj = self.game.gameObjects[agent_id]
             if isinstance(tile, Counter) and agent_obj.item is None:
                 agent_penalties[agent_id] += COUNTER_PENALTY
 

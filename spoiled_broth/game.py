@@ -13,12 +13,12 @@ import numpy as np
 import random
 
 class SpoiledBroth(BaseGame):
-    def __init__(self, map_nr=None):
+    def __init__(self, map_nr=None, grid_size=(8, 8)):
         super().__init__()
         if map_nr is None:
             map_nr = str(random.randint(1, 4))  # default maps
-        
-        self.grid = Grid("grid", 8, 8, 16)
+        width, height = grid_size
+        self.grid = Grid("grid", width, height, 16)
         map_path_img = Path(__file__).parent / "maps" / f"{map_nr}.png"
         map_path_txt = Path(__file__).parent / "maps" / f"{map_nr}.txt"
 
@@ -53,29 +53,29 @@ class SpoiledBroth(BaseGame):
 
 MAX_PLAYERS = 4 # or import if needed
 
-def game_to_vector(game, agent_id):
-    grid = game.grid
-    agent = game.gameObjects[agent_id]
-    tile_obs = []
-    for y in range(grid.height):
-        for x in range(grid.width):
-            tile = grid.tiles[x][y]
-            if tile:
-                tile_obs.extend(tile.to_vector())
-
-    self_obs = agent.to_vector()
-    len_agent_vector = len(self_obs)
-
-    other_obs = []
-    for other_id in game.gameObjects:
-        if other_id != agent_id and hasattr(game.gameObjects[other_id], "to_vector"):
-            other_obs.extend(game.gameObjects[other_id].to_vector())
-
-    n_other = len([aid for aid in game.gameObjects if aid != agent_id and hasattr(game.gameObjects[aid], "to_vector")])
-    if n_other < MAX_PLAYERS - 1:
-        other_obs.extend([0.0] * (len_agent_vector * (MAX_PLAYERS - 1 - n_other)))
-
-    return np.concatenate([tile_obs, self_obs, other_obs]).astype(np.float32)
+### LEGACY
+#def game_to_vector(game, agent_id):
+#    # Get both agents' info
+#    agent_ids = [aid for aid in game.gameObjects if aid.startswith('ai_rl_')]
+#    agent_vecs = []
+#    tile_vecs = []
+#    for aid in agent_ids:
+#        agent = game.gameObjects[aid]
+#        agent_vecs.append(agent.to_vector())
+#        # Find the tile the agent is currently targeting (if any intent exists)
+#        if hasattr(agent, 'intents') and agent.intents:
+#            # Assume first intent is MoveToIntent or similar, get its target
+#            intent = agent.intents[0]
+#            target_tile = getattr(intent, 'target', None)
+#            if target_tile is not None:
+#                tile_vecs.append(target_tile.to_vector())
+#            else:
+#                tile_vecs.append(np.zeros(1 + 4 + 1, dtype=np.float32))  # type + 4 items + progress
+#        else:
+#            tile_vecs.append(np.zeros(1 + 4 + 1, dtype=np.float32))
+#    # Flatten all vectors
+#    obs = np.concatenate(agent_vecs + tile_vecs).astype(np.float32)
+#    return obs
 
 
 def random_game_state(game, item_list=['tomato', 'plate', 'tomato_cut', 'tomato_salad']):
@@ -104,5 +104,71 @@ def random_game_state(game, item_list=['tomato', 'plate', 'tomato_cut', 'tomato_
         if hasattr(agent, "item"):
             if random.random() < .3:
                 agent.item = random.choice(_item_list)
+
+def game_to_obs_matrix(game, agent_id):
+    """
+    Returns a spatial observation for the current game state from the perspective of agent_id.
+    - obs_matrix: shape (channels, H, W)
+    - agent_inventory: shape (2, 4) (one-hot for [self, other] agent's held item)
+    Channels:
+      0: Self agent position
+      1: Other agent position
+      2: Counter tiles
+      3: Dispenser tiles
+      4: Cutting board tiles
+      5: Delivery tiles
+      6: Tomato on tile
+      7: Plate on tile
+      8: Tomato_cut on tile
+      9: Tomato_salad on tile
+      10: Progress (normalized, 0 for non-cutting board)
+    """
+    grid = game.grid
+    H, W = grid.height, grid.width
+    channels = 11
+    obs = np.zeros((channels, H, W), dtype=np.float32)
+    # Get agent ids and order as [self, other]
+    all_agent_ids = [aid for aid in game.gameObjects if aid.startswith('ai_rl_')]
+    if agent_id not in all_agent_ids:
+        raise ValueError(f"agent_id {agent_id} not found in gameObjects")
+    other_agent_id = [aid for aid in all_agent_ids if aid != agent_id]
+    agent_order = [agent_id] + other_agent_id
+    item_names = ["tomato", "plate", "tomato_cut", "tomato_salad"]
+    # --- Agent positions ---
+    for idx, aid in enumerate(agent_order):
+        agent = game.gameObjects[aid]
+        x, y = agent.slot_x, agent.slot_y
+        if 0 <= x < W and 0 <= y < H:
+            obs[idx, y, x] = 1.0  # Channel 0: self, Channel 1: other
+    # --- Tile types and items ---
+    for y in range(H):
+        for x in range(W):
+            tile = grid.tiles[x][y]
+            if tile is None:
+                continue
+            t = getattr(tile, '_type', None)
+            if t == 2:
+                obs[2, y, x] = 1.0
+            elif t == 3:
+                obs[3, y, x] = 1.0
+            elif t == 4:
+                obs[4, y, x] = 1.0
+            elif t == 5:
+                obs[5, y, x] = 1.0
+            item = getattr(tile, 'item', None)
+            if item in item_names:
+                obs[6 + item_names.index(item), y, x] = 1.0
+            if t == 4:
+                cut_stage = getattr(tile, 'cut_stage', 0)
+                norm_prog = min(3, max(0, cut_stage)) / 3.0
+                obs[10, y, x] = norm_prog
+    # --- Agent inventory ---
+    agent_inventory = np.zeros((2, 4), dtype=np.float32)
+    for idx, aid in enumerate(agent_order):
+        agent = game.gameObjects[aid]
+        item = getattr(agent, 'item', None)
+        if item in item_names:
+            agent_inventory[idx, item_names.index(item)] = 1.0
+    return obs, agent_inventory
 
 

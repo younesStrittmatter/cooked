@@ -34,10 +34,18 @@ from flask import jsonify
 import signal
 import sys
 
-map_nr = 'kitchen'
+map_nr = 'simple_kitchen'
 cooperative = int(sys.argv[1])
 training_id = sys.argv[2]
 checkpoint_number = int(sys.argv[3])
+
+# --- Determine grid size from map file ---
+map_txt_path = Path(__file__).parent / 'spoiled_broth' / 'maps' / f'{map_nr}.txt'
+with open(map_txt_path, 'r') as f:
+    map_lines = [line.rstrip('\n') for line in f.readlines()]
+rows = len(map_lines)
+cols = len(map_lines[0]) if rows > 0 else 0
+grid_size = (cols, rows)  # (width, height)
 
 # Configuration for game duration and actions
 cf_AI_TICK_RATE = 1  # Actions per second (low rate for complete actions)
@@ -46,7 +54,7 @@ ACTIONS_PER_AGENT = 100  # Reduced from 4000 to reduce load
 # Video speed configuration
 VIDEO_FPS = 60  # Increased from 15 for faster playback
 VIDEO_SPEED_MULTIPLIER = 2.0  # Makes video play 2x faster
-FRAME_SKIP = 2  # Capture every Nth frame (1=no skip, 2=every other frame, etc.)
+FRAME_SKIP = 1  # Capture every Nth frame (1=no skip, 2=every other frame, etc.)
 ENABLE_VIDEO_RECORDING = True  # Set to False to skip video recording entirely
 
 # Calculate AI tick rate to achieve desired number of actions in desired duration
@@ -252,11 +260,11 @@ def capture_canvas_frames(url="http://localhost:5000", duration_seconds=60, fps=
 
 # Create the AI-only engine app
 engine_app = AIOnlySessionApp(
-    game_factory=partial(Game, map_nr=map_nr),
+    game_factory=partial(Game, map_nr=map_nr, grid_size=grid_size),
     ui_modules=[Renderer2DModule()],
     agent_map={
-        "ai_1": RLlibController("ai_1", checkpoint_dir, "policy_ai_rl_1"),
-        "ai_2": RLlibController("ai_2", checkpoint_dir, "policy_ai_rl_2")
+        "ai_rl_1": RLlibController("ai_rl_1", checkpoint_dir, "policy_ai_rl_1"),
+        "ai_rl_2": RLlibController("ai_rl_2", checkpoint_dir, "policy_ai_rl_2")
     },
     path_root=path_root,
     tick_rate=24,
