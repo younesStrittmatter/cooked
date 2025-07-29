@@ -90,7 +90,11 @@ class GameEnv(ParallelEnv):
         self.csv_path = os.path.join(path, "training_stats.csv")
         self.grid_size = grid_size
 
-        self.possible_agents = ["ai_rl_1", "ai_rl_2"]
+        # Determine agent IDs from reward_weights or default to two agents
+        if reward_weights is not None:
+            self.possible_agents = list(reward_weights.keys())
+        else:
+            self.possible_agents = ["ai_rl_1", "ai_rl_2"]
         self.agents = self.possible_agents[:]
 
         default_weights = {agent: (1.0, 0.0) for agent in self.agents}

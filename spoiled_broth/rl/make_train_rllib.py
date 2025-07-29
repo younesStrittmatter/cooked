@@ -32,6 +32,39 @@ def make_train_rllib(config):
     # Register the environment with RLLib
     register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator(cfg)))
 
+    # --- Dynamic policy setup ---
+    num_agents = config.get("NUM_AGENTS", 2)
+    agent_ids = [f"ai_rl_{i+1}" for i in range(num_agents)]
+    policies = {}
+    policies_to_train = []
+    for agent_id in agent_ids:
+        policies[f"policy_{agent_id}"] = (
+            None,  # Use default PPO policy
+            env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space(agent_id),
+            env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space(agent_id),
+            {}
+        )
+        policies_to_train.append(f"policy_{agent_id}")
+
+    def dynamic_policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
+        return f"policy_{agent_id}"
+
+    # --- Model config for MLP or LSTM ---
+    model_config = {
+        "fcnet_hiddens": config.get("FCNET_HIDDENS", [256, 256]),
+        "fcnet_activation": config.get("FCNET_ACTIVATION", "tanh"),
+        "use_lstm": config.get("USE_LSTM", False),
+        "max_seq_len": config.get("MAX_SEQ_LEN", 20),
+    }
+    
+    # --- Model config for CNN ---
+    #model_config={
+    #            "conv_filters": config["CONV_FILTERS"],
+    #            "conv_activation": "tanh",
+    #            "use_lstm": False,
+    #            "use_attention": False,
+    #        }
+
     # Configuration for multi-agent training
     ppo_config = (
         PPOConfig()
@@ -40,12 +73,7 @@ def make_train_rllib(config):
             enable_env_runner_and_connector_v2=True
         )
         .rl_module(
-            model_config={
-                "conv_filters": config["CONV_FILTERS"],
-                "conv_activation": "tanh",
-                "use_lstm": False,
-                "use_attention": False,
-            }
+            model_config=model_config
         )
         .environment(
             env="spoiled_broth",
@@ -60,22 +88,9 @@ def make_train_rllib(config):
             clip_actions=True,
         )
         .multi_agent(
-            policies={
-                "policy_ai_rl_1": (
-                    None,  # Use default PPO policy
-                    env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space("ai_rl_1"),
-                    env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space("ai_rl_1"),
-                    {}
-                ),
-                "policy_ai_rl_2": (
-                    None,  # Use default PPO policy
-                    env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space("ai_rl_2"),
-                    env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space("ai_rl_2"),
-                    {}
-                )
-            },
-            policy_mapping_fn=policy_mapping_fn,
-            policies_to_train=["policy_ai_rl_1", "policy_ai_rl_2"]
+            policies=policies,
+            policy_mapping_fn=dynamic_policy_mapping_fn,
+            policies_to_train=policies_to_train
         )
         .resources(num_gpus=1)  # Set to 1 if you have a GPU
         .env_runners(num_env_runners=1, num_gpus_per_env_runner=1)

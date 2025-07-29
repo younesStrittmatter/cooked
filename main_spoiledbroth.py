@@ -34,6 +34,16 @@ if not checkpoint_dir.exists():
 def env_creator(config):
     return GameEnv(**config)
 
+# --- Determine agent IDs from config.txt if available ---
+agent_ids = ["ai_1", "ai_2"]
+policy_ids = ["policy_ai_rl_1", "policy_ai_rl_2"]
+if (base_path / "config.txt").exists():
+    with open(base_path / "config.txt", "r") as f:
+        config_lines = f.read()
+        if 'ai_rl_2' not in config_lines:
+            agent_ids = ["ai_1"]
+            policy_ids = ["policy_ai_rl_1"]
+
 # Initialize Ray
 ray.shutdown()
 ray.init(local_mode=True, ignore_reinit_error=True, include_dashboard=False)
@@ -44,10 +54,7 @@ path_root = Path(__file__).resolve().parent / "spoiled_broth"
 engine_app = SessionApp(
     game_factory=partial(Game, map_nr=map_nr),
     ui_modules=[Renderer2DModule()],
-    agent_map={
-        "ai_1": RLlibController("ai_1", checkpoint_dir, "policy_ai_rl_1"),
-        "ai_2": RLlibController("ai_2", checkpoint_dir, "policy_ai_rl_2")
-    },
+    agent_map={aid: RLlibController(aid, checkpoint_dir, pid) for aid, pid in zip(agent_ids, policy_ids)},
     path_root=path_root,
     tick_rate=24,
     ai_tick_rate=2,  # 2 actions per second

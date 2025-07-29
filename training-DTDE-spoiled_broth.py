@@ -7,26 +7,37 @@ input_path = sys.argv[1]
 MAP_NR = sys.argv[2]
 LR = float(sys.argv[3])
 COOPERATIVE = int(sys.argv[4])
+if len(sys.argv) > 5:
+    NUM_AGENTS = int(sys.argv[5])
+    if NUM_AGENTS not in [1, 2]:
+        raise ValueError("NUM_AGENTS must be 1 or 2")
+else:
+    NUM_AGENTS = 2  # Default to 2 agents for backward compatibility
 
 with open(input_path, "r") as f:
     lines = f.readlines()
     alpha_1, beta_1 = map(float, lines[0].strip().split())
-    alpha_2, beta_2 = map(float, lines[1].strip().split())
+    if NUM_AGENTS == 2:
+        alpha_2, beta_2 = map(float, lines[1].strip().split())
 
-reward_weights = {
-    "ai_rl_1": (alpha_1, beta_1),
-    "ai_rl_2": (alpha_2, beta_2),
-}
+if NUM_AGENTS == 1:
+    reward_weights = {
+        "ai_rl_1": (alpha_1, beta_1),
+    }
+else:
+    reward_weights = {
+        "ai_rl_1": (alpha_1, beta_1),
+        "ai_rl_2": (alpha_2, beta_2),
+    }
 
 local = '/mnt/lustre/home/samuloza'
 #local = 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
 
 # Hiperparámetros
 NUM_ENVS = 1
-NUM_INNER_STEPS = 300
-NUM_EPOCHS = 7500
+NUM_INNER_STEPS = 450
+NUM_EPOCHS = 15000
 NUM_MINIBATCHES = 10
-NUM_AGENTS = 2
 SHOW_EVERY_N_EPOCHS = 1000
 SAVE_EVERY_N_EPOCHS = 500
 CONV_FILTERS = [
@@ -34,6 +45,8 @@ CONV_FILTERS = [
     [64, [2, 2], 1],  # Output: (64, 2, 2)
     #[64, [2, 2], 1],  # Output: (64, 2, 2)
 ]
+MLP_LAYERS = [512, 512, 256]
+USE_LSTM = True
 
 if COOPERATIVE:
     save_dir = f'{local}/data/samuel_lozano/cooked/map_{MAP_NR}/cooperative'
@@ -76,7 +89,12 @@ config = {
     "CLIP_EPS": 0.2,  # PPO clip parameter
     "VF_COEF": 0.5,  # Value function coefficient
     "CONV_FILTERS": CONV_FILTERS,
-    "GRID_SIZE": GRID_SIZE
+    "GRID_SIZE": GRID_SIZE,
+    # MLP/LSTM model config
+    "USE_LSTM": USE_LSTM,  # Set to True to use LSTM
+    "FCNET_HIDDENS": MLP_LAYERS,  # Hidden layer sizes for MLP
+    "FCNET_ACTIVATION": "tanh",  # Activation function for MLP ("tanh", "relu", etc.)
+    "MAX_SEQ_LEN": 20,  # Sequence length for LSTM (if used)
 }
 
 # Run training
