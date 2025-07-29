@@ -73,13 +73,21 @@ print(f"  Actual Capture FPS: {VIDEO_FPS / FRAME_SKIP:.1f}")
 print(f"  Video Recording: {'Enabled' if ENABLE_VIDEO_RECORDING else 'Disabled'}")
 print()
 
-local = '/mnt/lustre/home/samuloza'
-#local = 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
+#local = '/mnt/lustre/home/samuloza'
+local = 'C:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
+pretraining = True
 
-if cooperative: 
-    base_path = Path(f"{local}/data/samuel_lozano/cooked/map_{map_nr}/cooperative/{training_id}")
+if pretraining:
+    if cooperative: 
+        base_path = Path(f"{local}/data/samuel_lozano/cooked/pretraining/map_{map_nr}/cooperative/{training_id}")
+    else:
+        base_path = Path(f"{local}/data/samuel_lozano/cooked/pretraining/map_{map_nr}/competitive/{training_id}")
+
 else:
-    base_path = Path(f"{local}/data/samuel_lozano/cooked/map_{map_nr}/competitive/{training_id}")
+    if cooperative: 
+        base_path = Path(f"{local}/data/samuel_lozano/cooked/map_{map_nr}/cooperative/{training_id}")
+    else:
+        base_path = Path(f"{local}/data/samuel_lozano/cooked/map_{map_nr}/competitive/{training_id}")
 
 config_path = base_path / "config.txt"
 if config_path.exists():
@@ -258,14 +266,22 @@ def capture_canvas_frames(url="http://localhost:5000", duration_seconds=60, fps=
             except Exception as e:
                 print(f"Error closing WebDriver: {e}")
 
+# Create the agent_map depending on pretraining mode
+if pretraining:
+    agent_map = {
+        "ai_rl_1": RLlibController("ai_rl_1", checkpoint_dir, "policy_ai_rl_1")
+    }
+else:
+    agent_map = {
+        "ai_rl_1": RLlibController("ai_rl_1", checkpoint_dir, "policy_ai_rl_1"),
+        "ai_rl_2": RLlibController("ai_rl_2", checkpoint_dir, "policy_ai_rl_2")
+    }
+
 # Create the AI-only engine app
 engine_app = AIOnlySessionApp(
     game_factory=partial(Game, map_nr=map_nr, grid_size=grid_size),
     ui_modules=[Renderer2DModule()],
-    agent_map={
-        "ai_rl_1": RLlibController("ai_rl_1", checkpoint_dir, "policy_ai_rl_1"),
-        "ai_rl_2": RLlibController("ai_rl_2", checkpoint_dir, "policy_ai_rl_2")
-    },
+    agent_map=agent_map,
     path_root=path_root,
     tick_rate=24,
     ai_tick_rate=cf_AI_TICK_RATE,
