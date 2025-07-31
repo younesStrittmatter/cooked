@@ -65,12 +65,13 @@ class Tile(grid.Tile):
             def _on_click(agent_id):
                 agent = self.game.gameObjects.get(agent_id)
                 if agent:
-                    intent = self.get_intent(agent)
+                    version = getattr(agent, "intent_version", "v1")
+                    intent = self.get_intent(agent, version=version)
                     if intent:
                         agent.set_intents(intent)
 
         super().add_to_grid(grid, slot_x, slot_y, tile_size, _on_click)
 
-    def get_intent(self, agent):
+    def get_intent(self, agent, version="v1"):
         return None
 

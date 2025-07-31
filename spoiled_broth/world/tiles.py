@@ -138,8 +138,8 @@ class Counter(SoiledBrothTile):
         
         # The salad_by field is now set in ItemExchangeIntent when salad is created
 
-    def get_intent(self, agent):
-        return [MoveToIntent(self), ItemExchangeIntent(self)]
+    def get_intent(self, agent, version="v1"):
+        return [MoveToIntent(self), ItemExchangeIntent(self, version=version)]
 
 
 class Dispenser(SoiledBrothTile):
@@ -161,8 +161,8 @@ class Dispenser(SoiledBrothTile):
             src_y = 48
         self.add_drawable(Basic2D(src='world/item-dispenser.png', z_index=0, src_y=src_y, normalize=False))
 
-    def get_intent(self, agent):
-        return [MoveToIntent(self), PickUpIntent(self)]
+    def get_intent(self, agent, version="v1"):
+        return [MoveToIntent(self), PickUpIntent(self, version=version)]
 
 
 class CuttingBoard(SoiledBrothTile):
@@ -179,17 +179,25 @@ class CuttingBoard(SoiledBrothTile):
         self.item = None
         self.cut_time_accumulated = 0
         self.cut_by = None  # New field to register the agent
+        self.version = None
 
     @property
     def cut_stage(self):
-        if 0 <= self.cut_time_accumulated < 1:
-            return 0
-        if 1 <= self.cut_time_accumulated < 2:
-            return 1
-        elif 2 <= self.cut_time_accumulated < 3:
-            return 2
+        if self.version == "v2":
+            # In v2: cutting one time is enough
+            if self.cut_time_accumulated >= 1:
+                return 3 
+            else:
+                return 0
         else:
-            return 3
+            if 0 <= self.cut_time_accumulated < 1:
+                return 0
+            if 1 <= self.cut_time_accumulated < 2:
+                return 1
+            elif 2 <= self.cut_time_accumulated < 3:
+                return 2
+            else:
+                return 3
 
     def update(self, agent, delta_time):
         super().update(agent, delta_time)
@@ -211,8 +219,9 @@ class CuttingBoard(SoiledBrothTile):
 
         # The cut_by field is now set in CuttingBoardIntent when item is cut
 
-    def get_intent(self, agent):
-        return [MoveToIntent(self), CuttingBoardIntent(self)]
+    def get_intent(self, agent, version="v1"):
+        self.version = version
+        return [MoveToIntent(self), CuttingBoardIntent(self, version=version)]
 
     def _progress_vec(self):
         if self.item is None:
@@ -236,13 +245,15 @@ class Delivery(SoiledBrothTile):
         self.is_walkable = False
         self.add_drawable(Basic2D(src='world/delivery.png', z_index=0, normalize=False))
         self.delivered_by = None  # Register which agent delivered
+        self.version = None
 
     def update(self, agent, delta_time):
         super().update(agent, delta_time)
         # The delivered_by field is now set in DeliveryIntent when delivery occurs
 
-    def get_intent(self, agent):
-        return [MoveToIntent(self), DeliveryIntent(self)]
+    def get_intent(self, agent, version="v1"):
+        self.version = version
+        return [MoveToIntent(self), DeliveryIntent(self, version=version)]
 
 
 COLOR_MAP = {

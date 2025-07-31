@@ -42,10 +42,13 @@ def get_action_type(tile):
     
     return type_mapping.get(tile._type, ACTION_TYPE_FLOOR)  # Default to floor for unknown types
 
-def init_game(agents, map_nr=1, grid_size=(8, 8)):
+def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None):
     game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size)
     for agent_id in agents:
-        game.add_agent(agent_id)
+        if intent_version is not None:
+            game.add_agent(agent_id, intent_version=intent_version)
+        else:
+            game.add_agent(agent_id)
 
     clickable_indices = []
     for x in range(game.grid.width):
@@ -76,7 +79,8 @@ class GameEnv(ParallelEnv):
             cooperative=1, 
             step_per_episode=1000,
             path="training_stats.csv",
-            grid_size=(8, 8)
+            grid_size=(8, 8),
+            intent_version=None
     ):
         super().__init__()
         self.map_nr = map_nr
@@ -89,6 +93,7 @@ class GameEnv(ParallelEnv):
         self.write_csv = False
         self.csv_path = os.path.join(path, "training_stats.csv")
         self.grid_size = grid_size
+        self.intent_version = intent_version
 
         # Determine agent IDs from reward_weights or default to two agents
         if reward_weights is not None:
@@ -113,7 +118,7 @@ class GameEnv(ParallelEnv):
             } for agent_id in self.agents
         }
 
-        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version)
 
         self.agent_map = {
             agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents
@@ -136,7 +141,7 @@ class GameEnv(ParallelEnv):
         self._last_score = 0
         self.agents = self.possible_agents[:]
 
-        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version)
 
         random_game_state(self.game)
 

@@ -34,8 +34,8 @@ class SpoiledBroth(BaseGame):
         self.gameObjects['grid'] = self.grid
         self.gameObjects['score'] = self.score
 
-    def add_agent(self, agent_id):
-        agent = Agent(agent_id, self.grid, self)
+    def add_agent(self, agent_id, intent_version="v1"):
+        agent = Agent(agent_id, self.grid, self, intent_version=intent_version)
         # set agent's initial position to walkable tile
         choices = []
         for x in range(self.grid.width):

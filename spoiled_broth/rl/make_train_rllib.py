@@ -84,6 +84,7 @@ def make_train_rllib(config):
                 "step_per_episode": config["NUM_INNER_STEPS"],
                 "path": config["PATH"],
                 "grid_size": config.get("GRID_SIZE", (8, 8)),
+                "intent_version": config.get("INTENT_VERSION", None),
             },
             clip_actions=True,
         )

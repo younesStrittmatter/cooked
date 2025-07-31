@@ -30,7 +30,10 @@ else:
         "ai_rl_2": (alpha_2, beta_2),
     }
 
-local = '/mnt/lustre/home/samuloza'
+INTENT_VERSION = "v2"
+
+#local = '/mnt/lustre/home/samuloza'
+local = ''
 #local = 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
 
 # Hiperparámetros
@@ -46,12 +49,22 @@ CONV_FILTERS = [
     #[64, [2, 2], 1],  # Output: (64, 2, 2)
 ]
 MLP_LAYERS = [512, 512, 256]
-USE_LSTM = True
+USE_LSTM = False
+
+if NUM_AGENTS == 1:
+    raw_dir = f'{local}/data/samuel_lozano/cooked/pretraining'
+else: 
+    raw_dir = f'{local}/data/samuel_lozano/cooked'
+
+if INTENT_VERSION is not None:
+    intent_dir = f'{raw_dir}/{INTENT_VERSION}'
+else: 
+    intent_dir = f'{raw_dir}'
 
 if COOPERATIVE:
-    save_dir = f'{local}/data/samuel_lozano/cooked/map_{MAP_NR}/cooperative'
+    save_dir = f'{intent_dir}/map_{MAP_NR}/cooperative'
 else:
-    save_dir = f'{local}/data/samuel_lozano/cooked/map_{MAP_NR}/competitive'
+    save_dir = f'{intent_dir}/map_{MAP_NR}/competitive'
 
 os.makedirs(save_dir, exist_ok=True)
 
@@ -80,6 +93,7 @@ config = {
     "MAP_NR": MAP_NR,
     "COOPERATIVE": COOPERATIVE,
     "REWARD_WEIGHTS": reward_weights,
+    "INTENT_VERSION": INTENT_VERSION,
     "SAVE_DIR": save_dir,
     # RLlib specific parameters
     "NUM_UPDATES": 10,  # Number of updates of the policy

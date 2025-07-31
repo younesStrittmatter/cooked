@@ -1,5 +1,5 @@
 WMTMW
-M   B
-D   M
-M   B
+B   M
+M   D
+B   M
 WMXMW

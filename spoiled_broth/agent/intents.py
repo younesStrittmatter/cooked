@@ -2,8 +2,9 @@ from engine.extensions.topDownGridWorld.intent import _base_intent
 
 
 class PickUpIntent(_base_intent.Intent):
-    def __init__(self, tile):
+    def __init__(self, tile, version="v1"):
         super().__init__()
+        self.version = version
         self.tile = tile
         self.has_ended = False
 
@@ -17,8 +18,9 @@ class PickUpIntent(_base_intent.Intent):
 
 
 class ItemExchangeIntent(_base_intent.Intent):
-    def __init__(self, tile):
+    def __init__(self, tile, version="v1"):
         super().__init__()
+        self.version = version
         self.tile = tile
         self.has_ended = False
 
@@ -39,9 +41,10 @@ class ItemExchangeIntent(_base_intent.Intent):
 
 
 class CuttingBoardIntent(_base_intent.Intent):
-    def __init__(self, tile):
+    def __init__(self, tile, version="v1"):
         super().__init__()
         self.tile = tile
+        self.version = version
         self.has_ended = False
         self.has_started = False
 
@@ -76,19 +79,28 @@ class CuttingBoardIntent(_base_intent.Intent):
 
 
 class DeliveryIntent(_base_intent.Intent):
-    def __init__(self, tile):
+    def __init__(self, tile, version="v1"):
         super().__init__()
         self.tile = tile
+        self.version = version
         self.has_ended = False
 
     def update(self, agent, delta_time: float):
         if not self.has_ended:
             self.has_ended = True
-            if agent.item in ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']:
+
+            if self.version == "v1":
+                valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato']
+            elif self.version == "v2":
+                valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato_cut']
+            else:
+                valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
+
+            if agent.item in valid_items:
                 self.tile.delivered_by = agent.id
                 agent.item = None
                 agent.score += 1
-                if 'score' in self.tile.game.gameObjects is not None:
+                if 'score' in self.tile.game.gameObjects and self.tile.game.gameObjects['score'] is not None:
                     self.tile.game.gameObjects['score'].score += 1
 
     def finished(self, agent):

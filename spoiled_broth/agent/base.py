@@ -7,9 +7,10 @@ from spoiled_broth.world.tiles import ITEM_LIST
 
 
 class Agent(agent.Agent):
-    def __init__(self, agent_id, grid, game):
+    def __init__(self, agent_id, grid, game, intent_version="v1"):
         super().__init__(agent_id, grid)
         self.game = game
+        self.intent_version = intent_version
         self.path = []
         self.path_index = 0
         self.move_target = None
