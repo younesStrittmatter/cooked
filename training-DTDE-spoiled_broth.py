@@ -30,7 +30,7 @@ else:
         "ai_rl_2": (alpha_2, beta_2),
     }
 
-INTENT_VERSION = "v2"
+INTENT_VERSION = "v1"
 
 #local = '/mnt/lustre/home/samuloza'
 local = ''

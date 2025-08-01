@@ -36,9 +36,13 @@ import signal
 import sys
 
 map_nr = 'simple_kitchen'
-cooperative = int(sys.argv[1])
-training_id = sys.argv[2]
-checkpoint_number = int(sys.argv[3])
+playing_map_nr = map_nr
+
+num_agents = int(sys.argv[1])
+intent_version = sys.argv[2]
+cooperative = int(sys.argv[3])
+training_id = sys.argv[4]
+checkpoint_number = int(sys.argv[5])
 
 # --- Determine grid size from map file ---
 map_txt_path = Path(__file__).parent / 'spoiled_broth' / 'maps' / f'{map_nr}.txt'
@@ -74,21 +78,24 @@ print(f"  Actual Capture FPS: {VIDEO_FPS / FRAME_SKIP:.1f}")
 print(f"  Video Recording: {'Enabled' if ENABLE_VIDEO_RECORDING else 'Disabled'}")
 print()
 
-local = '/mnt/lustre/home/samuloza'
+#local = '/mnt/lustre/home/samuloza'
+local = ''
 #local = 'C:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
-pretraining = True
 
-if pretraining:
-    if cooperative: 
-        base_path = Path(f"{local}/data/samuel_lozano/cooked/pretraining/map_{map_nr}/cooperative/{training_id}")
-    else:
-        base_path = Path(f"{local}/data/samuel_lozano/cooked/pretraining/map_{map_nr}/competitive/{training_id}")
-
+if num_agents == 1:
+    raw_dir = f'{local}/data/samuel_lozano/cooked/pretraining'
 else:
-    if cooperative: 
-        base_path = Path(f"{local}/data/samuel_lozano/cooked/map_{map_nr}/cooperative/{training_id}")
-    else:
-        base_path = Path(f"{local}/data/samuel_lozano/cooked/map_{map_nr}/competitive/{training_id}")
+    raw_dir = f'{local}/data/samuel_lozano/cooked'
+
+if intent_version is not None:
+    intent_dir = f'{raw_dir}/{intent_version}'
+else:
+    intent_dir = f'{raw_dir}'
+
+if cooperative: 
+    base_path = Path(f"{intent_dir}/map_{map_nr}/cooperative/{training_id}")
+else:
+    base_path = Path(f"{intent_dir}/map_{map_nr}/competitive/{training_id}")
 
 config_path = base_path / "config.txt"
 if config_path.exists():
@@ -134,14 +141,38 @@ class VideoRecorder:
         self.frame_count = 0
         print(f"Started recording video to {self.output_path}")
         
-    def capture_frame(self, frame):
+    def capture_frame(self, frame, scores=None):
         if self.recording:
+            # Draw the scores on a separate black bar above the frame
+            if scores is not None:
+                text = " | ".join([f"{agent}: {score}" for agent, score in scores.items()])
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 0.7
+                color = (0, 255, 0)  # bright green
+                thickness = 2
+
+                # Compute text size to center it if you want
+                text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
+                text_height = text_size[1]
+                bar_height = text_height + 20  # add some padding
+
+                # Create a new black bar image
+                bar = np.zeros((bar_height, frame.shape[1], 3), dtype=np.uint8)
+
+                # Put text onto the bar
+                text_x = 10
+                text_y = bar_height - 10
+                cv2.putText(bar, text, (text_x, text_y), font, font_scale, color, thickness, cv2.LINE_AA)
+
+                # Stack the bar on top of the frame
+                frame = np.vstack((bar, frame))
+
+            # Initialize writer if needed
             if self.video_writer is None:
-                # Initialize video writer with frame dimensions
                 height, width = frame.shape[:2]
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 self.video_writer = cv2.VideoWriter(self.output_path, fourcc, self.fps, (width, height))
-            
+
             self.video_writer.write(frame)
             self.frame_count += 1
             
@@ -227,7 +258,10 @@ def capture_canvas_frames(url="http://localhost:5000", duration_seconds=60, fps=
                     img = Image.open(BytesIO(img_data))
                     frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
                     
-                    recorder.capture_frame(frame)
+                    session = engine_app.get_session()
+                    scores = session.engine.game.agent_scores
+
+                    recorder.capture_frame(frame, scores=scores)
                     frame_count += 1
                 
                 # Wait for next frame
@@ -283,7 +317,7 @@ print(f"\nUsing LSTM controller: {'Yes' if use_lstm else 'No'}\n")
 controller_cls = RLlibControllerLSTM if use_lstm else RLlibController
 
 # Create the agent_map dynamically
-if pretraining:
+if num_agents == 1:
     agent_map = {
         "ai_rl_1": controller_cls("ai_rl_1", checkpoint_dir, "policy_ai_rl_1")
     }
@@ -295,7 +329,7 @@ else:
 
 # Create the AI-only engine app
 engine_app = AIOnlySessionApp(
-    game_factory=partial(Game, map_nr=map_nr, grid_size=grid_size),
+    game_factory=partial(Game, map_nr=playing_map_nr, grid_size=grid_size, intent_version=intent_version),
     ui_modules=[Renderer2DModule()],
     agent_map=agent_map,
     path_root=path_root,
@@ -334,4 +368,4 @@ if __name__ == "__main__":
     # Stop the session
     engine_app.stop()
     
-    print("Game execution completed!") 
+    print("Game execution completed!")

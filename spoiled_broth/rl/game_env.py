@@ -10,37 +10,110 @@ from spoiled_broth.world.tiles import Counter
 
 MAX_PLAYERS = 4
 
-COUNTER_PENALTY = 0.1
+COUNTER_PENALTY = 0.5
 
-REWARD_ITEM_CUT = 1.
-REWARD_SALAD_CREATED = 2. + REWARD_ITEM_CUT  # (+ REWARD_ITEM_CUT sinc creating a salad "loses a cut item")
-REWARD_DELIVERED = 10. + REWARD_SALAD_CREATED  # (+ REWARD_SALAD_CREATED since delivering "loses a salad")
+REWARDS_BY_VERSION = {
+    "v1": {
+        "item_cut": 0.0,
+        "salad_created": 0.0,
+        "delivered": 10.0
+    },
+    "v2": {
+        "item_cut": 2.0,
+        "salad_created": 0.0,
+        "delivered": 10.0
+    },
+    "default": {
+        "item_cut": 2.0,
+        "salad_created": 5.0,
+        "delivered": 10.0
+    }
+}
 
 # Action type constants for tracking
 ACTION_TYPE_FLOOR = "floor"
 ACTION_TYPE_WALL = "wall"
-ACTION_TYPE_COUNTER = "counter"
-ACTION_TYPE_DISPENSER = "dispenser"
-ACTION_TYPE_CUTTING_BOARD = "cutting_board"
-ACTION_TYPE_DELIVERY = "delivery"
-ACTION_TYPE_NON_CLICKABLE = "non_clickable"
+ACTION_TYPE_USELESS_COUNTER = "useless_counter"
+ACTION_TYPE_USEFUL_COUNTER = "useful_counter"
+ACTION_TYPE_USELESS_DISPENSER = "useless_dispenser"
+ACTION_TYPE_USEFUL_DISPENSER = "useful_dispenser"
+ACTION_TYPE_USELESS_CUTTING_BOARD = "useless_cutting_board"
+ACTION_TYPE_USEFUL_CUTTING_BOARD = "useful_cutting_board"
+ACTION_TYPE_USELESS_DELIVERY = "useless_delivery"
+ACTION_TYPE_USEFUL_DELIVERY = "useful_delivery"
 
-def get_action_type(tile):
-    """Determine the type of action based on the tile clicked"""
+def get_action_type(tile, agent):
+    """
+    Determine the type of action based on the tile clicked and agent state.
+    agent: the agent performing the action (to check what it holds, etc.)
+    """
     if tile is None or not hasattr(tile, '_type'):
         return ACTION_TYPE_FLOOR  # Default to floor for None/invalid tiles
-    
-    # Map tile types to action types
-    type_mapping = {
-        0: ACTION_TYPE_FLOOR,
-        1: ACTION_TYPE_WALL,
-        2: ACTION_TYPE_COUNTER,
-        3: ACTION_TYPE_DISPENSER,
-        4: ACTION_TYPE_CUTTING_BOARD,
-        5: ACTION_TYPE_DELIVERY
-    }
-    
-    return type_mapping.get(tile._type, ACTION_TYPE_FLOOR)  # Default to floor for unknown types
+
+    # Default mapping for unknown tiles
+    default_action = ACTION_TYPE_FLOOR
+
+    # Agent holds something? (e.g., tomato, salad, etc.)
+    holding_something = getattr(agent, "item", None) is not None
+
+    # Tile type 0: floor
+    if tile._type == 0:
+        return ACTION_TYPE_FLOOR
+
+    # Tile type 1: wall
+    if tile._type == 1:
+        return ACTION_TYPE_WALL
+
+    # Tile type 2: counter
+    if tile._type == 2:
+        # Useful if agent is holding something (can drop it), or counter has something and agent can pick it
+        has_on_counter = getattr(tile, "item", None) is not None
+        if holding_something or has_on_counter:
+            return ACTION_TYPE_USEFUL_COUNTER
+        else:
+            return ACTION_TYPE_USELESS_COUNTER
+
+    # Tile type 3: dispenser
+    if tile._type == 3:
+        # Useful if agent's hand is empty (can pick a new item)
+        if not holding_something:
+            return ACTION_TYPE_USEFUL_DISPENSER
+        else:
+            return ACTION_TYPE_USELESS_DISPENSER
+
+    # Tile type 4: cutting board
+    if tile._type == 4:
+        # Check if cutting board has an item
+        board_item = getattr(tile, "item", None)
+
+        # Agent holds an item that can be cut
+        item_in_hand = getattr(agent, "item", None)
+        holding_uncut = item_in_hand is not None and getattr(item_in_hand, "cut_stage", 0) == 0
+        
+        if holding_uncut or board_item is not None:
+            return ACTION_TYPE_USEFUL_CUTTING_BOARD
+        else:
+            return ACTION_TYPE_USELESS_CUTTING_BOARD
+
+    # Tile type 5: delivery
+    if tile._type == 5:
+        # Useful if agent holds a deliverable item (e.g., salad)
+        item = getattr(agent, "item", None)
+
+        if agent.intent_version == "v1":
+            valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato']
+        elif agent.intent_version == "v2":
+            valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato_cut']
+        else:
+            valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
+
+        if item is not None and item in valid_items:
+            return ACTION_TYPE_USEFUL_DELIVERY
+        else:
+            return ACTION_TYPE_USELESS_DELIVERY
+
+    # Default fallback
+    return default_action
 
 def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None):
     game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size)
@@ -106,15 +179,19 @@ class GameEnv(ParallelEnv):
         self.reward_weights = reward_weights if reward_weights is not None else default_weights
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
-        self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
+        self.total_agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
         self.total_action_types = {
             agent_id: {
                 ACTION_TYPE_FLOOR: 0,
                 ACTION_TYPE_WALL: 0,
-                ACTION_TYPE_COUNTER: 0,
-                ACTION_TYPE_DISPENSER: 0,
-                ACTION_TYPE_CUTTING_BOARD: 0,
-                ACTION_TYPE_DELIVERY: 0
+                ACTION_TYPE_USELESS_COUNTER: 0,
+                ACTION_TYPE_USEFUL_COUNTER: 0,
+                ACTION_TYPE_USELESS_DISPENSER: 0,
+                ACTION_TYPE_USEFUL_DISPENSER: 0,
+                ACTION_TYPE_USELESS_CUTTING_BOARD: 0,
+                ACTION_TYPE_USEFUL_CUTTING_BOARD: 0,
+                ACTION_TYPE_USELESS_DELIVERY: 0,
+                ACTION_TYPE_USEFUL_DELIVERY: 0
             } for agent_id in self.agents
         }
 
@@ -156,15 +233,19 @@ class GameEnv(ParallelEnv):
 
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
-        self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
+        self.total_agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
         self.total_action_types = {
             agent_id: {
                 ACTION_TYPE_FLOOR: 0,
                 ACTION_TYPE_WALL: 0,
-                ACTION_TYPE_COUNTER: 0,
-                ACTION_TYPE_DISPENSER: 0,
-                ACTION_TYPE_CUTTING_BOARD: 0,
-                ACTION_TYPE_DELIVERY: 0
+                ACTION_TYPE_USELESS_COUNTER: 0,
+                ACTION_TYPE_USEFUL_COUNTER: 0,
+                ACTION_TYPE_USELESS_DISPENSER: 0,
+                ACTION_TYPE_USEFUL_DISPENSER: 0,
+                ACTION_TYPE_USELESS_CUTTING_BOARD: 0,
+                ACTION_TYPE_USEFUL_CUTTING_BOARD: 0,
+                ACTION_TYPE_USELESS_DELIVERY: 0,
+                ACTION_TYPE_USEFUL_DELIVERY: 0
             } for agent_id in self.agents
         }
 
@@ -175,6 +256,10 @@ class GameEnv(ParallelEnv):
             agent: self.observe(agent)
             for agent in self.agents
         }, self.infos
+
+    def get_rewards_for_version(self):
+        return REWARDS_BY_VERSION.get(self.intent_version, REWARDS_BY_VERSION["default"])
+
 
     def observe(self, agent):
         # Use the new spatial observation (channels, H, W) and agent inventory
@@ -204,11 +289,11 @@ class GameEnv(ParallelEnv):
             tile = self.game.grid.tiles[x][y]
 
             # Track action type
-            action_type = get_action_type(tile)
+            action_type = get_action_type(tile, agent_obj)
             self.total_action_types[agent_id][action_type] += 1
 
-            # Penalty for clicking on counter without holding something
-            if isinstance(tile, Counter) and agent_obj.item is None:
+            # Penalty for clicking on counter without holding something or counter has something
+            if isinstance(tile, Counter) and agent_obj.item is None and tile.item is None:
                 agent_penalties[agent_id] += COUNTER_PENALTY
 
             tile.click(agent_id)
@@ -222,7 +307,7 @@ class GameEnv(ParallelEnv):
         self.game.step(actions_dict, delta_time=1 / cf_AI_TICK_RATE)
 
         # Detect agent that performed the action and reward
-        agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
+        agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
         
         for thing in self.game.gameObjects.values():
             if hasattr(thing, 'tiles'):
@@ -243,12 +328,20 @@ class GameEnv(ParallelEnv):
         # Delivery
         new_score = self.game.gameObjects["score"].score
         if (new_score - self._last_score) > 0:
-            print(f"Agent delivered item, new score: {new_score}")
             if self.cooperative:
                 # Reward all agents for delivery
                 for agent_id in agent_events:
-                    agent_events[agent_id]["delivered"] += 1
-                    self.total_agent_events[agent_id]["delivered"] += 1
+                    agent_events[agent_id]["delivered_coop"] += 1
+                    self.total_agent_events[agent_id]["delivered_coop"] += 1
+                for thing in self.game.gameObjects.values():
+                    if hasattr(thing, 'tiles'):
+                        for row in thing.tiles:
+                            for tile in row:
+                                if hasattr(tile, "delivered_by") and tile.delivered_by:
+                                    if tile.delivered_by in agent_events:
+                                        agent_events[tile.delivered_by]["delivered"] += 1
+                                        self.total_agent_events[tile.delivered_by]["delivered"] += 1
+                                    tile.delivered_by = None
             else:
                 # Only reward the delivering agent(s)
                 for thing in self.game.gameObjects.values():
@@ -259,17 +352,20 @@ class GameEnv(ParallelEnv):
                                     if tile.delivered_by in agent_events:
                                         agent_events[tile.delivered_by]["delivered"] += 1
                                         self.total_agent_events[tile.delivered_by]["delivered"] += 1
+                                        agent_events[tile.delivered_by]["delivered_coop"] += 1
+                                        self.total_agent_events[tile.delivered_by]["delivered_coop"] += 1
                                     tile.delivered_by = None
             self._last_score = new_score
 
         # Get reward from delivering items
+        rewards_cfg = self.get_rewards_for_version()
         pure_rewards = {agent_id: 0.0 for agent_id in self.agents}
         for agent_id in self.agents:
             # Pure rewards: only positive events, no penalties
             pure_rewards[agent_id] = (
-                agent_events[agent_id]["delivered"] * REWARD_DELIVERED +
-                agent_events[agent_id]["cut"] * REWARD_ITEM_CUT +
-                agent_events[agent_id]["salad"] * REWARD_SALAD_CREATED
+                agent_events[agent_id]["delivered_coop"] * rewards_cfg["delivered"] +
+                agent_events[agent_id]["cut"] * rewards_cfg["item_cut"] +
+                agent_events[agent_id]["salad"] * rewards_cfg["salad_created"]
             )
             self.cumulated_pure_rewards[agent_id] += pure_rewards[agent_id]
 
@@ -295,7 +391,8 @@ class GameEnv(ParallelEnv):
             agent: {
                 "pure_reward": pure_rewards[agent],
                 "agent_events": agent_events[agent],  # Add agent events to info
-                "action_types": self.total_action_types[agent]  # Add action types to info
+                "action_types": self.total_action_types[agent],  # Add action types to info
+                "score": self.agent_map[agent].score
             }
             for agent in self.agents
         }
@@ -315,6 +412,7 @@ class GameEnv(ParallelEnv):
                 }
             
             for agent_id in self.agents:
+                row[f"total_deliveries_{agent_id}"] = float(self.total_agent_events[agent_id]["delivered_coop"])
                 row[f"pure_reward_{agent_id}"] = float(self.cumulated_pure_rewards[agent_id])
                 row[f"modified_reward_{agent_id}"] = float(self.cumulated_modified_rewards[agent_id])
                 row[f"delivered_{agent_id}"] = self.total_agent_events[agent_id]["delivered"]
@@ -324,10 +422,14 @@ class GameEnv(ParallelEnv):
                 # Add action type columns
                 row[f"floor_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_FLOOR]
                 row[f"wall_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_WALL]
-                row[f"counter_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_COUNTER]
-                row[f"dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_DISPENSER]
-                row[f"cutting_board_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_CUTTING_BOARD]
-                row[f"delivery_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_DELIVERY]
+                row[f"useless_counter_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_COUNTER]
+                row[f"useful_counter_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_COUNTER]
+                row[f"useless_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_DISPENSER]
+                row[f"useful_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_DISPENSER]
+                row[f"useless_cutting_board_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_CUTTING_BOARD]
+                row[f"useful_cutting_board_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_CUTTING_BOARD]
+                row[f"useless_delivery_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_DELIVERY]
+                row[f"useful_delivery_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_DELIVERY]
 
             with open(self.csv_path, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=row.keys())

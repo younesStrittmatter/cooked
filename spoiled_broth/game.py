@@ -13,11 +13,12 @@ import numpy as np
 import random
 
 class SpoiledBroth(BaseGame):
-    def __init__(self, map_nr=None, grid_size=(8, 8)):
+    def __init__(self, map_nr=None, grid_size=(8, 8), intent_version="v1"):
         super().__init__()
         if map_nr is None:
             map_nr = str(random.randint(1, 4))  # default maps
         width, height = grid_size
+        self.intent_version = intent_version
         self.grid = Grid("grid", width, height, 16)
         map_path_img = Path(__file__).parent / "maps" / f"{map_nr}.png"
         map_path_txt = Path(__file__).parent / "maps" / f"{map_nr}.txt"
@@ -34,7 +35,10 @@ class SpoiledBroth(BaseGame):
         self.gameObjects['grid'] = self.grid
         self.gameObjects['score'] = self.score
 
-    def add_agent(self, agent_id, intent_version="v1"):
+    def add_agent(self, agent_id, intent_version=None):
+        # Use the game's intent_version if not explicitly provided
+        if intent_version is None:
+            intent_version = self.intent_version
         agent = Agent(agent_id, self.grid, self, intent_version=intent_version)
         # set agent's initial position to walkable tile
         choices = []
@@ -51,9 +55,17 @@ class SpoiledBroth(BaseGame):
     def step(self, actions: dict, delta_time: float):
         super().step(actions, delta_time)
 
+    @property
+    def agent_scores(self):
+        return {
+            aid: agent.score
+            for aid, agent in self.gameObjects.items()
+            if aid.startswith('ai_rl_')
+        }
+
 MAX_PLAYERS = 4 # or import if needed
 
-### LEGACY
+### LEGACY ###
 #def game_to_vector(game, agent_id):
 #    # Get both agents' info
 #    agent_ids = [aid for aid in game.gameObjects if aid.startswith('ai_rl_')]
@@ -77,33 +89,40 @@ MAX_PLAYERS = 4 # or import if needed
 #    obs = np.concatenate(agent_vecs + tile_vecs).astype(np.float32)
 #    return obs
 
+### LEGACY ###
+# Randomize game state possibily adding items to counters and cutting boards
+#def random_game_state_v1(game, item_list=['tomato', 'plate', 'tomato_cut', 'tomato_salad']):
+#    chance = random.random()
+#    if chance < 0.4: # easy
+#        _item_list = item_list + ['tomato_salad']
+#    elif chance < 0.6: # mid
+#        _item_list = [i for i in item_list if not i.endswith('salad')]
+#    elif chance < 0.8: # hard
+#        _item_list = [i for i in item_list if not (i.endswith('cut') or i.endswith('salad'))] + [None]
+#    else:
+#        _item_list = [None]
+#
+#    for x in range(game.grid.width):
+#        for y in range(game.grid.height):
+#            tile = game.grid.tiles[x][y]
+#            if isinstance(tile, Counter):
+#                if random.random() < .6:
+#                    tile.item = random.choice(_item_list)
+#            if isinstance(tile, CuttingBoard):
+#                if random.random() < .6 and chance < 0.6:
+#                    tile.item = random.choice(['tomato', None])
+#
+#    # Optionally randomize agent inventory
+#    for agent in game.gameObjects.values():
+#        if hasattr(agent, "item"):
+#            if random.random() < .3:
+#                agent.item = random.choice(_item_list)
 
-def random_game_state(game, item_list=['tomato', 'plate', 'tomato_cut', 'tomato_salad']):
-    chance = random.random()
-    if chance < 0.4: # easy
-        _item_list = item_list + ['tomato_salad']
-    elif chance < 0.6: # mid
-        _item_list = [i for i in item_list if not i.endswith('salad')]
-    elif chance < 0.8: # hard
-        _item_list = [i for i in item_list if not (i.endswith('cut') or i.endswith('salad'))] + [None]
-    else:
-        _item_list = [None]
-
-    for x in range(game.grid.width):
-        for y in range(game.grid.height):
-            tile = game.grid.tiles[x][y]
-            if isinstance(tile, Counter):
-                if random.random() < .6:
-                    tile.item = random.choice(_item_list)
-            if isinstance(tile, CuttingBoard):
-                if random.random() < .6 and chance < 0.6:
-                    tile.item = random.choice(['tomato', None])
-
-    # Optionally randomize agent inventory
+def random_game_state(game):
+    # Only randomize agent positions (already done by add_agent)
     for agent in game.gameObjects.values():
-        if hasattr(agent, "item"):
-            if random.random() < .3:
-                agent.item = random.choice(_item_list)
+        if hasattr(agent, "item") and agent.item is not None:
+            agent.item = None
 
 def game_to_obs_matrix(game, agent_id):
     """
@@ -170,5 +189,3 @@ def game_to_obs_matrix(game, agent_id):
         if item in item_names:
             agent_inventory[idx, item_names.index(item)] = 1.0
     return obs, agent_inventory
-
-

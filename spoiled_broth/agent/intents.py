@@ -2,7 +2,7 @@ from engine.extensions.topDownGridWorld.intent import _base_intent
 
 
 class PickUpIntent(_base_intent.Intent):
-    def __init__(self, tile, version="v1"):
+    def __init__(self, tile, version):
         super().__init__()
         self.version = version
         self.tile = tile
@@ -18,7 +18,7 @@ class PickUpIntent(_base_intent.Intent):
 
 
 class ItemExchangeIntent(_base_intent.Intent):
-    def __init__(self, tile, version="v1"):
+    def __init__(self, tile, version):
         super().__init__()
         self.version = version
         self.tile = tile
@@ -41,7 +41,7 @@ class ItemExchangeIntent(_base_intent.Intent):
 
 
 class CuttingBoardIntent(_base_intent.Intent):
-    def __init__(self, tile, version="v1"):
+    def __init__(self, tile, version):
         super().__init__()
         self.tile = tile
         self.version = version
@@ -79,7 +79,7 @@ class CuttingBoardIntent(_base_intent.Intent):
 
 
 class DeliveryIntent(_base_intent.Intent):
-    def __init__(self, tile, version="v1"):
+    def __init__(self, tile, version):
         super().__init__()
         self.tile = tile
         self.version = version
