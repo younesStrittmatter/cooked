@@ -30,7 +30,7 @@ else:
         "ai_rl_2": (alpha_2, beta_2),
     }
 
-INTENT_VERSION = "v1"
+INTENT_VERSION = "v2"
 
 #local = '/mnt/lustre/home/samuloza'
 local = ''
@@ -40,7 +40,7 @@ local = ''
 NUM_ENVS = 1
 NUM_INNER_STEPS = 450
 NUM_EPOCHS = 15000
-NUM_MINIBATCHES = 10
+NUM_MINIBATCHES = 20
 SHOW_EVERY_N_EPOCHS = 1000
 SAVE_EVERY_N_EPOCHS = 500
 CONV_FILTERS = [

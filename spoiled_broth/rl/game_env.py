@@ -8,23 +8,31 @@ from spoiled_broth.config import *
 from spoiled_broth.game import SpoiledBroth, random_game_state, game_to_obs_matrix
 from spoiled_broth.world.tiles import Counter
 
-MAX_PLAYERS = 4
-
-COUNTER_PENALTY = 0.5
+USELESS_ACTION_PENALTY = 0.3
+NO_ACTION_PENALTY = 0.01
 
 REWARDS_BY_VERSION = {
     "v1": {
+        "useful_food_dispenser": 0.5,
+        "useful_cutting_board": 0.0,
+        "useful_plate_dispenser": 0.0,
         "item_cut": 0.0,
         "salad_created": 0.0,
         "delivered": 10.0
     },
     "v2": {
-        "item_cut": 2.0,
+        "useful_food_dispenser": 0.5,
+        "useful_cutting_board": 1.0,
+        "useful_plate_dispenser": 0.0,
+        "item_cut": 3.0,
         "salad_created": 0.0,
         "delivered": 10.0
     },
     "default": {
-        "item_cut": 2.0,
+        "useful_dispenser": 0.5,
+        "useful_cutting_board": 1.0,
+        "useful_plate_dispenser": 1.5,
+        "item_cut": 3.0,
         "salad_created": 5.0,
         "delivered": 10.0
     }
@@ -35,10 +43,12 @@ ACTION_TYPE_FLOOR = "floor"
 ACTION_TYPE_WALL = "wall"
 ACTION_TYPE_USELESS_COUNTER = "useless_counter"
 ACTION_TYPE_USEFUL_COUNTER = "useful_counter"
-ACTION_TYPE_USELESS_DISPENSER = "useless_dispenser"
-ACTION_TYPE_USEFUL_DISPENSER = "useful_dispenser"
+ACTION_TYPE_USEFUL_FOOD_DISPENSER = "useful_food_dispenser"
+ACTION_TYPE_USELESS_FOOD_DISPENSER = "useless_food_dispenser"
 ACTION_TYPE_USELESS_CUTTING_BOARD = "useless_cutting_board"
 ACTION_TYPE_USEFUL_CUTTING_BOARD = "useful_cutting_board"
+ACTION_TYPE_USEFUL_PLATE_DISPENSER = "useful_plate_dispenser"
+ACTION_TYPE_USELESS_PLATE_DISPENSER = "useless_plate_dispenser"
 ACTION_TYPE_USELESS_DELIVERY = "useless_delivery"
 ACTION_TYPE_USEFUL_DELIVERY = "useful_delivery"
 
@@ -75,12 +85,11 @@ def get_action_type(tile, agent):
 
     # Tile type 3: dispenser
     if tile._type == 3:
-        # Useful if agent's hand is empty (can pick a new item)
-        if not holding_something:
-            return ACTION_TYPE_USEFUL_DISPENSER
+        if getattr(tile, "item", None) == "plate":
+            return ACTION_TYPE_USEFUL_PLATE_DISPENSER if not holding_something else ACTION_TYPE_USELESS_PLATE_DISPENSER
         else:
-            return ACTION_TYPE_USELESS_DISPENSER
-
+            return ACTION_TYPE_USEFUL_FOOD_DISPENSER if not holding_something else ACTION_TYPE_USELESS_FOOD_DISPENSER
+            
     # Tile type 4: cutting board
     if tile._type == 4:
         # Check if cutting board has an item
@@ -186,14 +195,18 @@ class GameEnv(ParallelEnv):
                 ACTION_TYPE_WALL: 0,
                 ACTION_TYPE_USELESS_COUNTER: 0,
                 ACTION_TYPE_USEFUL_COUNTER: 0,
-                ACTION_TYPE_USELESS_DISPENSER: 0,
-                ACTION_TYPE_USEFUL_DISPENSER: 0,
+                ACTION_TYPE_USEFUL_FOOD_DISPENSER: 0,
+                ACTION_TYPE_USELESS_FOOD_DISPENSER: 0,
                 ACTION_TYPE_USELESS_CUTTING_BOARD: 0,
                 ACTION_TYPE_USEFUL_CUTTING_BOARD: 0,
+                ACTION_TYPE_USEFUL_PLATE_DISPENSER: 0,
+                ACTION_TYPE_USELESS_PLATE_DISPENSER: 0,
                 ACTION_TYPE_USELESS_DELIVERY: 0,
                 ACTION_TYPE_USEFUL_DELIVERY: 0
             } for agent_id in self.agents
         }
+        self.total_actions_asked = {agent_id: 0 for agent_id in self.agents}
+        self.total_actions_not_performed = {agent_id: 0 for agent_id in self.agents}
 
         self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version)
 
@@ -240,14 +253,18 @@ class GameEnv(ParallelEnv):
                 ACTION_TYPE_WALL: 0,
                 ACTION_TYPE_USELESS_COUNTER: 0,
                 ACTION_TYPE_USEFUL_COUNTER: 0,
-                ACTION_TYPE_USELESS_DISPENSER: 0,
-                ACTION_TYPE_USEFUL_DISPENSER: 0,
+                ACTION_TYPE_USEFUL_FOOD_DISPENSER: 0,
+                ACTION_TYPE_USELESS_FOOD_DISPENSER: 0,
                 ACTION_TYPE_USELESS_CUTTING_BOARD: 0,
                 ACTION_TYPE_USEFUL_CUTTING_BOARD: 0,
+                ACTION_TYPE_USEFUL_PLATE_DISPENSER: 0,
+                ACTION_TYPE_USELESS_PLATE_DISPENSER: 0,
                 ACTION_TYPE_USELESS_DELIVERY: 0,
                 ACTION_TYPE_USEFUL_DELIVERY: 0
             } for agent_id in self.agents
         }
+        self.total_actions_asked = {agent_id: 0 for agent_id in self.agents}
+        self.total_actions_not_performed = {agent_id: 0 for agent_id in self.agents}
 
         assert isinstance(self.infos, dict), f"infos is not a dict: {self.infos}"
         assert all(isinstance(v, dict) for v in self.infos.values()), "infos values must be dicts"
@@ -274,11 +291,15 @@ class GameEnv(ParallelEnv):
         self._step_counter += 1
         # Submit intents from each agent
 
-        agent_penalties = {agent_id: 0.0 for agent_id in self.agents}  # Used for counter penalty
+        agent_penalties = {agent_id: 0.0 for agent_id in self.agents}  # Used for useless and idle penalties
         for agent_id, action in actions.items():
+
+            self.total_actions_asked[agent_id] += 1
             agent_obj = self.game.gameObjects[agent_id]
             # Only allow a new action if the agent is not moving and has no unfinished intents
             if getattr(agent_obj, "is_moving", False) or getattr(agent_obj, "intents", []):
+                self.total_actions_not_performed[agent_id] += 1
+                agent_penalties[agent_id] += NO_ACTION_PENALTY
                 continue  # Skip this agent's new action, let it finish its current one
 
             # Map action to actual clickable tile index
@@ -292,9 +313,9 @@ class GameEnv(ParallelEnv):
             action_type = get_action_type(tile, agent_obj)
             self.total_action_types[agent_id][action_type] += 1
 
-            # Penalty for clicking on counter without holding something or counter has something
-            if isinstance(tile, Counter) and agent_obj.item is None and tile.item is None:
-                agent_penalties[agent_id] += COUNTER_PENALTY
+            # Penalty for useless action
+            if action_type.startswith("useless"):
+                agent_penalties[agent_id] += USELESS_ACTION_PENALTY
 
             tile.click(agent_id)
 
@@ -308,7 +329,11 @@ class GameEnv(ParallelEnv):
 
         # Detect agent that performed the action and reward
         agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
-        
+        step_action_types = {agent_id: {ACTION_TYPE_USEFUL_FOOD_DISPENSER: 0,
+                                        ACTION_TYPE_USEFUL_PLATE_DISPENSER: 0,
+                                        ACTION_TYPE_USEFUL_CUTTING_BOARD: 0
+                                        } for agent_id in self.agents }
+
         for thing in self.game.gameObjects.values():
             if hasattr(thing, 'tiles'):
                 for row in thing.tiles:
@@ -363,10 +388,14 @@ class GameEnv(ParallelEnv):
         for agent_id in self.agents:
             # Pure rewards: only positive events, no penalties
             pure_rewards[agent_id] = (
-                agent_events[agent_id]["delivered_coop"] * rewards_cfg["delivered"] +
-                agent_events[agent_id]["cut"] * rewards_cfg["item_cut"] +
-                agent_events[agent_id]["salad"] * rewards_cfg["salad_created"]
+                agent_events[agent_id]["delivered_coop"] * rewards_cfg["delivered"]
+                + agent_events[agent_id]["cut"] * rewards_cfg["item_cut"]
+                + agent_events[agent_id]["salad"] * rewards_cfg["salad_created"]
+                + step_action_types[agent_id][ACTION_TYPE_USEFUL_FOOD_DISPENSER] * rewards_cfg["useful_food_dispenser"]
+                + step_action_types[agent_id][ACTION_TYPE_USEFUL_PLATE_DISPENSER] * rewards_cfg["useful_plate_dispenser"]
+                + step_action_types[agent_id][ACTION_TYPE_USEFUL_CUTTING_BOARD] * rewards_cfg["useful_cutting_board"]
             )
+
             self.cumulated_pure_rewards[agent_id] += pure_rewards[agent_id]
 
         for agent_id in self.agents:
@@ -419,15 +448,20 @@ class GameEnv(ParallelEnv):
                 row[f"cut_{agent_id}"] = self.total_agent_events[agent_id]["cut"]
                 row[f"salad_{agent_id}"] = self.total_agent_events[agent_id]["salad"]
 
+                row[f"actions_asked_{agent_id}"] = self.total_actions_asked[agent_id]
+                row[f"actions_not_performed_{agent_id}"] = self.total_actions_not_performed[agent_id]
+
                 # Add action type columns
                 row[f"floor_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_FLOOR]
                 row[f"wall_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_WALL]
                 row[f"useless_counter_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_COUNTER]
                 row[f"useful_counter_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_COUNTER]
-                row[f"useless_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_DISPENSER]
-                row[f"useful_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_DISPENSER]
+                row[f"useless_food_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_FOOD_DISPENSER]
+                row[f"useful_food_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_FOOD_DISPENSER]
                 row[f"useless_cutting_board_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_CUTTING_BOARD]
                 row[f"useful_cutting_board_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_CUTTING_BOARD]
+                row[f"useless_plate_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_PLATE_DISPENSER]
+                row[f"useful_plate_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_PLATE_DISPENSER]
                 row[f"useless_delivery_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_DELIVERY]
                 row[f"useful_delivery_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_DELIVERY]
 

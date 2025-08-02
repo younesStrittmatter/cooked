@@ -1,6 +1,5 @@
 from engine.extensions.topDownGridWorld.intent import _base_intent
 
-
 class PickUpIntent(_base_intent.Intent):
     def __init__(self, tile, version):
         super().__init__()
@@ -63,12 +62,29 @@ class CuttingBoardIntent(_base_intent.Intent):
                     self.has_ended = True
                 elif agent.item is None:
                     self.has_started = True
+                else:
+                    self.has_ended = True
             else:
                 if agent.item in ['tomato', 'pumpkin', 'cabbage']:
-                    self.tile.cut_time_accumulated = 0
-                    self.tile.item = agent.item
-                    agent.item = None
-                    self.has_started = True
+                    if self.version == "v2":
+                        # v2: cut instantly
+                        agent.item = f'{agent.item}_cut'
+                        self.tile.cut_by = agent.id
+                        self.tile.item = None
+                        self.tile.cut_time_accumulated = 0
+                        self.has_ended = True
+                    elif self.version == "v3":
+                        # v3: put the item on the board and cut one time
+                        self.tile.cut_time_accumulated = 1
+                        self.tile.item = agent.item
+                        agent.item = None
+                        self.has_started = True
+                    else:
+                        # normal behavior: put the item on the board
+                        self.tile.cut_time_accumulated = 0
+                        self.tile.item = agent.item
+                        agent.item = None
+                        self.has_started = True
                 else:
                     self.has_ended = True
         else:

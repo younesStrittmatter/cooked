@@ -13,7 +13,6 @@ ITEM_LIST = [
     "tomato", "plate", "tomato_cut", "tomato_salad"
 ]
 
-
 class SoiledBrothTile(Tile):
     _type = 0
 
@@ -115,24 +114,24 @@ class Counter(SoiledBrothTile):
             self.drawables[1].height = 16
             if self.item == 'tomato':
                 self.drawables[1].src_y = 0
-            #if self.item == 'pumpkin':
-            #    self.drawables[1].src_y = 16
-            #if self.item == 'cabbage':
-            #    self.drawables[1].src_y = 32
+            if self.item == 'pumpkin':
+                self.drawables[1].src_y = 16
+            if self.item == 'cabbage':
+                self.drawables[1].src_y = 32
             if self.item == 'plate':
                 self.drawables[1].src_y = 48
             if self.item == 'tomato_cut':
                 self.drawables[1].src_y = 9 * 16
-            #if self.item == 'pumpkin_cut':
-            #    self.drawables[1].src_y = 10 * 16
-            #if self.item == 'cabbage_cut':
-            #    self.drawables[1].src_y = 11 * 16
+            if self.item == 'pumpkin_cut':
+                self.drawables[1].src_y = 10 * 16
+            if self.item == 'cabbage_cut':
+                self.drawables[1].src_y = 11 * 16
             if self.item == 'tomato_salad':
                 self.drawables[1].src_y = 15 * 16
-            #if self.item == 'pumpkin_salad':
-            #    self.drawables[1].src_y = 16 * 16
-            #if self.item == 'cabbage_salad':
-            #    self.drawables[1].src_y = 17 * 16
+            if self.item == 'pumpkin_salad':
+                self.drawables[1].src_y = 16 * 16
+            if self.item == 'cabbage_salad':
+                self.drawables[1].src_y = 17 * 16
         else:
             self.drawables[1].width = 0
             self.drawables[1].height = 0
@@ -155,10 +154,10 @@ class Dispenser(SoiledBrothTile):
         src_y = 0
         if item == 'tomato':
             src_y = 0
-        #if item == 'pumpkin':
-        #    src_y = 16
-        #if item == 'cabbage':
-        #    src_y = 32
+        if item == 'pumpkin':
+            src_y = 16
+        if item == 'cabbage':
+            src_y = 32
         if item == 'plate':
             src_y = 48
         self.add_drawable(Basic2D(src='world/item-dispenser.png', z_index=0, src_y=src_y, normalize=False))
@@ -188,7 +187,10 @@ class CuttingBoard(SoiledBrothTile):
     @property
     def cut_stage(self):
         if self.intent_version == "v2":
-            # In v2: cutting one time is enough
+        # v2: cutting is instant, so always consider it done
+            return 3
+        elif self.intent_version == "v3":
+            # In v3: cutting one time is enough
             if self.cut_time_accumulated >= 1:
                 return 3 
             else:
@@ -212,10 +214,10 @@ class CuttingBoard(SoiledBrothTile):
             self.drawables[2].height = 16
             if self.item == 'tomato':
                 self.drawables[2].src_y = 0
-            #if self.item == 'pumpkin':
-            #    self.drawables[2].src_y = 16
-            #if self.item == 'cabbage':
-            #    self.drawables[2].src_y = 32
+            if self.item == 'pumpkin':
+                self.drawables[2].src_y = 16
+            if self.item == 'cabbage':
+                self.drawables[2].src_y = 32
             self.drawables[2].src_x = self.cut_stage * 16
         else:
             self.drawables[2].width = 0
