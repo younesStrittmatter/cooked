@@ -1,14 +1,25 @@
 import os
 import sys
 from spoiled_broth.rl.make_train_rllib import make_train_rllib
+import ray
+import torch
 
-# Leer archivo de entrada
+# PyTorch, NumPy, MKL, etc. not creating more threads
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
+##### Cluster config ##################
+NUM_GPUS = 0.3
+NUM_CPUS = 13
+
+# Read input file
 input_path = sys.argv[1]
 MAP_NR = sys.argv[2]
 LR = float(sys.argv[3])
 COOPERATIVE = int(sys.argv[4])
-if len(sys.argv) > 5:
-    NUM_AGENTS = int(sys.argv[5])
+INTENT_VERSION = sys.argv[5]
+if len(sys.argv) > 6:
+    NUM_AGENTS = int(sys.argv[6])
     if NUM_AGENTS not in [1, 2]:
         raise ValueError("NUM_AGENTS must be 1 or 2")
 else:
@@ -29,8 +40,6 @@ else:
         "ai_rl_1": (alpha_1, beta_1),
         "ai_rl_2": (alpha_2, beta_2),
     }
-
-INTENT_VERSION = "v2"
 
 #local = '/mnt/lustre/home/samuloza'
 local = ''
@@ -109,7 +118,15 @@ config = {
     "FCNET_HIDDENS": MLP_LAYERS,  # Hidden layer sizes for MLP
     "FCNET_ACTIVATION": "tanh",  # Activation function for MLP ("tanh", "relu", etc.)
     "MAX_SEQ_LEN": 20,  # Sequence length for LSTM (if used)
+    "NUM_CPUS": NUM_CPUS,
+    "NUM_GPUS": NUM_GPUS,
 }
+
+if ray.is_initialized():
+    ray.shutdown()
+ray.init(num_cpus=NUM_CPUS)
+
+torch.set_num_threads(NUM_CPUS)
 
 # Run training
 trainer, current_date = make_train_rllib(config)

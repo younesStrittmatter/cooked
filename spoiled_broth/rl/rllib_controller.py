@@ -39,26 +39,31 @@ class RLlibController(Controller):
         # Obtain the action distribution class from the policy module
         action_dist_class = self.policy_module.get_inference_action_dist_cls()
         action_dist = action_dist_class.from_logits(action_logits)
-
-        # Sample an action from the distribution
         action = action_dist.sample().item()
-
-        # Map action index to the correct tile using clickable_indices
-        grid = self.agent.grid
-        # clickable_indices is assumed to be available from the environment
-        # If not, fallback to grid width/height as before (legacy)
+        
+        # Get clickable indices from environment
         clickable_indices = getattr(self.agent.game, 'clickable_indices', None)
-        if clickable_indices is not None and 0 <= action < len(clickable_indices):
-            tile_index = clickable_indices[action]
-            x = tile_index % grid.width
-            y = tile_index // grid.width
+        if clickable_indices is not None:
+            # Check if action is the last index: do nothing
+            if action == len(clickable_indices):
+                # The agent chose the "do nothing" action
+                return None
+    
+            if 0 <= action < len(clickable_indices):
+                tile_index = clickable_indices[action]
+                grid = self.agent.grid
+                x = tile_index % grid.width
+                y = tile_index // grid.width
+                tile = grid.tiles[x][y]
+                if tile and hasattr(tile, "click"):
+                    return {"type": "click", "target": tile.id}
         else:
-            # Fallback: treat action as a flat index
+            # Fallback: treat action as a flat index over the grid (legacy)
+            grid = self.agent.grid
             x = action % grid.width
             y = action // grid.width
-        tile = grid.tiles[x][y]
-        # print(f'{self.agent_id} chose tile: ({tile.slot_x}, {tile.slot_y})')  # Removed to reduce console output
-
-        if tile and hasattr(tile, "click"):
-            return {"type": "click", "target": tile.id}
+            tile = grid.tiles[x][y]
+            if tile and hasattr(tile, "click"):
+                return {"type": "click", "target": tile.id}
+    
         return None

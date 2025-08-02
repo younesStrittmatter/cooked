@@ -20,12 +20,36 @@ REWARDS_BY_VERSION = {
         "salad_created": 0.0,
         "delivered": 10.0
     },
-    "v2": {
+    "v2.1": {
         "useful_food_dispenser": 0.5,
         "useful_cutting_board": 1.0,
         "useful_plate_dispenser": 0.0,
         "item_cut": 3.0,
         "salad_created": 0.0,
+        "delivered": 10.0
+    },
+    "v2.2": {
+        "useful_food_dispenser": 0.5,
+        "useful_cutting_board": 1.0,
+        "useful_plate_dispenser": 0.0,
+        "item_cut": 3.0,
+        "salad_created": 0.0,
+        "delivered": 10.0
+    },
+    "v3.1": {
+        "useful_food_dispenser": 0.5,
+        "useful_cutting_board": 1.0,
+        "useful_plate_dispenser": 2.0,
+        "item_cut": 3.0,
+        "salad_created": 5.0,
+        "delivered": 10.0
+    },
+    "v3.2": {
+        "useful_food_dispenser": 0.5,
+        "useful_cutting_board": 1.0,
+        "useful_plate_dispenser": 2.0,
+        "item_cut": 3.0,
+        "salad_created": 5.0,
         "delivered": 10.0
     },
     "default": {
@@ -39,6 +63,7 @@ REWARDS_BY_VERSION = {
 }
 
 # Action type constants for tracking
+ACTION_TYPE_DO_NOTHING = "do_nothing"
 ACTION_TYPE_FLOOR = "floor"
 ACTION_TYPE_WALL = "wall"
 ACTION_TYPE_USELESS_COUNTER = "useless_counter"
@@ -141,7 +166,7 @@ def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None):
                 clickable_indices.append(index)
 
     action_spaces = {
-        agent: spaces.Discrete(len(clickable_indices))
+        agent: spaces.Discrete(len(clickable_indices) + 1)  # last action index = do nothing
         for agent in agents
     }
     _clickable_mask = np.zeros(game.grid.width * game.grid.height, dtype=np.int8)
@@ -191,6 +216,7 @@ class GameEnv(ParallelEnv):
         self.total_agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
         self.total_action_types = {
             agent_id: {
+                ACTION_TYPE_DO_NOTHING: 0,
                 ACTION_TYPE_FLOOR: 0,
                 ACTION_TYPE_WALL: 0,
                 ACTION_TYPE_USELESS_COUNTER: 0,
@@ -249,6 +275,7 @@ class GameEnv(ParallelEnv):
         self.total_agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
         self.total_action_types = {
             agent_id: {
+                ACTION_TYPE_DO_NOTHING: 0,
                 ACTION_TYPE_FLOOR: 0,
                 ACTION_TYPE_WALL: 0,
                 ACTION_TYPE_USELESS_COUNTER: 0,
@@ -293,9 +320,16 @@ class GameEnv(ParallelEnv):
 
         agent_penalties = {agent_id: 0.0 for agent_id in self.agents}  # Used for useless and idle penalties
         for agent_id, action in actions.items():
-
             self.total_actions_asked[agent_id] += 1
             agent_obj = self.game.gameObjects[agent_id]
+
+             # Check if agent wants to do nothing
+            if action == len(self.clickable_indices):
+                self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING] = self.total_action_types[agent_id].get(ACTION_TYPE_DO_NOTHING, 0) + 1
+                # Agent chose to do nothing
+                agent_penalties[agent_id] += NO_ACTION_PENALTY  
+                continue  # skip issuing an intent
+
             # Only allow a new action if the agent is not moving and has no unfinished intents
             if getattr(agent_obj, "is_moving", False) or getattr(agent_obj, "intents", []):
                 self.total_actions_not_performed[agent_id] += 1
@@ -320,12 +354,18 @@ class GameEnv(ParallelEnv):
             tile.click(agent_id)
 
         def decode_action(action_int):
-            return {"type": "click", "target": int(self.clickable_indices[action_int])}
+            if action_int == len(self.clickable_indices):
+                # do nothing action
+                return None
+            else:
+                return {"type": "click", "target": int(self.clickable_indices[action_int])}
 
-        actions_dict = {agent_id: decode_action(action) for agent_id, action in actions.items()}
+        actions_dict = {agent_id: decode_action(action) for agent_id, action in actions.items()} # Some entries might now be None (when agent chose to do nothing)
+        # Filter out None (do nothing) actions
+        filtered_actions_dict = {k: v for k, v in actions_dict.items() if v is not None}
 
         # Advance the game state by one step (simulate one tick)
-        self.game.step(actions_dict, delta_time=1 / cf_AI_TICK_RATE)
+        self.game.step(filtered_actions_dict, delta_time=1 / cf_AI_TICK_RATE)
 
         # Detect agent that performed the action and reward
         agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
@@ -452,6 +492,7 @@ class GameEnv(ParallelEnv):
                 row[f"actions_not_performed_{agent_id}"] = self.total_actions_not_performed[agent_id]
 
                 # Add action type columns
+                row[f"do_nothing_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING]
                 row[f"floor_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_FLOOR]
                 row[f"wall_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_WALL]
                 row[f"useless_counter_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_COUNTER]

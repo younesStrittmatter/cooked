@@ -186,10 +186,10 @@ class CuttingBoard(SoiledBrothTile):
 
     @property
     def cut_stage(self):
-        if self.intent_version == "v2":
-        # v2: cutting is instant, so always consider it done
+        if self.intent_version == "v2.1" or self.intent_version == "v3.1":
+        # v2.1: cutting is instant, so always consider it done
             return 3
-        elif self.intent_version == "v3":
+        elif self.intent_version == "v2.2" or self.intent_version == "v3.2":
             # In v3: cutting one time is enough
             if self.cut_time_accumulated >= 1:
                 return 3 

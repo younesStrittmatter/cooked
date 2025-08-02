@@ -93,8 +93,10 @@ def make_train_rllib(config):
             policy_mapping_fn=dynamic_policy_mapping_fn,
             policies_to_train=policies_to_train
         )
-        .resources(num_gpus=1)  # Set to 1 if you have a GPU
-        .env_runners(num_env_runners=1, num_gpus_per_env_runner=1)
+        .resources(num_gpus=config["NUM_GPUS"])  # Set to 1 if you have a GPU
+        .env_runners(num_env_runners=1, 
+                    #num_gpus_per_env_runner=config["NUM_GPUS"]/2,
+                    num_cpus_per_env_runner=int(config["NUM_CPUS"] / 2))
         .training(
                 train_batch_size=config["NUM_ENVS"] * config["NUM_INNER_STEPS"],
                 lr=config["LR"],

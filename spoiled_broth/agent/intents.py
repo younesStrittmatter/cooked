@@ -66,15 +66,15 @@ class CuttingBoardIntent(_base_intent.Intent):
                     self.has_ended = True
             else:
                 if agent.item in ['tomato', 'pumpkin', 'cabbage']:
-                    if self.version == "v2":
-                        # v2: cut instantly
+                    if self.version == "v2.1" or self.version == "v3.1":
+                        # v2.1: cut instantly
                         agent.item = f'{agent.item}_cut'
                         self.tile.cut_by = agent.id
                         self.tile.item = None
                         self.tile.cut_time_accumulated = 0
                         self.has_ended = True
-                    elif self.version == "v3":
-                        # v3: put the item on the board and cut one time
+                    elif self.version == "v2.2" or self.version == "v3.2":
+                        # v2.2: put the item on the board and cut one time
                         self.tile.cut_time_accumulated = 1
                         self.tile.item = agent.item
                         agent.item = None
@@ -107,7 +107,7 @@ class DeliveryIntent(_base_intent.Intent):
 
             if self.version == "v1":
                 valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato']
-            elif self.version == "v2":
+            elif self.version == "v2.1" or self.version == "v2.2":
                 valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato_cut']
             else:
                 valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
