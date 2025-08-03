@@ -136,7 +136,7 @@ def get_action_type(tile, agent):
 
         if agent.intent_version == "v1":
             valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato']
-        elif agent.intent_version == "v2":
+        elif agent.intent_version == "v2.1" or agent.intent_version == "v2.2":
             valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato_cut']
         else:
             valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']

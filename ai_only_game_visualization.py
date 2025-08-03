@@ -34,9 +34,10 @@ from PIL import Image
 from flask import jsonify
 import signal
 import sys
+import socket
 
-map_nr = 'simple_kitchen'
-playing_map_nr = map_nr
+training_map_nr = 'simple_kitchen'
+playing_map_nr = training_map_nr
 
 num_agents = int(sys.argv[1])
 intent_version = sys.argv[2]
@@ -44,8 +45,24 @@ cooperative = int(sys.argv[3])
 training_id = sys.argv[4]
 checkpoint_number = int(sys.argv[5])
 
+def find_free_port(start_port=5000, max_tries=100):
+    port = start_port
+    for _ in range(max_tries):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("", port))
+                s.close()
+                return port
+            except OSError:
+                port += 1
+    raise RuntimeError("Could not find a free port in range.")
+
+# Find first free port starting from 5000
+free_port = find_free_port(start_port=5000)
+print(f"Using free port: {free_port}")
+
 # --- Determine grid size from map file ---
-map_txt_path = Path(__file__).parent / 'spoiled_broth' / 'maps' / f'{map_nr}.txt'
+map_txt_path = Path(__file__).parent / 'spoiled_broth' / 'maps' / f'{training_map_nr}.txt'
 with open(map_txt_path, 'r') as f:
     map_lines = [line.rstrip('\n') for line in f.readlines()]
 rows = len(map_lines)
@@ -93,9 +110,9 @@ else:
     intent_dir = f'{raw_dir}'
 
 if cooperative: 
-    base_path = Path(f"{intent_dir}/map_{map_nr}/cooperative/{training_id}")
+    base_path = Path(f"{intent_dir}/map_{training_map_nr}/cooperative/{training_id}")
 else:
-    base_path = Path(f"{intent_dir}/map_{map_nr}/competitive/{training_id}")
+    base_path = Path(f"{intent_dir}/map_{training_map_nr}/competitive/{training_id}")
 
 config_path = base_path / "config.txt"
 if config_path.exists():
@@ -343,7 +360,7 @@ app = engine_app.app
 if __name__ == "__main__":
     # Start the Flask app in a separate thread
     def run_app():
-        app.run(port=5000, debug=False, use_reloader=False)
+        app.run(port=free_port, debug=False, use_reloader=False)
     
     app_thread = threading.Thread(target=run_app)
     app_thread.daemon = True
@@ -355,11 +372,10 @@ if __name__ == "__main__":
     if ENABLE_VIDEO_RECORDING:
         try:
             # Capture video frames
-            capture_canvas_frames(duration_seconds=DESIRED_DURATION_SECONDS, fps=VIDEO_FPS, frame_skip=FRAME_SKIP)
+            capture_canvas_frames(url=f"http://localhost:{free_port}", duration_seconds=DESIRED_DURATION_SECONDS, fps=VIDEO_FPS, frame_skip=FRAME_SKIP)
         except Exception as e:
             print(f"Video recording failed: {e}")
             print("Falling back to running game without video recording...")
-            # Fallback: just run the game for the desired duration
             time.sleep(DESIRED_DURATION_SECONDS)
     else:
         print("Video recording disabled. Running game for specified duration...")
