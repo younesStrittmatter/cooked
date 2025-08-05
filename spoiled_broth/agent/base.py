@@ -5,36 +5,60 @@ from engine.extensions.topDownGridWorld import agent
 import random
 from spoiled_broth.world.tiles import ITEM_LIST
 
+BASE_CUTTING_SPEED = 1
+BASE_WALKING_SPEED = 30
+
 
 class Agent(agent.Agent):
-    def __init__(self, agent_id, grid, game):
+    def __init__(self, agent_id, grid, game, additional_info=None):
         super().__init__(agent_id, grid)
         self.game = game
         self.path = []
         self.path_index = 0
         self.move_target = None
+        self.additional_info = additional_info
+        self.cut_speed = BASE_CUTTING_SPEED
+        self.speed = BASE_WALKING_SPEED
+        if 'cutting_speed' in additional_info:
+            self.cut_speed = float(additional_info['cutting_speed'][0]) * BASE_CUTTING_SPEED
+        if 'walking_speed' in additional_info:
+            self.speed = float(additional_info['walking_speed'][0]) * BASE_WALKING_SPEED
 
         self.item = None
-        self.cut_speed = 1
+
+        z_index_base = 0
+        if 'player' in additional_info:
+
+            z_index_base = 1 if additional_info['player'][0] == 'p1' else 4
+
+        print('[Agent] z_index_base:', z_index_base)
+
         self.action = None
         self.score = 0
         hair_n = random.randint(0, 8)
         mustache_n = random.randint(0, 8)
         skin_n = random.randint(0, 8)
 
-        husk_2d = Basic2D(src='agent/cook-husk.png', z_index=1, src_y=0, src_w=16, src_h=16, width=16, height=16,
+        husk_2d = Basic2D(src='agent/cook-husk.png', z_index=1 + z_index_base, src_y=0, src_w=16, src_h=16, width=16,
+                          height=16,
                           normalize=False)
-        hair_2d = Basic2D(src=f'agent/hair/{hair_n}.png', z_index=2, src_w=16, src_h=16, width=16, height=16,
+        hair_2d = Basic2D(src=f'agent/hair/{hair_n}.png', z_index=2 + z_index_base, src_w=16, src_h=16, width=16,
+                          height=16,
                           normalize=False)
-        mustache_2d = Basic2D(src=f'agent/mustache/{mustache_n}.png', z_index=2, src_w=16, src_h=16, width=16,
+        mustache_2d = Basic2D(src=f'agent/mustache/{mustache_n}.png', z_index=2 + z_index_base, src_w=16, src_h=16,
+                              width=16,
                               height=16, normalize=False)
-        head_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2, src_y=0, src_w=16, src_h=16, width=16, height=16,
+        head_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2 + z_index_base, src_y=0, src_w=16, src_h=16,
+                          width=16, height=16,
                           normalize=False)
-        hands_no_item_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2, src_y=16, src_w=16, src_h=16, width=16,
+        hands_no_item_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2 + z_index_base, src_y=16, src_w=16,
+                                   src_h=16, width=16,
                                    height=16, normalize=False)
-        hands_with_item_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2, src_y=32, src_w=16, src_h=16, width=0,
+        hands_with_item_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2 + z_index_base, src_y=32, src_w=16,
+                                     src_h=16, width=0,
                                      height=0, normalize=False)
-        item_held_2d = Basic2D(src='agent/items-held.png', z_index=3, src_y=0, src_w=16, src_h=16, width=0, height=0,
+        item_held_2d = Basic2D(src='agent/items-held.png', z_index=3 + z_index_base, src_y=0, src_w=16, src_h=16,
+                               width=0, height=0,
                                normalize=False)
 
         self.src_x = 0
@@ -62,9 +86,9 @@ class Agent(agent.Agent):
             self.src_x_n = 0
         else:
             self.animation_time += delta_time
-            if self.animation_time > 0.1:
+            if self.animation_time > float(3 / self.speed):
                 self.src_x_n += 1
-                self.src_x_n %= 5
+                self.src_x_n %= 8
                 self.animation_time = 0
         self.src_x = self.src_x_n * 16
 
@@ -114,3 +138,11 @@ class Agent(agent.Agent):
         return np.array(
             _pos + _item + [self.speed] + [self.cut_speed] + [1.0 if self.is_moving else 0.0], dtype=np.float32
         )
+
+    def to_prompt(self, is_self=False):
+        _p = f"""\
+{"You" if is_self else "Agent"}:
+    coordinates: ({self.slot_x}, {self.slot_y})
+    item: {self.item}\n
+"""
+        return _p

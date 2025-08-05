@@ -1,5 +1,3 @@
-from abc import abstractmethod
-
 from engine.extensions.gridworld import grid
 from PIL import Image
 
@@ -15,8 +13,30 @@ class Grid(grid.Grid):
         for x in range(self.width):
             for y in range(self.height):
                 color = img.getpixel((x, y))
-                tile = color_map[str(color)]['class'](game=game, **color_map[str(color)]['kwargs'])
+                tile = color_map[str(color)]['class'](game=game, slot_id=f'{x}{y}', **color_map[str(color)]['kwargs'])
                 tile.add_to_grid(self, x, y, self.tile_size)
+
+    def serialize(self) -> dict:
+        return {
+            'id': self.id,
+            'width': self.width,
+            'height': self.height,
+            'tile_size': self.tile_size,
+            'tiles': [[tile.full_serialize() if tile else None for tile in row] for row in self.tiles]
+        }
+
+    @classmethod
+    def deserialize(cls, data: dict, game=None):
+        grid_instance = cls(data['id'], data['width'], data['height'], data['tile_size'])
+        for x in range(data['width']):
+            for y in range(data['height']):
+                tile_data = data['tiles'][x][y]
+                if tile_data:
+                    tile = grid_instance.tiles[x][y] = grid.Tile.full_deserialize(tile_data, game=game)
+                    tile.slot_x = x
+                    tile.slot_y = y
+        return grid_instance
+
 
 
 class Tile(grid.Tile):
@@ -51,4 +71,26 @@ class Tile(grid.Tile):
 
     def get_intent(self, agent):
         return None
+
+    def serialize(self) -> dict:
+        return {
+            "id": self.id,
+            "class": self.__class__.__name__,
+            "slot_x": self.slot_x,
+            "slot_y": self.slot_y,
+            "tile_size": self.tile_size,
+            "is_walkable": self.is_walkable,
+        }
+
+    @classmethod
+    def deserialize(cls, data: dict, game=None):
+        tile = cls(
+            id=data.get("id"),
+            is_walkable=data.get("is_walkable", False),
+            game=game,
+            tile_size=data.get("tile_size", 16)
+        )
+        tile.slot_x = data.get("slot_x", 0)
+        tile.slot_y = data.get("slot_y", 0)
+        return tile
 

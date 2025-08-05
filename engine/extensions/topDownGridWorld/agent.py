@@ -11,6 +11,7 @@ TILE_SNAP_THRESHOLD = .2
 
 
 class Agent(GameObject):
+    _is_agent = True
     def __init__(self,
                  id,
                  grid,

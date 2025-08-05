@@ -21,9 +21,22 @@ class Clickable2D(GameObject):
     def serialize(self) -> dict:
         data = super().serialize()
         data["left"] = self.left
+        data['class']= self.__class__.__name__,
         data["top"] = self.top
         data["width"] = self.width
         data["height"] = self.height
         data["isClickable"] = self.is_clickable
         data['id'] = self.id
         return data
+
+    @classmethod
+    def deserialize(cls, data: dict, game=None):
+        obj = cls(
+            id=data.get("id"),
+            left=data.get("left", 0),
+            top=data.get("top", 0),
+            width=data.get("width", 1),
+            height=data.get("height", 1),
+            on_click=data.get("onClick")
+        )
+        return obj

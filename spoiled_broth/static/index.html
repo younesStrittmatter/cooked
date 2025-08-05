@@ -1,67 +1,55 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8"/>
-    <title>Grid Game</title>
-    <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            background: black;
-            height: 100%;
-            overflow: hidden;
-        }
+<style>
+    #scene {
+        position: fixed;
+        width: min(90vw, 90vh);
+        height: min(90vh, 90vw);
+        image-rendering: pixelated;
+        background-color: #000; /* Optional: Set a background color */
+        left: 50vw;
+        top: 50vh;
+        transform: translate(-50%, -50%);
+    }
+    #text_overlay {
+        position: fixed;
+        width: min(90vw, 90vh);
+        height: min(90vh, 90vw);
 
-        #scene {
-            image-rendering: pixelated;
-            display: block;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 100vmin;
-            height: 100vmin;
-        }
-    </style>
-</head>
+        background-color: #0000; /* Optional: Set a background color */
+        left: 50vw;
+        top: 50vh;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
-<body>
-<canvas id="scene" width="128" height="128" style="background: black"></canvas>
-<script type="module" src="/engine/static/engine_ui.js"></script>
+<canvas id="scene" width="128" height="128"></canvas>
+<canvas id="text_overlay" width="1024" height="1024"></canvas>
+
 
 
 <script type="module">
-     import {renderScene} from "/extensions/renderer2d/static/renderer_ui.js";
-import {fetchState} from "/engine/static/engine_ui.js";
+    import { renderScene } from "/extensions/renderer2d/static/renderer_ui.js";
+    import { setStateUpdateHandler } from "/engine/static/engine_ui.js";
 
-let previousState = null;
-let currentState = null;
-let lastUpdateTime = 0;
-const tickInterval = 1000 / 24; // 30 FPS logic
+    let previousState = null;
+    let currentState = null;
+    let lastUpdateTime = 0;
+    const tickInterval = 1000 / 24; // 24 FPS logic
 
-// 🎮 Game logic updater
-async function gameTickLoop() {
-    const state = await fetchState();
+    setStateUpdateHandler((state) => {
+        previousState = currentState;
+        currentState = state;
+        lastUpdateTime = performance.now();
+    });
 
-    previousState = currentState;
-    currentState = state;
-    lastUpdateTime = performance.now();
-    setTimeout(gameTickLoop, tickInterval);
-}
-
-// 🖼️ High-FPS renderer
-function renderLoop(now) {
-    if (previousState && currentState) {
-        const t = Math.min(1, (now - lastUpdateTime) / tickInterval);
-        renderScene(previousState, currentState, t);
+    function renderLoop(now) {
+        if (previousState && currentState) {
+            const t = Math.min(1, (now - lastUpdateTime) / tickInterval);
+            renderScene(previousState, currentState, t);
+        }
+        requestAnimationFrame(renderLoop);
     }
+
     requestAnimationFrame(renderLoop);
-}
-
-// ✅ Kick off both loops
-gameTickLoop();
-requestAnimationFrame(renderLoop);
 </script>
-
-</body>
-</html>

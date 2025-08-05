@@ -11,15 +11,17 @@ fi
 # Defaults
 SERVICE_NAME=${SERVICE_NAME:-overcooked-server}
 REGION=${REGION:-us-central1}
+PROJECT_ID=${PROJECT_ID:-$(gcloud config get-value project)}
 
-echo "Creating requirements.txt..."
+#echo "Creating requirements.txt..."
+#"$SCRIPT_DIR/build-requirements.sh"
 
-"$SCRIPT_DIR/build-requirements.sh"
+echo "🛠️ Submitting build to Cloud Build..."
+gcloud builds submit --tag "gcr.io/$PROJECT_ID/$SERVICE_NAME" .
 
 echo "🚀 Deploying $SERVICE_NAME to Cloud Run in region $REGION..."
-
 gcloud run deploy "$SERVICE_NAME" \
-  --source . \
+  --image "gcr.io/$PROJECT_ID/$SERVICE_NAME" \
   --region "$REGION" \
   --platform managed \
   --allow-unauthenticated

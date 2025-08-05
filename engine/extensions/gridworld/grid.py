@@ -24,7 +24,6 @@ class Grid(GameObject):
         if tile.slot_x < self.width and tile.slot_y < self.height:
             self.tiles[tile.slot_x][tile.slot_y] = tile
             return True
-        print('Invalid slot coordinates, tile not added')
         return False
 
     @property
@@ -40,6 +39,7 @@ class Grid(GameObject):
             child.update(actions, delta_time)
 
     def serialize(self):
+        # get the serialized representation of the grid
         return {'id': self.id}  # Grid itself is abstract
 
 
@@ -56,7 +56,8 @@ class Tile(GameObject):
 
     clickable = None
 
-    def __init__(self, id=None,
+    def __init__(self,
+                 id=None,
                  left=0,
                  top=0,
                  tiles_size=16,
@@ -67,7 +68,7 @@ class Tile(GameObject):
         self._tiles_size = tiles_size
 
         if on_click:
-            self.clickable = Clickable2D(None, left, top, tiles_size, tiles_size, on_click)
+            self.clickable = Clickable2D(f'{self.id}_clickable', left, top, tiles_size, tiles_size, on_click)
 
     def update(self, actions, delta_time):
         pass

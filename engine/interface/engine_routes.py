@@ -41,6 +41,8 @@ def register_engine_routes(app, session_manager):
             engine = session.engine
             modules = session.ui_modules
 
+            session._runner.ping()
+
             payload = {
                 "you": agent_id,
                 "tick": engine.tick_count

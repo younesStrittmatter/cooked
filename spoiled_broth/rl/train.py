@@ -22,7 +22,7 @@ class SimpleLoggingCallback(BaseCallback):
             print(f"[Step {self.n_calls}] Mean reward: {mean_reward:.3f}")
             if self.model:
                 self.model.save(str(save_path))
-                print(f"✅ Model saved at {save_path}")
+                print(f"[SimpleLoggingCallback] ✅ Model saved at {save_path}")
         return True
 
 

@@ -213,7 +213,7 @@ class GameEnv(ParallelEnv):
                   - IDLE_PENALTY)
 
         if (new_score - self._last_score) > 0:
-            print(f"Agent delivered item, new score: {new_score}")
+            print(f"[GameEnv] Agent delivered item, new score: {new_score}")
         self._last_score = new_score
         for agent_id in self.agents:
             self.rewards[agent_id] = reward - agent_penalties[agent_id]

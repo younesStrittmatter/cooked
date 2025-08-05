@@ -3,6 +3,7 @@
 import {sendIntent} from "/engine/static/engine_ui.js";
 
 let canvas = document.getElementById("scene");
+let text_overlay = document.getElementById("text_overlay");
 const prevPositions = {};
 
 if (!canvas) {
@@ -12,8 +13,17 @@ if (!canvas) {
     canvas.height = 128;
     document.body.appendChild(canvas);
 }
+if (!text_overlay) {
+    text_overlay = document.createElement("text_overlay");
+    text_overlay.id = "scene";
+    text_overlay.width = 1024;
+    text_overlay.height = 1024;
+    document.body.appendChild(text_overlay);
+}
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
+
+const ctx_text = text_overlay.getContext("2d");
 
 const spriteCache = {};
 let currentState = null;
@@ -40,7 +50,6 @@ canvas.addEventListener("click", async (event) => {
     const objects = currentState?.gameObjects || [];
     for (const obj of objects) {
         if (obj.isClickable) {
-            console.log('click')
             const withinX = clickX >= obj.left && clickX <= obj.left + obj.width;
             const withinY = clickY >= obj.top && clickY <= obj.top + obj.height;
             if (withinX && withinY) {
@@ -54,37 +63,107 @@ canvas.addEventListener("click", async (event) => {
 export async function renderScene(prevState, currState, t) {
     const objects = currState['gameObjects'] || [];
     currentState = currState;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx_text.clearRect(0, 0, text_overlay.width, text_overlay.height);
 
     objects.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
 
     for (const obj of objects) {
-        if (!obj.src) continue;
-        let s_x = canvas.width;
-        let s_y = canvas.height;
-        if (!obj.normalize) {
-            s_x = 1.;
-            s_y = 1.;
+        if (obj.class === "Basic2D") {
+            let s_x = canvas.width;
+            let s_y = canvas.height;
+            if (!obj.normalize) {
+                s_x = 1.;
+                s_y = 1.;
+            }
+
+            const img = await loadSprite(obj.src);
+            const id = obj.id;
+
+            const currX = obj.left * s_x;
+            const currY = obj.top * s_y;
+
+            let prevObj = (prevState.gameObjects || []).find(o => o.id === id);
+            const prevX = prevObj ? prevObj.left * s_x : currX;
+            const prevY = prevObj ? prevObj.top * s_y : currY;
+
+            const x = prevX + (currX - prevX) * t;
+            const y = prevY + (currY - prevY) * t;
+
+            const w = obj.width * s_x;
+            const h = obj.height * s_y;
+
+            ctx.drawImage(img, obj.srcX || 0, obj.srcY || 0, obj.srcW || img.width, obj.srcH || img.height,
+                Math.round(x), Math.round(y), Math.round(w), Math.round(h));
         }
+        if (obj.class === "Text") {
 
-        const img = await loadSprite(obj.src);
-        const id = obj.id;
+            let s_x = text_overlay.width;
+            let s_y = text_overlay.height;
+            if (!obj.normalize) {
+                s_x = 1.;
+                s_y = 1.;
+            }
 
-        const currX = obj.left * s_x;
-        const currY = obj.top * s_y;
 
-        let prevObj = (prevState.gameObjects || []).find(o => o.id === id);
-        const prevX = prevObj ? prevObj.left * s_x : currX;
-        const prevY = prevObj ? prevObj.top * s_y : currY;
+            let currX
+            if (obj.left === null) {
+                currX = text_overlay.width - obj.right * s_x;
+            } else {
+                currX = obj.left * s_x;
+            }
 
-        const x = prevX + (currX - prevX) * t;
-        const y = prevY + (currY - prevY) * t;
+            let currY;
+            if (obj.top === null) {
+                currY = text_overlay.height - obj.bottom * s_y;
+            } else {
+                currY = obj.top * s_y;
+            }
 
-        const w = obj.width * s_x;
-        const h = obj.height * s_y;
 
-        ctx.drawImage(img, obj.srcX || 0, obj.srcY || 0, obj.srcW || img.width, obj.srcH || img.height,
-                      Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+            let prevObj = (prevState.gameObjects || []).find(o => o.id === obj.id);
+
+            let prevX;
+            if (prevObj.left === null) {
+                prevX = text_overlay.width - (prevObj ? prevObj.right * s_x : currX);
+            } else {
+                prevX = prevObj ? prevObj.left * s_x : currX;
+            }
+
+            let prevY;
+            if (prevObj.top === null) {
+                prevY = text_overlay.height - (prevObj ? prevObj.bottom * s_y : currY);
+            } else {
+                prevY = prevObj ? prevObj.top * s_y : currY;
+            }
+
+            const x = prevX + (currX - prevX) * t;
+            const y = prevY + (currY - prevY) * t;
+
+            const lines = (obj.content || '').split('\n');
+            const fontSize = obj.fontSize || 48;
+            ctx_text.font = `${fontSize}pt ${obj.fontFamily || 'Arial'}`;
+            ctx_text.fillStyle = obj.color || 'black';
+            ctx_text.textAlign = obj.align || 'left';
+            ctx_text.textBaseline = obj.baseline || 'top';
+
+            if (obj.top === null) {
+                lines.forEach((line, i) => {
+                    ctx_text.fillText(
+                        line,
+                        Math.round(x),
+                        Math.round(y - lines.length * fontSize * 1.5 + i * fontSize * 1.5) + fontSize * 1.5
+                    );
+                });
+            } else {
+                lines.forEach((line, i) => {
+                    ctx_text.fillText(line, Math.round(x), Math.round(y + i * fontSize * 1.5));
+                });
+
+
+            }
+        }
     }
 }
 

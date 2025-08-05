@@ -28,6 +28,9 @@ class ItemExchangeIntent(_base_intent.Intent):
             if agent.item and self.tile.item and agent.item.endswith('_cut') and self.tile.item == 'plate':
                 self.tile.item = agent.item.split('_')[0] + '_salad'
                 agent.item = None
+            elif agent.item and self.tile.item and self.tile.item.endswith('_cut') and agent.item == 'plate':
+                self.tile.item = self.tile.item.split('_')[0] + '_salad'
+                agent.item = None
             else:
                 _item = self.tile.item
                 self.tile.item = agent.item

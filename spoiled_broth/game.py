@@ -1,7 +1,7 @@
 from engine.base_game import BaseGame
 
 from engine.extensions.topDownGridWorld.grid import Grid
-from spoiled_broth.world.tiles import Counter, CuttingBoard
+from spoiled_broth.world.tiles import Counter, CuttingBoard, Wall
 from spoiled_broth.agent.base import Agent
 
 from spoiled_broth.world.tiles import COLOR_MAP
@@ -12,48 +12,94 @@ from pathlib import Path
 import numpy as np
 import random
 
-
-
-
+MAP_ID = 'encouraged_division_of_labor'
 
 
 class SpoiledBroth(BaseGame):
-    def __init__(self, map_nr=None):
+    def __init__(self, map_nr=MAP_ID, url_params=None):
         super().__init__()
         if map_nr is None:
             map_nr = random.randint(1, 4)
-        self.grid = None
+        if url_params and 'map' in url_params:
+            map_nr = url_params['map'][0]
+        self.map_nr = map_nr
+        # self.grid = None
         img_path = Path(__file__).parent / "maps" / f"{map_nr}.png"
-        self.grid = Grid("grid", 8, 8, 16)
-        self.grid.init_from_img(img_path, COLOR_MAP, self)
-        self.score = Score()
+        self.gameObjects['grid'] = Grid("grid", 8, 8, 16)
+        self.gameObjects['grid'].init_from_img(img_path, COLOR_MAP, self)
+        self.gameObjects['score'] = Score()
 
-        self.gameObjects['grid'] = self.grid
-        self.gameObjects['score'] = self.score
+    def redirect_link(self):
+        return "https://spoiledbrothwaitingroom-7135b.web.app/endPage?score=" + str(self.gameObjects['score'].score)
 
-    def add_agent(self, agent_id):
-        agent = Agent(agent_id, self.grid, self)
+    def add_agent(self, agent_id, url_params=None, **kwargs):
+
+        grid = self.gameObjects['grid']
+        agent = Agent(agent_id, grid, self, additional_info=url_params)
+
         # set agent's initial position to walkable tile
         choices = []
-        for x in range(self.grid.width):
-            for y in range(self.grid.height):
-                tile = self.grid.tiles[x][y]
+        for x in range(grid.width):
+            for y in range(grid.height):
+                tile = grid.tiles[x][y]
                 if tile and tile.is_walkable:
                     choices.append(tile)
         start_tile = random.choice(choices)
-        agent.x = start_tile.slot_x * self.grid.tile_size + self.grid.tile_size // 2
-        agent.y = start_tile.slot_y * self.grid.tile_size + self.grid.tile_size // 2
+
+        if not 'x' in kwargs:
+            agent.x = start_tile.slot_x * grid.tile_size + grid.tile_size // 2
+        else:
+            agent.x = kwargs['x']
+        if 'slot_x' in url_params:
+            agent.x = (int(url_params['slot_x'][0]) * grid.tile_size + grid.tile_size // 2)
+        if not 'y' in kwargs:
+            agent.y = start_tile.slot_y * grid.tile_size + grid.tile_size // 2
+        else:
+            agent.y = kwargs['y']
+        if 'slot_y' in url_params:
+            agent.y = (int(url_params['slot_y'][0]) * grid.tile_size + grid.tile_size // 2)
         self.gameObjects[agent_id] = agent
+
+    def remove_agent(self, agent_id):
+        if agent_id in self.gameObjects:
+            del self.gameObjects[agent_id]
 
     def step(self, actions: dict, delta_time: float):
         super().step(actions, delta_time)
+
+    def initial_args(self) -> dict:
+        """
+        Returns the initial state of the game.
+        This can be used to reset the game or for training purposes.
+        """
+        return {
+            "map_nr": self.map_nr,
+        }
+
+    def agent_initial_state(self, agent_id: str) -> dict:
+        """
+        Returns the initial state of a specific agent.
+        This can be used to reset the agent's state or for training purposes.
+        """
+        return {
+            "agent_id": agent_id,
+            "x": self.gameObjects[agent_id].x,
+            'y': self.gameObjects[agent_id].y,
+            "item": self.gameObjects[agent_id].item,
+            "url_params": self.gameObjects[agent_id].additional_info,
+            "cut_speed": getattr(self.gameObjects[agent_id], "cut_speed", 1.0),
+            "walk_speed": getattr(self.gameObjects[agent_id], "speed", 1.0),
+        }
 
 
 MAX_PLAYERS = 4  # or import if needed
 
 
 def game_to_vector(game, agent_id):
-    grid = game.grid
+    """
+    For RL Agents, transform the game state into a vector representation.
+    """
+    grid = game.gameObjects['grid']
     agent = game.gameObjects[agent_id]
     tile_obs = []
     for y in range(grid.height):
@@ -77,13 +123,120 @@ def game_to_vector(game, agent_id):
     return np.concatenate([tile_obs, self_obs, other_obs]).astype(np.float32)
 
 
+def game_to_prompt(game, agent_id):
+    """
+    For LLM Agents, transform the game state into a prompt representation.
+    """
+    grid = game.gameObjects['grid']
+    agent = game.gameObjects[agent_id]
+    _p = f"""
+You are playing a cooperative grid-based game with other agents as a team.
+The shared goal is to deliver as many *tomato_salad* as possible.
+
+You interact with the game by choosing a tile.
+Choosing a tile makes you walk there and interact (e.g., pick up, place, cut, deliver).
+
+You must think carefully: choose the tile that let's your team deliver a salad quickest.
+
+Game Basics:
+
+- To deliver a *tomato_salad*, you must hold it and place it on the delivery tile.
+- To make a *tomato_salad*, you must hold a *tomato_cut* and place it on a *counter* that already contains a *plate*.
+- To make a *tomato_cut*, you must choose a *cutting_board* that contains a *tomato*.
+- To place a *tomato* on the cutting board, you must hold it and choose the cutting board.
+- To place any item on a counter, you must hold it and place it on a counter.
+- To pick up an item, you must choose the tile that contains it (dispenser, counter, cutting board).
+
+Choosing a tile means walking to it (if reachable) and interacting with it. You cannot walk through walls or counters. Distance matters — far-away tiles take longer to reach. Try to think about the layout of the game since you might have to walk around counters or walls.
+Here is the current state of the game, tile by tile including the action taken when chosing the tile. The floor tiles are omitted. The full grid is 8x8. The tile coordinates are (x, y) where x is the column and y is the row. The top left corner is (0, 0) and the bottom right corner is (7, 7):
+"""
+
+    for y in range(grid.height):
+        for x in range(grid.width):
+            tile = grid.tiles[x][y]
+            if tile and not tile.is_walkable and not (
+                    isinstance(tile, Wall) and (x == 0 or x == 7 or y == 0 or y == 7)):
+                _p += f"\n{tile.to_prompt(agent)}"
+
+    options = []
+    for y in range(grid.height):
+        for x in range(grid.width):
+            tile = grid.tiles[x][y]
+            if tile and not tile.is_walkable and not isinstance(tile, Wall):
+                if hasattr(tile, "to_prompt") and '[None]' not in tile.to_prompt(agent):
+                    options.append(f"({x}, {y})")
+
+    _p += """
+Some tiles show on_choose: [None].  These are not useful right now, but they help you understand the layout or other agents."""
+
+    _p += """
+Descriptions of the other agents:
+"""
+
+    for other_id in game.gameObjects:
+        object = game.gameObjects[other_id]
+        if other_id != agent_id and isinstance(object, Agent) and hasattr(object, "to_prompt"):
+            _p += f"{object.to_prompt(False)}"
+
+    _p += """
+your own state state:
+"""
+
+    _p += f"{agent.to_prompt(True)}"
+
+    _p += """
+Before choosing, ask yourself:
+
+- What ist the next step for your team?"""
+    if agent.item:
+        _p += f"""
+- You are currently holding a {agent.item}."""
+    if agent.item in ['tomato', 'pumpkin', 'cabbage']:
+        _p += f"""
+- You can cut the {agent.item} on a cutting board or on a counter. Is there an empty cutting board?
+- Is it better to cut it yourself or to place it on a counter up for someone else to pick it up and cut it? (Consider walking distance for you and other agents.)
+- If there is no empty cutting board, you should place your item on a counter or get a different item from a dispenser."""
+    if agent.item in ['plate']:
+        _p += f"""
+- You can put the {agent.item} on a counter.
+- Where should you place it? Or is it unnecessary and you need to pick up a tomato instead?"""
+    if agent.item in ['tomato_cut', 'pumpkin_cut', 'cabbage_cut']:
+        _p += f"""
+- Can you place this item on a counter with a plate on it to assemble a salad? Is there a counter with a plate?
+- Should you place it on an empty counter instead? For example, to get a plate first or for another agent to pick it up."""
+    if agent.item in ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']:
+        _p += f"""
+- You can deliver the {agent.item} or put it a counter. Only put it on a counter if you are sure that you or someone else will pick it up soon.
+"""
+
+    if agent.item is None:
+        _p += f"""
+- What item must you hold next to enable the next step toward delivering a tomato_salad? (Think about the full sequence: cut → assemble → deliver.) You need all the items so if there is a counter with a plate, you need a tomato_cut but if there is a tomato_cut, you need a plate.
+- What items are currently available on tiles (counters, dispensers, cutting boards)?
+- Is it possible to immediately cut, assemble, or deliver based on the available items? (If yes, act; if not, set up for the next step.)
+- Which available tiles allow you to make progress with the fewest moves? (Consider walking distance and interaction steps.)
+"""
+    _p += f"""
+Work with your team. You don’t need to do everything yourself. Others can also pick up, cut, assemble, or deliver. Sometimes it’s best to set up for someone else — especially if it saves walking time.
+Now choose the tile that enables the next useful step for your team.
+
+Format your answer as (x, y) — or '' if you don’t want to choose anything right now."""
+
+    _p += f"""
+The allowed tiles are: {options}.
+You must choose only from the given list of allowed tiles.
+"""
+    _p += f"""Only give the tile, and nothing else."""
+    return _p
+
+
 def random_game_state(game, item_list=['tomato', 'plate', 'tomato_cut', 'tomato_salad']):
     chance = random.random()
-    if chance < 0.4: # easy
+    if chance < 0.4:  # easy
         _item_list = item_list + ['tomato_salad']
-    elif chance < 0.6: # mid
+    elif chance < 0.6:  # mid
         _item_list = [i for i in item_list if not i.endswith('salad')]
-    elif chance < 0.8: # hard
+    elif chance < 0.8:  # hard
         _item_list = [i for i in item_list if not (i.endswith('cut') or i.endswith('salad'))] + [None]
     else:
         _item_list = [None]
@@ -103,5 +256,3 @@ def random_game_state(game, item_list=['tomato', 'plate', 'tomato_cut', 'tomato_
         if hasattr(agent, "item"):
             if random.random() < .3:
                 agent.item = random.choice(_item_list)
-
-

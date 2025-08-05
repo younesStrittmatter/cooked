@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 
-
 class BaseGame(ABC):
     def __init__(self):
         self.done = False
@@ -20,4 +19,34 @@ class BaseGame(ABC):
 
     def get_observations(self) -> dict:
         return self.gameObjects
-        # return self.gameObjects
+
+    @abstractmethod
+    def initial_args(self) -> dict:
+        """
+        Returns the initial state of the game.
+        This can be used to reset the game or for training purposes.
+        """
+        return {}
+
+    @abstractmethod
+    def agent_initial_state(self, agent_id: str) -> dict:
+        """
+        Returns the initial state of a specific agent.
+        This can be used to reset the agent's state or for training purposes.
+        """
+        return {}
+
+
+    def serialize_initial_state(self) -> dict:
+        return {
+            "class": self.__class__.__name__,
+            "gameObjects": {k: v.full_serialize() for k, v in self.gameObjects.items()},
+            "init_args": self.initial_args()
+        }
+
+
+    @classmethod
+    def from_state(cls, state_dict: dict):
+        init_args = state_dict.get("init_args", {})
+        game = cls(**init_args)
+        return game
