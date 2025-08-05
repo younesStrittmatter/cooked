@@ -105,6 +105,7 @@ class Counter(SoiledBrothTile):
         self.drawables[1].width = 0
         self.drawables[1].height = 0
         self.salad_by = None  # Register the agent
+        self.salad_item = None
         self.intent_version = None
 
     def update(self, agent, delta_time):
@@ -182,6 +183,7 @@ class CuttingBoard(SoiledBrothTile):
         self.item = None
         self.cut_time_accumulated = 0
         self.cut_by = None  # New field to register the agent
+        self.cut_item = None
         self.intent_version = None
 
     @property
@@ -251,6 +253,7 @@ class Delivery(SoiledBrothTile):
         self.is_walkable = False
         self.add_drawable(Basic2D(src='world/delivery.png', z_index=0, normalize=False))
         self.delivered_by = None  # Register which agent delivered
+        self.delivered_item = None
         self.intent_version = None
 
     def update(self, agent, delta_time):

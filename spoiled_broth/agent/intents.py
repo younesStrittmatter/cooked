@@ -26,10 +26,21 @@ class ItemExchangeIntent(_base_intent.Intent):
     def update(self, agent, delta_time: float):
         if not self.has_ended:
             self.has_ended = True
+            # Case 1: agent has a cutted ingredient and tile has a plate
             if agent.item and self.tile.item and agent.item.endswith('_cut') and self.tile.item == 'plate':
                 self.tile.item = agent.item.split('_')[0] + '_salad'
                 self.tile.salad_by = agent.id
+                self.tile.salad_item = self.tile.item
                 agent.item = None
+
+            # Case 2: agent has a plate and tile has a cutted ingredient
+            elif agent.item == 'plate' and self.tile.item and self.tile.item.endswith('_cut'):
+                self.tile.item = self.tile.item.split('_')[0] + '_salad'
+                self.tile.salad_by = agent.id
+                self.tile.salad_item = self.tile.item
+                agent.item = None
+
+            # Normal exchange
             else:
                 _item = self.tile.item
                 self.tile.item = agent.item
@@ -54,6 +65,7 @@ class CuttingBoardIntent(_base_intent.Intent):
                     _a_temp = agent.item
                     agent.item = f'{self.tile.item}_cut'
                     self.tile.cut_by = agent.id
+                    self.tile.cut_item = agent.item
                     if _a_temp in ['tomato', 'pumpkin', 'cabbage']:
                         self.tile.cut_time_accumulated = 0
                         self.tile.item = _a_temp
@@ -70,6 +82,7 @@ class CuttingBoardIntent(_base_intent.Intent):
                         # v2.1: cut instantly
                         agent.item = f'{agent.item}_cut'
                         self.tile.cut_by = agent.id
+                        self.tile.cut_item = agent.item
                         self.tile.item = None
                         self.tile.cut_time_accumulated = 0
                         self.has_ended = True
@@ -114,6 +127,7 @@ class DeliveryIntent(_base_intent.Intent):
 
             if agent.item in valid_items:
                 self.tile.delivered_by = agent.id
+                self.tile.delivered_item = agent.item
                 agent.item = None
                 agent.score += 1
                 if 'score' in self.tile.game.gameObjects and self.tile.game.gameObjects['score'] is not None:

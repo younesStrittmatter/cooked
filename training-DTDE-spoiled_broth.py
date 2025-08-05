@@ -17,9 +17,11 @@ input_path = sys.argv[1]
 MAP_NR = sys.argv[2]
 LR = float(sys.argv[3])
 COOPERATIVE = int(sys.argv[4])
-INTENT_VERSION = sys.argv[5]
-if len(sys.argv) > 6:
-    NUM_AGENTS = int(sys.argv[6])
+## If game_version = CLASSIC, one type of food (tomato); if game_version = COMPETITION, two types of food (tomato and potato)
+GAME_VERSION = sys.argv[5]
+INTENT_VERSION = sys.argv[6]
+if len(sys.argv) > 7:
+    NUM_AGENTS = int(sys.argv[7])
     if NUM_AGENTS not in [1, 2]:
         raise ValueError("NUM_AGENTS must be 1 or 2")
 else:
@@ -57,6 +59,7 @@ CONV_FILTERS = [
     [64, [2, 2], 1],  # Output: (64, 2, 2)
     #[64, [2, 2], 1],  # Output: (64, 2, 2)
 ]
+PAYOFF_MATRIX = [1,1,-2]
 MLP_LAYERS = [512, 512, 256]
 USE_LSTM = False
 
@@ -65,10 +68,17 @@ if NUM_AGENTS == 1:
 else: 
     raw_dir = f'{local}/data/samuel_lozano/cooked'
 
+if GAME_VERSION == "CLASSIC":
+    game_dir = f'{raw_dir}/classic'
+elif GAME_VERSION == "COMPETITION":
+    game_dir = f'{raw_dir}/competition'
+else:
+    game_dir = f'{raw_dir}'
+
 if INTENT_VERSION is not None:
-    intent_dir = f'{raw_dir}/{INTENT_VERSION}'
+    intent_dir = f'{game_dir}/{INTENT_VERSION}'
 else: 
-    intent_dir = f'{raw_dir}'
+    intent_dir = f'{game_dir}'
 
 if COOPERATIVE:
     save_dir = f'{intent_dir}/map_{MAP_NR}/cooperative'
@@ -103,6 +113,8 @@ config = {
     "COOPERATIVE": COOPERATIVE,
     "REWARD_WEIGHTS": reward_weights,
     "INTENT_VERSION": INTENT_VERSION,
+    "GAME_VERSION": GAME_VERSION,
+    "PAYOFF_MATRIX": PAYOFF_MATRIX,
     "SAVE_DIR": save_dir,
     # RLlib specific parameters
     "NUM_UPDATES": 10,  # Number of updates of the policy

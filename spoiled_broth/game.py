@@ -189,3 +189,108 @@ def game_to_obs_matrix(game, agent_id):
         if item in item_names:
             agent_inventory[idx, item_names.index(item)] = 1.0
     return obs, agent_inventory
+
+
+def game_to_obs_matrix_competition(game, agent_id, agent_food_type):
+    """
+    Returns a spatial observation for the current game state from the perspective of agent_id.
+    - obs_matrix: shape (channels, H, W)
+    - agent_inventory: shape (2, 4) (one-hot for [self, other] agent's held item)
+    Channels:
+      0: Self agent position
+      1: Other agent position
+      2: Counter tiles
+      3: Own Dispenser tiles
+      4: Other Dispenser tiles
+      5: Plate Dispenser tiles
+      6: Cutting board tiles
+      7: Delivery tiles
+      8: Own food on tile
+      9: Other food on tile
+      10: Plate on tile
+      11: Own cut on tile
+      12: Other cut on tile
+      13: Own salad on tile
+      14: Other salad on tile
+      15: Progress (normalized, 0 for non-cutting board)
+    """
+    grid = game.grid
+    H, W = grid.height, grid.width
+    obs = np.zeros((16, H, W), dtype=np.float32)
+
+    # Get agent ids and order as [self, other]
+    all_agent_ids = [aid for aid in game.gameObjects if aid.startswith("ai_rl_")]
+    if agent_id not in all_agent_ids:
+        raise ValueError(f"agent_id {agent_id} not found in gameObjects")
+        
+    other_agent_id = [aid for aid in all_agent_ids if aid != agent_id][0]
+    agent_order = [agent_id, other_agent_id]
+    food_type_self = agent_food_type[agent_id]
+    food_type_other = agent_food_type[other_agent_id]
+    
+    # --- Agent positions ---
+    for idx, aid in enumerate(agent_order):
+        agent = game.gameObjects[aid]
+        x, y = agent.slot_x, agent.slot_y
+        if 0 <= x < W and 0 <= y < H:
+            obs[idx, y, x] = 1.0  # Channel 0: self, Channel 1: other
+
+    # --- Tile types and items ---
+    for y in range(H):
+        for x in range(W):
+            tile = grid.tiles[x][y]
+            if tile is None:
+                continue
+            t = getattr(tile, '_type', None)
+            # Counter
+            if t == 2:
+                obs[2, y, x] = 1.0
+            # Dispensers
+            elif t == 3:
+                if getattr(tile, 'item', None) == food_type_self:
+                    obs[3, y, x] = 1.0  # Own dispenser
+                elif getattr(tile, 'item', None) == food_type_other:
+                    obs[4, y, x] = 1.0  # Other dispenser
+                elif getattr(tile, 'item', None) == "plate":
+                    obs[5, y, x] = 1.0
+            # Cutting board
+            elif t == 4:
+                obs[6, y, x] = 1.0
+            # Delivery
+            elif t == 5:
+                obs[7, y, x] = 1.0
+            # Items
+            item = getattr(tile, 'item', None)
+            if item:
+                if item == "plate":
+                    obs[10, y, x] = 1.0
+                elif item == food_type_self:
+                    obs[8, y, x] = 1.0
+                elif item == food_type_other:
+                    obs[9, y, x] = 1.0
+                elif item == f"{food_type_self}_cut":
+                    obs[11, y, x] = 1.0
+                elif item == f"{food_type_other}_cut":
+                    obs[12, y, x] = 1.0
+                elif item == f"{food_type_self}_salad":
+                    obs[13, y, x] = 1.0
+                elif item == f"{food_type_other}_salad":
+                    obs[14, y, x] = 1.0
+            # Cutting progress
+            if t == 4:
+                cut_stage = getattr(tile, 'cut_stage', 0)
+                obs[15, y, x] = min(3, max(0, cut_stage)) / 3.0
+
+    # --- Agent inventory ---
+    item_names = ["plate", food_type_self, food_type_other, 
+                  f"{food_type_self}_cut", f"{food_type_other}_cut", 
+                  f"{food_type_self}_salad", f"{food_type_other}_salad"]
+
+    agent_inventory = np.zeros((2, len(item_names)), dtype=np.float32)
+    for idx, aid in enumerate(agent_order):
+        agent = game.gameObjects[aid]
+        item = getattr(agent, 'item', None)
+        if item in item_names:
+            agent_inventory[idx, item_names.index(item)] = 1.0
+
+    return obs, agent_inventory

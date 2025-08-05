@@ -3,6 +3,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
 from ray.tune.registry import register_env
 from spoiled_broth.rl.game_env import GameEnv
+from spoiled_broth.rl.game_env_competition import GameEnvCompetition
 from collections import defaultdict
 from pathlib import Path
 import csv
@@ -13,6 +14,10 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 def env_creator(config):
     # Your existing GameEnv class goes here
     return GameEnv(**config)
+
+def env_creator_competition(config):
+    # Your existing GameEnv class goes here
+    return GameEnvCompetition(**config)
 
 # Define separate policies for each agent
 def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
@@ -29,8 +34,14 @@ def make_train_rllib(config):
         for key, val in config.items():
             f.write(f"{key}: {val}\n")
 
-    # Register the environment with RLLib
-    register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator(cfg)))
+    if config["GAME_VERSION"] == "CLASSIC":
+        # Register the environment with RLLib
+        register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator(cfg)))
+    elif config["GAME_VERSION"] == "COMPETITION":
+        # Register the environment with RLLib
+        register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator_competition(cfg)))
+    else:
+        print("Incorrect GAME_VERSION!")
 
     # --- Dynamic policy setup ---
     num_agents = config.get("NUM_AGENTS", 2)
@@ -38,12 +49,20 @@ def make_train_rllib(config):
     policies = {}
     policies_to_train = []
     for agent_id in agent_ids:
-        policies[f"policy_{agent_id}"] = (
-            None,  # Use default PPO policy
-            env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space(agent_id),
-            env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space(agent_id),
-            {}
-        )
+        if config["GAME_VERSION"] == "CLASSIC":
+            policies[f"policy_{agent_id}"] = (
+                None,  # Use default PPO policy
+                env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space(agent_id),
+                env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space(agent_id),
+                {}
+            )
+        elif config["GAME_VERSION"] == "COMPETITION":
+            policies[f"policy_{agent_id}"] = (
+                None,  # Use default PPO policy
+                env_creator_competition({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space(agent_id),
+                env_creator_competition({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space(agent_id),
+                {}
+            )
         policies_to_train.append(f"policy_{agent_id}")
 
     def dynamic_policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
@@ -85,6 +104,7 @@ def make_train_rllib(config):
                 "path": config["PATH"],
                 "grid_size": config.get("GRID_SIZE", (8, 8)),
                 "intent_version": config.get("INTENT_VERSION", None),
+                "payoff_matrix": config.get("PAYOFF_MATRIX", [1,1,-2])
             },
             clip_actions=True,
         )
