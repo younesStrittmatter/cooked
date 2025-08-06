@@ -104,7 +104,7 @@ def make_train_rllib(config):
                 "path": config["PATH"],
                 "grid_size": config.get("GRID_SIZE", (8, 8)),
                 "intent_version": config.get("INTENT_VERSION", None),
-                "payoff_matrix": config.get("PAYOFF_MATRIX", [1,1,-2])
+                "payoff_matrix": config.get("PAYOFF_MATRIX", [1,1,-2]),
             },
             clip_actions=True,
         )

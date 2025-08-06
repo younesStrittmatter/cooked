@@ -13,12 +13,14 @@ import numpy as np
 import random
 
 class SpoiledBroth(BaseGame):
-    def __init__(self, map_nr=None, grid_size=(8, 8), intent_version="v1"):
+    def __init__(self, map_nr=None, grid_size=(8, 8), intent_version="v1", num_agents=2):
         super().__init__()
         if map_nr is None:
             map_nr = str(random.randint(1, 4))  # default maps
         width, height = grid_size
+        self.num_agents = num_agents
         self.intent_version = intent_version
+        self.agent_start_tiles = {}
         self.grid = Grid("grid", width, height, 16)
         map_path_img = Path(__file__).parent / "maps" / f"{map_nr}.png"
         map_path_txt = Path(__file__).parent / "maps" / f"{map_nr}.txt"
@@ -34,6 +36,17 @@ class SpoiledBroth(BaseGame):
         self.score = Score()
         self.gameObjects['grid'] = self.grid
         self.gameObjects['score'] = self.score
+        a1_tile = None
+        a2_tile = None
+        for x in range(self.grid.width):
+            for y in range(self.grid.height):
+                tile = self.grid.tiles[x][y]
+                if tile and hasattr(tile, 'char'):
+                    if tile.char == 'A1':
+                        a1_tile = tile
+                    elif tile.char == 'A2':
+                        a2_tile = tile
+        self.agent_start_tiles = {'A1': a1_tile, 'A2': a2_tile}
 
     def add_agent(self, agent_id, intent_version=None):
         # Use the game's intent_version if not explicitly provided
@@ -41,16 +54,38 @@ class SpoiledBroth(BaseGame):
             intent_version = self.intent_version
         agent = Agent(agent_id, self.grid, self, intent_version=intent_version)
         # set agent's initial position to walkable tile
-        choices = []
-        for x in range(self.grid.width):
-            for y in range(self.grid.height):
-                tile = self.grid.tiles[x][y]
-                if tile and tile.is_walkable:
-                    choices.append(tile)
-        start_tile = random.choice(choices)
+
+        # Get fixed A1/A2 tiles if present
+        a1_tile = self.agent_start_tiles.get('1', None)
+        a2_tile = self.agent_start_tiles.get('2', None)
+
+        num_current_agents = len([aid for aid in self.gameObjects if aid.startswith('ai_rl_')])
+
+        if a1_tile and a2_tile:
+            # Fixed position logic
+            if len(self.agent_start_tiles) == 2:
+                if self.num_agents == 1:
+                    start_tile = random.choice([a1_tile, a2_tile])
+                else:  # assume num_agents == 2
+                    start_tile = a1_tile if num_current_agents == 0 else a2_tile
+            else:
+                start_tile = random.choice([a1_tile, a2_tile])
+        else:
+            # Random walkable tile
+            choices = []
+            for x in range(self.grid.width):
+                for y in range(self.grid.height):
+                    tile = self.grid.tiles[x][y]
+                    if tile and tile.is_walkable:
+                        choices.append(tile)
+            start_tile = random.choice(choices)
+
+        # Assign pixel position
         agent.x = start_tile.slot_x * self.grid.tile_size + self.grid.tile_size // 2
         agent.y = start_tile.slot_y * self.grid.tile_size + self.grid.tile_size // 2
+    
         self.gameObjects[agent_id] = agent
+
 
     def step(self, actions: dict, delta_time: float):
         super().step(actions, delta_time)

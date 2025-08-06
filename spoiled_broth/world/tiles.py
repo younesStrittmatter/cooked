@@ -287,4 +287,7 @@ CHAR_MAP = {
     'B': {'class': CuttingBoard, 'kwargs': {}},
     'M': {'class': Counter, 'kwargs': {}},
     'D': {'class': Delivery, 'kwargs': {}},
+    # OPTIONAL (Fixed agents)
+    '1': {'class': Floor, 'kwargs': {}, 'char': 'A1'},
+    '2': {'class': Floor, 'kwargs': {}, 'char': 'A2'},
 }

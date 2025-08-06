@@ -184,7 +184,8 @@ def get_action_type(tile, agent, agent_id, agent_food_type):
     return default_action
 
 def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None):
-    game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size)
+    num_agents = len(agents)
+    game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size, intent_version=intent_version, num_agents=num_agents)
     for agent_id in agents:
         if intent_version is not None:
             game.add_agent(agent_id, intent_version=intent_version)
@@ -222,7 +223,7 @@ class GameEnvCompetition(ParallelEnv):
             path="training_stats.csv",
             grid_size=(8, 8),
             intent_version=None,
-            payoff_matrix=[1,1,-2]
+            payoff_matrix=[1,1,-2],
     ):
         super().__init__()
         self.map_nr = map_nr
@@ -496,6 +497,14 @@ class GameEnvCompetition(ParallelEnv):
                 + step_action_types[agent_id][ACTION_TYPE_OWN_USEFUL_CUTTING_BOARD] * rewards_cfg["useful_cutting_board"]
             )
 
+            other_reward = (
+                step_result_events[agent_id]["delivered_other"] * rewards_cfg["delivered"]
+                + step_result_events[agent_id]["salad_other"] * rewards_cfg["salad_created"]
+                + step_result_events[agent_id]["cut_other"] * rewards_cfg["item_cut"]
+                + step_action_types[agent_id][ACTION_TYPE_OTHER_USEFUL_FOOD_DISPENSER] * rewards_cfg["useful_food_dispenser"]
+                + step_action_types[agent_id][ACTION_TYPE_OTHER_USEFUL_CUTTING_BOARD] * rewards_cfg["useful_cutting_board"]
+            )
+
             other_penalty = 0
             for other_agent_id in self.agents:
                 if other_agent_id == agent_id:
@@ -508,7 +517,7 @@ class GameEnvCompetition(ParallelEnv):
                     + step_action_types[other_agent_id][ACTION_TYPE_OTHER_USEFUL_CUTTING_BOARD] * rewards_cfg["useful_cutting_board"]
                 )
 
-            pure_rewards[agent_id] = (self.payoff_matrix[0] * own_reward + self.payoff_matrix[2] * other_penalty)
+            pure_rewards[agent_id] = (self.payoff_matrix[0] * own_reward + self.payoff_matrix[1] * other_reward + self.payoff_matrix[2] * other_penalty)
             self.cumulated_pure_rewards[agent_id] += pure_rewards[agent_id]
 
         for agent_id in self.agents:

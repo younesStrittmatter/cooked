@@ -150,7 +150,8 @@ def get_action_type(tile, agent):
     return default_action
 
 def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None):
-    game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size)
+    num_agents = len(agents)
+    game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size, intent_version=intent_version, num_agents=num_agents)
     for agent_id in agents:
         if intent_version is not None:
             game.add_agent(agent_id, intent_version=intent_version)
@@ -187,7 +188,8 @@ class GameEnv(ParallelEnv):
             step_per_episode=1000,
             path="training_stats.csv",
             grid_size=(8, 8),
-            intent_version=None
+            intent_version=None,
+            payoff_matrix=None,
     ):
         super().__init__()
         self.map_nr = map_nr

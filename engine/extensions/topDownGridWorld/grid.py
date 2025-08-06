@@ -39,6 +39,7 @@ class Grid(grid.Grid):
                 tile_class = char_map[ch]['class']
                 kwargs = char_map[ch].get('kwargs', {})
                 tile = tile_class(game=game, **kwargs)
+                tile.char = char_map[ch].get('char', ch)
                 tile.add_to_grid(self, x, y, self.tile_size)
 
 class Tile(grid.Tile):

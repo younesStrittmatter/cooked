@@ -13,6 +13,9 @@ CHAR_MAP = {
     'B': {'class': CuttingBoard, 'kwargs': {}},   # Creates a cutting board where ingredients can be processed
     'M': {'class': Counter, 'kwargs': {}},        # Creates a counter surface where items can be placed
     'D': {'class': Delivery, 'kwargs': {}},       # Creates a delivery point where completed orders can be submitted
+    # OPTIONAL (Fixed agents)
+    '1': {'class': Floor, 'kwargs': {}, 'char': 'A1'},
+    '2': {'class': Floor, 'kwargs': {}, 'char': 'A2'},
 }
 
 # How It Works:
