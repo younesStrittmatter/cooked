@@ -215,7 +215,7 @@ class GameEnv(ParallelEnv):
         self.reward_weights = reward_weights if reward_weights is not None else default_weights
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
-        self.total_agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
+        self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
         self.total_action_types = {
             agent_id: {
                 ACTION_TYPE_DO_NOTHING: 0,
@@ -274,7 +274,7 @@ class GameEnv(ParallelEnv):
 
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
-        self.total_agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
+        self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
         self.total_action_types = {
             agent_id: {
                 ACTION_TYPE_DO_NOTHING: 0,
@@ -329,7 +329,7 @@ class GameEnv(ParallelEnv):
             if action == len(self.clickable_indices):
                 self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING] = self.total_action_types[agent_id].get(ACTION_TYPE_DO_NOTHING, 0) + 1
                 # Agent chose to do nothing
-                agent_penalties[agent_id] += NO_ACTION_PENALTY  
+                agent_penalties[agent_id] += USELESS_ACTION_PENALTY  
                 continue  # skip issuing an intent
 
             # Only allow a new action if the agent is not moving and has no unfinished intents
@@ -370,7 +370,7 @@ class GameEnv(ParallelEnv):
         self.game.step(filtered_actions_dict, delta_time=1 / cf_AI_TICK_RATE)
 
         # Detect agent that performed the action and reward
-        agent_events = {agent_id: {"delivered_coop": 0, "delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
+        agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
         step_action_types = {agent_id: {ACTION_TYPE_USEFUL_FOOD_DISPENSER: 0,
                                         ACTION_TYPE_USEFUL_PLATE_DISPENSER: 0,
                                         ACTION_TYPE_USEFUL_CUTTING_BOARD: 0
@@ -395,60 +395,55 @@ class GameEnv(ParallelEnv):
         # Delivery
         new_score = self.game.gameObjects["score"].score
         if (new_score - self._last_score) > 0:
-            if self.cooperative:
-                # Reward all agents for delivery
-                for agent_id in agent_events:
-                    agent_events[agent_id]["delivered_coop"] += 1
-                    self.total_agent_events[agent_id]["delivered_coop"] += 1
-                for thing in self.game.gameObjects.values():
-                    if hasattr(thing, 'tiles'):
-                        for row in thing.tiles:
-                            for tile in row:
-                                if hasattr(tile, "delivered_by") and tile.delivered_by:
-                                    if tile.delivered_by in agent_events:
-                                        agent_events[tile.delivered_by]["delivered"] += 1
-                                        self.total_agent_events[tile.delivered_by]["delivered"] += 1
-                                    tile.delivered_by = None
-            else:
-                # Only reward the delivering agent(s)
-                for thing in self.game.gameObjects.values():
-                    if hasattr(thing, 'tiles'):
-                        for row in thing.tiles:
-                            for tile in row:
-                                if hasattr(tile, "delivered_by") and tile.delivered_by:
-                                    if tile.delivered_by in agent_events:
-                                        agent_events[tile.delivered_by]["delivered"] += 1
-                                        self.total_agent_events[tile.delivered_by]["delivered"] += 1
-                                        agent_events[tile.delivered_by]["delivered_coop"] += 1
-                                        self.total_agent_events[tile.delivered_by]["delivered_coop"] += 1
-                                    tile.delivered_by = None
-            self._last_score = new_score
+            # Only reward the delivering agent(s)
+            for thing in self.game.gameObjects.values():
+                if hasattr(thing, 'tiles'):
+                    for row in thing.tiles:
+                        for tile in row:
+                            if hasattr(tile, "delivered_by") and tile.delivered_by:
+                                if tile.delivered_by in agent_events:
+                                    agent_events[tile.delivered_by]["delivered"] += 1
+                                    self.total_agent_events[tile.delivered_by]["delivered"] += 1
+                                tile.delivered_by = None
+        self._last_score = new_score
 
         # Get reward from delivering items
         rewards_cfg = self.get_rewards_for_version()
-        pure_rewards = {agent_id: 0.0 for agent_id in self.agents}
+        event_rewards = {agent_id: 0.0 for agent_id in self.agents}
+        action_rewards = {agent_id: 0.0 for agent_id in self.agents}
         for agent_id in self.agents:
-            # Pure rewards: only positive events, no penalties
-            pure_rewards[agent_id] = (
-                agent_events[agent_id]["delivered_coop"] * rewards_cfg["delivered"]
+            # Event rewards: only positive events
+            event_rewards[agent_id] = (
+                agent_events[agent_id]["delivered"] * rewards_cfg["delivered"]
                 + agent_events[agent_id]["cut"] * rewards_cfg["item_cut"]
                 + agent_events[agent_id]["salad"] * rewards_cfg["salad_created"]
-                + step_action_types[agent_id][ACTION_TYPE_USEFUL_FOOD_DISPENSER] * rewards_cfg["useful_food_dispenser"]
+            )
+            # Action rewards: only individual actions
+            action_rewards[agent_id] = (
+                step_action_types[agent_id][ACTION_TYPE_USEFUL_FOOD_DISPENSER] * rewards_cfg["useful_food_dispenser"]
                 + step_action_types[agent_id][ACTION_TYPE_USEFUL_PLATE_DISPENSER] * rewards_cfg["useful_plate_dispenser"]
                 + step_action_types[agent_id][ACTION_TYPE_USEFUL_CUTTING_BOARD] * rewards_cfg["useful_cutting_board"]
             )
 
-            self.cumulated_pure_rewards[agent_id] += pure_rewards[agent_id]
+        if self.cooperative == 1:
+            shared_event_reward = sum(event_rewards.values())
 
         for agent_id in self.agents:
+            if self.cooperative == 1:
+                reward = shared_event_reward + action_rewards[agent_id]
+            else:
+                reward = event_rewards[agent_id] + action_rewards[agent_id]
+            self.cumulated_pure_rewards[agent_id] += reward
+
             alpha, beta = self.reward_weights.get(agent_id, (1.0, 0.0))
             other_agents = [a for a in self.agents if a != agent_id]
-            if other_agents:
-                avg_other_reward = sum(pure_rewards[a] for a in other_agents) / len(other_agents)
-            else:
-                avg_other_reward = 0.0  # in case there is only one agent
+            avg_other_reward = (
+                sum(event_rewards[a] + action_rewards[a] for a in other_agents) / len(other_agents)
+                if other_agents else 0.0
+            )  # in case there is only one agent
+
             # Modified rewards: include penalties
-            self.rewards[agent_id] = alpha * (pure_rewards[agent_id] - agent_penalties[agent_id]) + beta * avg_other_reward
+            self.rewards[agent_id] = alpha * (reward - agent_penalties[agent_id]) + beta * avg_other_reward
             self.cumulated_modified_rewards[agent_id] += self.rewards[agent_id]
 
         # Check if episode should end due to step limit
@@ -460,7 +455,6 @@ class GameEnv(ParallelEnv):
         
         self.infos = {
             agent: {
-                "pure_reward": pure_rewards[agent],
                 "agent_events": agent_events[agent],  # Add agent events to info
                 "action_types": self.total_action_types[agent],  # Add action types to info
                 "score": self.agent_map[agent].score
@@ -483,7 +477,6 @@ class GameEnv(ParallelEnv):
                 }
             
             for agent_id in self.agents:
-                row[f"total_deliveries_{agent_id}"] = float(self.total_agent_events[agent_id]["delivered_coop"])
                 row[f"pure_reward_{agent_id}"] = float(self.cumulated_pure_rewards[agent_id])
                 row[f"modified_reward_{agent_id}"] = float(self.cumulated_modified_rewards[agent_id])
                 row[f"delivered_{agent_id}"] = self.total_agent_events[agent_id]["delivered"]
