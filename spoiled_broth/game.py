@@ -32,7 +32,7 @@ class SpoiledBroth(BaseGame):
             # Load map through text
             self.grid.init_from_text(map_path_txt, CHAR_MAP, self)
         else:
-            raise FileNotFoundError(f"Map'{map_nr}' not found, neither as image nor as text.")
+            raise FileNotFoundError(f"Map '{map_nr}' not found, neither as image nor as text.")
         self.score = Score()
         self.gameObjects['grid'] = self.grid
         self.gameObjects['score'] = self.score

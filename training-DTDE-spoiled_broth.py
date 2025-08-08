@@ -9,8 +9,8 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
 ##### Cluster config ##################
-NUM_GPUS = 0.1
-NUM_CPUS = 4
+NUM_GPUS = 0.2
+NUM_CPUS = 5
 
 # Read input file
 input_path = sys.argv[1]

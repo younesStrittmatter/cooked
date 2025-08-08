@@ -4,12 +4,15 @@ from pettingzoo import ParallelEnv
 from gymnasium import spaces
 import numpy as np
 from spoiled_broth.config import *
+from spoiled_broth.maps.accessibility_maps import get_accessibility_map
 
 from spoiled_broth.game import SpoiledBroth, random_game_state, game_to_obs_matrix
 #from spoiled_broth.world.tiles import Counter
 
-USELESS_ACTION_PENALTY = 0.3
+DO_NOTHING_PENALTY = 0.5  # Penalty for choosing to do nothing
+USELESS_ACTION_PENALTY = 0.2 # Penalty for performing a useless action
 NO_ACTION_PENALTY = 0.01
+INACCESSIBLE_TILE_PENALTY = 1.0  # Harsh penalty for trying to access unreachable tiles
 
 REWARDS_BY_VERSION = {
     "v1": {
@@ -76,14 +79,20 @@ ACTION_TYPE_USEFUL_PLATE_DISPENSER = "useful_plate_dispenser"
 ACTION_TYPE_USELESS_PLATE_DISPENSER = "useless_plate_dispenser"
 ACTION_TYPE_USELESS_DELIVERY = "useless_delivery"
 ACTION_TYPE_USEFUL_DELIVERY = "useful_delivery"
+ACTION_TYPE_INACCESSIBLE = "inaccessible_tile"
 
-def get_action_type(tile, agent):
+def get_action_type(tile, agent, x=None, y=None, accessibility_map=None):
     """
     Determine the type of action based on the tile clicked and agent state.
-    agent: the agent performing the action (to check what it holds, etc.)
     """
     if tile is None or not hasattr(tile, '_type'):
         return ACTION_TYPE_FLOOR  # Default to floor for None/invalid tiles
+        
+    # Check accessibility using pre-computed map
+    agent_pos = (agent.x, agent.y)
+    tile_pos = (x, y)
+    if accessibility_map is not None and tile_pos not in accessibility_map.get(agent_pos, set()):
+        return ACTION_TYPE_INACCESSIBLE
 
     # Default mapping for unknown tiles
     default_action = ACTION_TYPE_FLOOR
@@ -204,6 +213,9 @@ class GameEnv(ParallelEnv):
         self.grid_size = grid_size
         self.intent_version = intent_version
 
+        # Load the accessibility map for this map
+        self.accessibility_map = get_accessibility_map(map_nr)
+
         # Determine agent IDs from reward_weights or default to two agents
         if reward_weights is not None:
             self.possible_agents = list(reward_weights.keys())
@@ -260,7 +272,6 @@ class GameEnv(ParallelEnv):
         self.agents = self.possible_agents[:]
 
         self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version)
-
         random_game_state(self.game)
 
         self.agent_map = {
@@ -329,7 +340,7 @@ class GameEnv(ParallelEnv):
             if action == len(self.clickable_indices):
                 self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING] = self.total_action_types[agent_id].get(ACTION_TYPE_DO_NOTHING, 0) + 1
                 # Agent chose to do nothing
-                agent_penalties[agent_id] += USELESS_ACTION_PENALTY  
+                agent_penalties[agent_id] += DO_NOTHING_PENALTY  
                 continue  # skip issuing an intent
 
             # Only allow a new action if the agent is not moving and has no unfinished intents
@@ -346,7 +357,14 @@ class GameEnv(ParallelEnv):
             tile = self.game.grid.tiles[x][y]
 
             # Track action type
-            action_type = get_action_type(tile, agent_obj)
+            action_type = get_action_type(tile, agent_obj, x, y, accessibility_map=self.accessibility_map)
+            
+            # Check if the tile is inaccessible
+            if action_type == ACTION_TYPE_INACCESSIBLE:
+                self.total_actions_not_performed[agent_id] += 1
+                agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
+                continue  # Skip this agent's action
+            
             self.total_action_types[agent_id][action_type] += 1
 
             # Penalty for useless action
