@@ -9,8 +9,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
 ##### Cluster config ##################
-NUM_GPUS = 0.2
-NUM_CPUS = 5
+NUM_GPUS = 1
+NUM_CPUS = 24
+CLUSTER = 'brigit'  # Options: 'brigit', 'local', 'cuenca'
 
 # Read input file
 input_path = sys.argv[1]
@@ -43,14 +44,19 @@ else:
         "ai_rl_2": (alpha_2, beta_2),
     }
 
-#local = '/mnt/lustre/home/samuloza'
-local = ''
-#local = 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
+if CLUSTER == 'brigit':
+    local = '/mnt/lustre/home/samuloza'
+elif CLUSTER == 'cuenca':
+    local = ''
+elif CLUSTER == 'local':
+    local = 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
+else:
+    raise ValueError("Invalid cluster specified. Choose from 'brigit', 'cuenca', or 'local'.")
 
 # Hiperparámetros
 NUM_ENVS = 1
 NUM_INNER_STEPS = 450
-NUM_EPOCHS = 15000
+NUM_EPOCHS = 7500
 NUM_MINIBATCHES = 20
 SHOW_EVERY_N_EPOCHS = 1000
 SAVE_EVERY_N_EPOCHS = 500
