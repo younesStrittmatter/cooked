@@ -30,9 +30,9 @@ else:
 
 with open(input_path, "r") as f:
     lines = f.readlines()
-    alpha_1, beta_1 = map(float, lines[0].strip().split())
+    alpha_1, beta_1 = [round(float(x), 4) for x in lines[0].strip().split()]
     if NUM_AGENTS == 2:
-        alpha_2, beta_2 = map(float, lines[1].strip().split())
+        alpha_2, beta_2 = [round(float(x), 4) for x in lines[1].strip().split()]
 
 if NUM_AGENTS == 1:
     reward_weights = {
