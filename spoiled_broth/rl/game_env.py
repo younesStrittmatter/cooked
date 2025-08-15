@@ -10,9 +10,9 @@ from spoiled_broth.game import SpoiledBroth, random_game_state, game_to_obs_matr
 #from spoiled_broth.world.tiles import Counter
 
 DO_NOTHING_PENALTY = 0.5  # Penalty for choosing to do nothing
-USELESS_ACTION_PENALTY = 0.2 # Penalty for performing a useless action
+USELESS_ACTION_PENALTY = 0.1 # Penalty for performing a useless action
 NO_ACTION_PENALTY = 0.01
-INACCESSIBLE_TILE_PENALTY = 1.0  # Harsh penalty for trying to access unreachable tiles
+INACCESSIBLE_TILE_PENALTY = 0.3  # Harsh penalty for trying to access unreachable tiles
 
 REWARDS_BY_VERSION = {
     "v1": {
@@ -89,7 +89,7 @@ def get_action_type(tile, agent, x=None, y=None, accessibility_map=None):
         return ACTION_TYPE_FLOOR  # Default to floor for None/invalid tiles
         
     # Check accessibility using pre-computed map
-    agent_pos = (agent.x, agent.y)
+    agent_pos = (agent.slot_x, agent.slot_y)
     tile_pos = (x, y)
     if accessibility_map is not None and tile_pos not in accessibility_map.get(agent_pos, set()):
         return ACTION_TYPE_INACCESSIBLE
@@ -177,6 +177,7 @@ def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None):
 
     action_spaces = {
         agent: spaces.Discrete(len(clickable_indices) + 1)  # last action index = do nothing
+        #agent: spaces.Discrete(len(clickable_indices))
         for agent in agents
     }
     _clickable_mask = np.zeros(game.grid.width * game.grid.height, dtype=np.int8)
@@ -305,6 +306,7 @@ class GameEnv(ParallelEnv):
         }
         self.total_actions_asked = {agent_id: 0 for agent_id in self.agents}
         self.total_actions_not_performed = {agent_id: 0 for agent_id in self.agents}
+        self.total_actions_inaccessible = {agent_id: 0 for agent_id in self.agents}
 
         assert isinstance(self.infos, dict), f"infos is not a dict: {self.infos}"
         assert all(isinstance(v, dict) for v in self.infos.values()), "infos values must be dicts"
@@ -336,7 +338,7 @@ class GameEnv(ParallelEnv):
             self.total_actions_asked[agent_id] += 1
             agent_obj = self.game.gameObjects[agent_id]
 
-             # Check if agent wants to do nothing
+            # Check if agent wants to do nothing
             if action == len(self.clickable_indices):
                 self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING] = self.total_action_types[agent_id].get(ACTION_TYPE_DO_NOTHING, 0) + 1
                 # Agent chose to do nothing
@@ -361,7 +363,7 @@ class GameEnv(ParallelEnv):
             
             # Check if the tile is inaccessible
             if action_type == ACTION_TYPE_INACCESSIBLE:
-                self.total_actions_not_performed[agent_id] += 1
+                self.total_actions_inaccessible[agent_id] += 1
                 agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
                 continue  # Skip this agent's action
             
@@ -503,6 +505,7 @@ class GameEnv(ParallelEnv):
 
                 row[f"actions_asked_{agent_id}"] = self.total_actions_asked[agent_id]
                 row[f"actions_not_performed_{agent_id}"] = self.total_actions_not_performed[agent_id]
+                row[f"inaccessible_actions_{agent_id}"] = self.total_actions_inaccessible[agent_id]
 
                 # Add action type columns
                 row[f"do_nothing_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING]

@@ -42,11 +42,11 @@ class SpoiledBroth(BaseGame):
             for y in range(self.grid.height):
                 tile = self.grid.tiles[x][y]
                 if tile and hasattr(tile, 'char'):
-                    if tile.char == 'A1':
+                    if tile.char == '1':
                         a1_tile = tile
-                    elif tile.char == 'A2':
+                    elif tile.char == '2':
                         a2_tile = tile
-        self.agent_start_tiles = {'A1': a1_tile, 'A2': a2_tile}
+        self.agent_start_tiles = {'1': a1_tile, '2': a2_tile}
 
     def add_agent(self, agent_id, intent_version=None):
         # Use the game's intent_version if not explicitly provided
@@ -62,22 +62,22 @@ class SpoiledBroth(BaseGame):
         num_current_agents = len([aid for aid in self.gameObjects if aid.startswith('ai_rl_')])
 
         if a1_tile and a2_tile:
-            # Fixed position logic
-            if len(self.agent_start_tiles) == 2:
-                if self.num_agents == 1:
-                    start_tile = random.choice([a1_tile, a2_tile])
-                else:  # assume num_agents == 2
-                    start_tile = a1_tile if num_current_agents == 0 else a2_tile
+            # Fixed mapping: agent 1 always gets a1_tile, agent 2 always gets a2_tile
+            agent_number = int(agent_id.split('_')[-1])  # Extract number from agent_id
+            if agent_number == 1:
+                start_tile = a1_tile
+            elif agent_number == 2:
+                start_tile = a2_tile
             else:
-                start_tile = random.choice([a1_tile, a2_tile])
+                raise ValueError(f"Unexpected agent_id {agent_id}, should be ai_rl_1 or ai_rl_2")
         else:
-            # Random walkable tile
-            choices = []
-            for x in range(self.grid.width):
-                for y in range(self.grid.height):
-                    tile = self.grid.tiles[x][y]
-                    if tile and tile.is_walkable:
-                        choices.append(tile)
+            # Random walkable tile logic (no fixed tiles available)
+            choices = [
+                tile
+                for x in range(self.grid.width)
+                for y in range(self.grid.height)
+                if (tile := self.grid.tiles[x][y]) and tile.is_walkable
+            ]
             start_tile = random.choice(choices)
 
         # Assign pixel position
