@@ -21,8 +21,9 @@ COOPERATIVE = int(sys.argv[4])
 ## If game_version = CLASSIC, one type of food (tomato); if game_version = COMPETITION, two types of food (tomato and potato)
 GAME_VERSION = sys.argv[5]
 INTENT_VERSION = sys.argv[6]
-if len(sys.argv) > 7:
-    NUM_AGENTS = int(sys.argv[7])
+SEED = int(sys.argv[7])
+if len(sys.argv) > 8:
+    NUM_AGENTS = int(sys.argv[8])
     if NUM_AGENTS not in [1, 2]:
         raise ValueError("NUM_AGENTS must be 1 or 2")
 else:
@@ -121,6 +122,7 @@ config = {
     "INTENT_VERSION": INTENT_VERSION,
     "GAME_VERSION": GAME_VERSION,
     "PAYOFF_MATRIX": PAYOFF_MATRIX,
+    "INITIAL_SEED": SEED,
     "SAVE_DIR": save_dir,
     # RLlib specific parameters
     "NUM_UPDATES": 10,  # Number of updates of the policy

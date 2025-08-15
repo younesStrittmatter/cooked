@@ -13,10 +13,11 @@ import numpy as np
 import random
 
 class SpoiledBroth(BaseGame):
-    def __init__(self, map_nr=None, grid_size=(8, 8), intent_version="v1", num_agents=2):
+    def __init__(self, map_nr=None, grid_size=(8, 8), intent_version="v1", num_agents=2, seed=None):
         super().__init__()
+        self.rng = random.Random(seed)
         if map_nr is None:
-            map_nr = str(random.randint(1, 4))  # default maps
+            map_nr = str(self.rng.randint(1, 4))  # default maps
         width, height = grid_size
         self.num_agents = num_agents
         self.intent_version = intent_version
@@ -62,23 +63,23 @@ class SpoiledBroth(BaseGame):
         num_current_agents = len([aid for aid in self.gameObjects if aid.startswith('ai_rl_')])
 
         if a1_tile and a2_tile:
-            # Fixed mapping: agent 1 always gets a1_tile, agent 2 always gets a2_tile
-            agent_number = int(agent_id.split('_')[-1])  # Extract number from agent_id
-            if agent_number == 1:
-                start_tile = a1_tile
-            elif agent_number == 2:
-                start_tile = a2_tile
+            # Fixed position logic
+            if len(self.agent_start_tiles) == 2:
+                if self.num_agents == 1:
+                    start_tile = self.rng.choice([a1_tile, a2_tile])
+                else:  # assume num_agents == 2
+                    start_tile = a1_tile if num_current_agents == 0 else a2_tile
             else:
-                raise ValueError(f"Unexpected agent_id {agent_id}, should be ai_rl_1 or ai_rl_2")
+                start_tile = self.rng.choice([a1_tile, a2_tile])
         else:
-            # Random walkable tile logic (no fixed tiles available)
-            choices = [
-                tile
-                for x in range(self.grid.width)
-                for y in range(self.grid.height)
-                if (tile := self.grid.tiles[x][y]) and tile.is_walkable
-            ]
-            start_tile = random.choice(choices)
+            # Random walkable tile
+            choices = []
+            for x in range(self.grid.width):
+                for y in range(self.grid.height):
+                    tile = self.grid.tiles[x][y]
+                    if tile and tile.is_walkable:
+                        choices.append(tile)
+            start_tile = self.rng.choice(choices)
 
         # Assign pixel position
         agent.x = start_tile.slot_x * self.grid.tile_size + self.grid.tile_size // 2
@@ -155,6 +156,7 @@ MAX_PLAYERS = 4 # or import if needed
 
 def random_game_state(game):
     # Only randomize agent positions (already done by add_agent)
+    # Note: No additional randomization needed here since agent positions are handled by add_agent with seeded RNG
     for agent in game.gameObjects.values():
         if hasattr(agent, "item") and agent.item is not None:
             agent.item = None

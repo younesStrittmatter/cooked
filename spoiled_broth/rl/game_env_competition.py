@@ -8,7 +8,8 @@ from spoiled_broth.config import *
 from spoiled_broth.game import SpoiledBroth, random_game_state, game_to_obs_matrix_competition
 #from spoiled_broth.world.tiles import Counter
 
-USELESS_ACTION_PENALTY = 0.3
+DO_NOTHING_PENALTY = 0.3  # Penalty for choosing to do nothing
+USELESS_ACTION_PENALTY = 0.2 # Penalty for performing a useless action
 NO_ACTION_PENALTY = 0.01
 
 REWARDS_BY_VERSION = {
@@ -183,9 +184,9 @@ def get_action_type(tile, agent, agent_id, agent_food_type):
     # Default fallback
     return default_action
 
-def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None):
+def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None, seed=None):
     num_agents = len(agents)
-    game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size, intent_version=intent_version, num_agents=num_agents)
+    game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size, intent_version=intent_version, num_agents=num_agents, seed=seed)
     for agent_id in agents:
         if intent_version is not None:
             game.add_agent(agent_id, intent_version=intent_version)
@@ -224,6 +225,7 @@ class GameEnvCompetition(ParallelEnv):
             grid_size=(8, 8),
             intent_version=None,
             payoff_matrix=[1,1,-2],
+            initial_seed=0,
     ):
         super().__init__()
         self.map_nr = map_nr
@@ -238,6 +240,7 @@ class GameEnvCompetition(ParallelEnv):
         self.grid_size = grid_size
         self.intent_version = intent_version
         self.payoff_matrix = payoff_matrix
+        self.seed = initial_seed
         self.agent_food_type = {
             "ai_rl_1": "tomato",
             "ai_rl_2": "pumpkin",
@@ -279,7 +282,7 @@ class GameEnvCompetition(ParallelEnv):
         self.total_actions_asked = {agent_id: 0 for agent_id in self.agents}
         self.total_actions_not_performed = {agent_id: 0 for agent_id in self.agents}
 
-        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version, seed=self.seed)
 
         self.agent_map = {
             agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents
@@ -299,6 +302,14 @@ class GameEnvCompetition(ParallelEnv):
         self._last_score = 0
 
     def reset(self, seed=None, options=None):
+        # Initialize or increment reset counter
+        if not hasattr(self, '_reset_count'):
+            self._reset_count = 0
+        self._reset_count += 1
+        
+        # Create a unique seed by combining fixed seed and reset counter
+        episode_seed = (self.seed + self._reset_count) if self.seed is not None else None
+        
         self._last_score = 0
         self.agents = self.possible_agents[:]
         self.agent_food_type = {
@@ -306,7 +317,7 @@ class GameEnvCompetition(ParallelEnv):
             "ai_rl_2": "pumpkin",
         }        
 
-        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version, seed=episode_seed)
 
         random_game_state(self.game)
 
