@@ -1,0 +1,4025 @@
+{
+  "session_id": "8a5196298d73ff96",
+  "start_time": "2025-08-29T21:24:47.576903",
+  "config": {
+    "class": "SpoiledBroth",
+    "gameObjects": {
+      "grid": {
+        "id": "grid",
+        "class": "Grid",
+        "data": {
+          "id": "grid",
+          "width": 8,
+          "height": 8,
+          "tile_size": 16,
+          "tiles": [
+            [
+              {
+                "id": "Wall_00",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_00",
+                  "slot_x": 0,
+                  "slot_y": 0,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_00_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_00_drawable",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Counter_01",
+                "class": "Counter",
+                "data": {
+                  "class": "Counter",
+                  "id": "Counter_01",
+                  "slot_x": 0,
+                  "slot_y": 1,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Counter_01_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_01_drawable_base",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Counter_01_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_01_drawable_item",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-on-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 1
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Counter_01",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 0,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Counter_01"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Counter_02",
+                "class": "Counter",
+                "data": {
+                  "class": "Counter",
+                  "id": "Counter_02",
+                  "slot_x": 0,
+                  "slot_y": 2,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Counter_02_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_02_drawable_base",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Counter_02_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_02_drawable_item",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-on-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 1
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Counter_02",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 0,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Counter_02"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Counter_03",
+                "class": "Counter",
+                "data": {
+                  "class": "Counter",
+                  "id": "Counter_03",
+                  "slot_x": 0,
+                  "slot_y": 3,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Counter_03_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_03_drawable_base",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Counter_03_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_03_drawable_item",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-on-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 1
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Counter_03",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 0,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Counter_03"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_04",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_04",
+                  "slot_x": 0,
+                  "slot_y": 4,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_04_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_04_drawable",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_05",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_05",
+                  "slot_x": 0,
+                  "slot_y": 5,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_05_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_05_drawable",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_06",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_06",
+                  "slot_x": 0,
+                  "slot_y": 6,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_06_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_06_drawable",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 96,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_07",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_07",
+                  "slot_x": 0,
+                  "slot_y": 7,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_07_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_07_drawable",
+                        "class": "Basic2D",
+                        "left": 0,
+                        "top": 112,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "id": "CuttingBoard_10",
+                "class": "CuttingBoard",
+                "data": {
+                  "class": "CuttingBoard",
+                  "id": "CuttingBoard_10",
+                  "slot_x": 1,
+                  "slot_y": 0,
+                  "item": null,
+                  "clickable": true,
+                  "cut_time_accumulated": 0,
+                  "cut_stage": 0
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "CuttingBoard_10_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "CuttingBoard_10_drawable_base",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "CuttingBoard_10_drawable_board",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "CuttingBoard_10_drawable_board",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/cutting-board.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 1
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[2]",
+                    "data": {
+                      "id": "CuttingBoard_10_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "CuttingBoard_10_drawable_item",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-on-board.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 2
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[3]",
+                    "data": {
+                      "id": "CuttingBoard_10_drawable_knife",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "CuttingBoard_10_drawable_knife",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/knife.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 3
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "CuttingBoard_10",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 16,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "CuttingBoard_10"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_11",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_11",
+                  "slot_x": 1,
+                  "slot_y": 1,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_11_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_11_drawable",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 32,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_12",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_12",
+                  "slot_x": 1,
+                  "slot_y": 2,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_12_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_12_drawable",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 144,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_13",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_13",
+                  "slot_x": 1,
+                  "slot_y": 3,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_13_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_13_drawable",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 96,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_14",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_14",
+                  "slot_x": 1,
+                  "slot_y": 4,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_14_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_14_drawable",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 384,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_15",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_15",
+                  "slot_x": 1,
+                  "slot_y": 5,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_15_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_15_drawable",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 384,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_16",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_16",
+                  "slot_x": 1,
+                  "slot_y": 6,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_16_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_16_drawable",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 96,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 448,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_17",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_17",
+                  "slot_x": 1,
+                  "slot_y": 7,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_17_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_17_drawable",
+                        "class": "Basic2D",
+                        "left": 16,
+                        "top": 112,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "id": "CuttingBoard_20",
+                "class": "CuttingBoard",
+                "data": {
+                  "class": "CuttingBoard",
+                  "id": "CuttingBoard_20",
+                  "slot_x": 2,
+                  "slot_y": 0,
+                  "item": null,
+                  "clickable": true,
+                  "cut_time_accumulated": 0,
+                  "cut_stage": 0
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "CuttingBoard_20_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "CuttingBoard_20_drawable_base",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "CuttingBoard_20_drawable_board",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "CuttingBoard_20_drawable_board",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/cutting-board.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 1
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[2]",
+                    "data": {
+                      "id": "CuttingBoard_20_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "CuttingBoard_20_drawable_item",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-on-board.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 2
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[3]",
+                    "data": {
+                      "id": "CuttingBoard_20_drawable_knife",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "CuttingBoard_20_drawable_knife",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/knife.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 3
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "CuttingBoard_20",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 32,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "CuttingBoard_20"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_21",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_21",
+                  "slot_x": 2,
+                  "slot_y": 1,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_21_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_21_drawable",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 128,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_22",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_22",
+                  "slot_x": 2,
+                  "slot_y": 2,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_22_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_22_drawable",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 352,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_23",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_23",
+                  "slot_x": 2,
+                  "slot_y": 3,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_23_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_23_drawable",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 368,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_24",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_24",
+                  "slot_x": 2,
+                  "slot_y": 4,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_24_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_24_drawable",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 304,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_25",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_25",
+                  "slot_x": 2,
+                  "slot_y": 5,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_25_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_25_drawable",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 160,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_26",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_26",
+                  "slot_x": 2,
+                  "slot_y": 6,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_26_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_26_drawable",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 96,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 176,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_27",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_27",
+                  "slot_x": 2,
+                  "slot_y": 7,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_27_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_27_drawable",
+                        "class": "Basic2D",
+                        "left": 32,
+                        "top": 112,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "id": "Wall_30",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_30",
+                  "slot_x": 3,
+                  "slot_y": 0,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_30_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_30_drawable",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_31",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_31",
+                  "slot_x": 3,
+                  "slot_y": 1,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_31_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_31_drawable",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Counter_32",
+                "class": "Counter",
+                "data": {
+                  "class": "Counter",
+                  "id": "Counter_32",
+                  "slot_x": 3,
+                  "slot_y": 2,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Counter_32_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_32_drawable_base",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Counter_32_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_32_drawable_item",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-on-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 1
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Counter_32",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 48,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Counter_32"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Counter_33",
+                "class": "Counter",
+                "data": {
+                  "class": "Counter",
+                  "id": "Counter_33",
+                  "slot_x": 3,
+                  "slot_y": 3,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Counter_33_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_33_drawable_base",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Counter_33_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_33_drawable_item",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-on-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 1
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Counter_33",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 48,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Counter_33"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Counter_34",
+                "class": "Counter",
+                "data": {
+                  "class": "Counter",
+                  "id": "Counter_34",
+                  "slot_x": 3,
+                  "slot_y": 4,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Counter_34_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_34_drawable_base",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Counter_34_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_34_drawable_item",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-on-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 1
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Counter_34",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 48,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Counter_34"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Counter_35",
+                "class": "Counter",
+                "data": {
+                  "class": "Counter",
+                  "id": "Counter_35",
+                  "slot_x": 3,
+                  "slot_y": 5,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Counter_35_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_35_drawable_base",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Counter_35_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Counter_35_drawable_item",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-on-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 1
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Counter_35",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 48,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Counter_35"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_36",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_36",
+                  "slot_x": 3,
+                  "slot_y": 6,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_36_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_36_drawable",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 96,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 144,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_37",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_37",
+                  "slot_x": 3,
+                  "slot_y": 7,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_37_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_37_drawable",
+                        "class": "Basic2D",
+                        "left": 48,
+                        "top": 112,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "id": "Dispenser_40",
+                "class": "Dispenser",
+                "data": {
+                  "class": "Dispenser",
+                  "id": "Dispenser_40",
+                  "slot_x": 4,
+                  "slot_y": 0,
+                  "item": "tomato",
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Dispenser_40_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Dispenser_40_drawable_base",
+                        "class": "Basic2D",
+                        "left": 64,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Dispenser_40_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Dispenser_40_drawable_item",
+                        "class": "Basic2D",
+                        "left": 64,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-dispenser.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Dispenser_40",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 64,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Dispenser_40"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_41",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_41",
+                  "slot_x": 4,
+                  "slot_y": 1,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_41_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_41_drawable",
+                        "class": "Basic2D",
+                        "left": 64,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 368,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_42",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_42",
+                  "slot_x": 4,
+                  "slot_y": 2,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_42_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_42_drawable",
+                        "class": "Basic2D",
+                        "left": 64,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 416,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_43",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_43",
+                  "slot_x": 4,
+                  "slot_y": 3,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_43_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_43_drawable",
+                        "class": "Basic2D",
+                        "left": 64,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 112,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_44",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_44",
+                  "slot_x": 4,
+                  "slot_y": 4,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_44_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_44_drawable",
+                        "class": "Basic2D",
+                        "left": 64,
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 16,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_45",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_45",
+                  "slot_x": 4,
+                  "slot_y": 5,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_45_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_45_drawable",
+                        "class": "Basic2D",
+                        "left": 64,
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 368,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_46",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_46",
+                  "slot_x": 4,
+                  "slot_y": 6,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_46_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_46_drawable",
+                        "class": "Basic2D",
+                        "left": 64,
+                        "top": 96,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 192,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_47",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_47",
+                  "slot_x": 4,
+                  "slot_y": 7,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_47_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_47_drawable",
+                        "class": "Basic2D",
+                        "left": 64,
+                        "top": 112,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "id": "Dispenser_50",
+                "class": "Dispenser",
+                "data": {
+                  "class": "Dispenser",
+                  "id": "Dispenser_50",
+                  "slot_x": 5,
+                  "slot_y": 0,
+                  "item": "tomato",
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Dispenser_50_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Dispenser_50_drawable_base",
+                        "class": "Basic2D",
+                        "left": 80,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Dispenser_50_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Dispenser_50_drawable_item",
+                        "class": "Basic2D",
+                        "left": 80,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-dispenser.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Dispenser_50",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 80,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Dispenser_50"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_51",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_51",
+                  "slot_x": 5,
+                  "slot_y": 1,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_51_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_51_drawable",
+                        "class": "Basic2D",
+                        "left": 80,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 160,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_52",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_52",
+                  "slot_x": 5,
+                  "slot_y": 2,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_52_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_52_drawable",
+                        "class": "Basic2D",
+                        "left": 80,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 96,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_53",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_53",
+                  "slot_x": 5,
+                  "slot_y": 3,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_53_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_53_drawable",
+                        "class": "Basic2D",
+                        "left": 80,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 288,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_54",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_54",
+                  "slot_x": 5,
+                  "slot_y": 4,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_54_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_54_drawable",
+                        "class": "Basic2D",
+                        "left": 80,
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 336,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_55",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_55",
+                  "slot_x": 5,
+                  "slot_y": 5,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_55_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_55_drawable",
+                        "class": "Basic2D",
+                        "left": 80,
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 208,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_56",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_56",
+                  "slot_x": 5,
+                  "slot_y": 6,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_56_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_56_drawable",
+                        "class": "Basic2D",
+                        "left": 80,
+                        "top": 96,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 128,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_57",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_57",
+                  "slot_x": 5,
+                  "slot_y": 7,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_57_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_57_drawable",
+                        "class": "Basic2D",
+                        "left": 80,
+                        "top": 112,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "id": "Dispenser_60",
+                "class": "Dispenser",
+                "data": {
+                  "class": "Dispenser",
+                  "id": "Dispenser_60",
+                  "slot_x": 6,
+                  "slot_y": 0,
+                  "item": "plate",
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Dispenser_60_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Dispenser_60_drawable_base",
+                        "class": "Basic2D",
+                        "left": 96,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Dispenser_60_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Dispenser_60_drawable_item",
+                        "class": "Basic2D",
+                        "left": 96,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-dispenser.png",
+                        "srcX": 0,
+                        "srcY": 48,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Dispenser_60",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 96,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Dispenser_60"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_61",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_61",
+                  "slot_x": 6,
+                  "slot_y": 1,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_61_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_61_drawable",
+                        "class": "Basic2D",
+                        "left": 96,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 368,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_62",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_62",
+                  "slot_x": 6,
+                  "slot_y": 2,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_62_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_62_drawable",
+                        "class": "Basic2D",
+                        "left": 96,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 80,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Delivery_63",
+                "class": "Delivery",
+                "data": {
+                  "class": "Delivery",
+                  "id": "Delivery_63",
+                  "slot_x": 6,
+                  "slot_y": 3,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Delivery_63_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Delivery_63_drawable",
+                        "class": "Basic2D",
+                        "left": 96,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/delivery.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Delivery_63",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 96,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Delivery_63"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Delivery_64",
+                "class": "Delivery",
+                "data": {
+                  "class": "Delivery",
+                  "id": "Delivery_64",
+                  "slot_x": 6,
+                  "slot_y": 4,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Delivery_64_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Delivery_64_drawable",
+                        "class": "Basic2D",
+                        "left": 96,
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/delivery.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Delivery_64",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 96,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Delivery_64"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_65",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_65",
+                  "slot_x": 6,
+                  "slot_y": 5,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_65_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_65_drawable",
+                        "class": "Basic2D",
+                        "left": 96,
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 32,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Floor_66",
+                "class": "Floor",
+                "data": {
+                  "class": "Floor",
+                  "id": "Floor_66",
+                  "slot_x": 6,
+                  "slot_y": 6,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Floor_66_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Floor_66_drawable",
+                        "class": "Basic2D",
+                        "left": 96,
+                        "top": 96,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-floor.png",
+                        "srcX": 0,
+                        "srcY": 352,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_67",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_67",
+                  "slot_x": 6,
+                  "slot_y": 7,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_67_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_67_drawable",
+                        "class": "Basic2D",
+                        "left": 96,
+                        "top": 112,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            ],
+            [
+              {
+                "id": "Wall_70",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_70",
+                  "slot_x": 7,
+                  "slot_y": 0,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_70_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_70_drawable",
+                        "class": "Basic2D",
+                        "left": 112,
+                        "top": 0,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Dispenser_71",
+                "class": "Dispenser",
+                "data": {
+                  "class": "Dispenser",
+                  "id": "Dispenser_71",
+                  "slot_x": 7,
+                  "slot_y": 1,
+                  "item": "plate",
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Dispenser_71_drawable_base",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Dispenser_71_drawable_base",
+                        "class": "Basic2D",
+                        "left": 112,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-counter.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "drawables[1]",
+                    "data": {
+                      "id": "Dispenser_71_drawable_item",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Dispenser_71_drawable_item",
+                        "class": "Basic2D",
+                        "left": 112,
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/item-dispenser.png",
+                        "srcX": 0,
+                        "srcY": 48,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Dispenser_71",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 112,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 16,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Dispenser_71"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_72",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_72",
+                  "slot_x": 7,
+                  "slot_y": 2,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_72_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_72_drawable",
+                        "class": "Basic2D",
+                        "left": 112,
+                        "top": 32,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Delivery_73",
+                "class": "Delivery",
+                "data": {
+                  "class": "Delivery",
+                  "id": "Delivery_73",
+                  "slot_x": 7,
+                  "slot_y": 3,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Delivery_73_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Delivery_73_drawable",
+                        "class": "Basic2D",
+                        "left": 112,
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/delivery.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Delivery_73",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 112,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 48,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Delivery_73"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Delivery_74",
+                "class": "Delivery",
+                "data": {
+                  "class": "Delivery",
+                  "id": "Delivery_74",
+                  "slot_x": 7,
+                  "slot_y": 4,
+                  "item": null,
+                  "clickable": true
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Delivery_74_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Delivery_74_drawable",
+                        "class": "Basic2D",
+                        "left": 112,
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/delivery.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  },
+                  {
+                    "attr": "clickable",
+                    "data": {
+                      "id": "Delivery_74",
+                      "class": "Clickable2D",
+                      "data": {
+                        "left": 112,
+                        "class": [
+                          "Clickable2D"
+                        ],
+                        "top": 64,
+                        "width": 16,
+                        "height": 16,
+                        "isClickable": true,
+                        "id": "Delivery_74"
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_75",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_75",
+                  "slot_x": 7,
+                  "slot_y": 5,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_75_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_75_drawable",
+                        "class": "Basic2D",
+                        "left": 112,
+                        "top": 80,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_76",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_76",
+                  "slot_x": 7,
+                  "slot_y": 6,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_76_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_76_drawable",
+                        "class": "Basic2D",
+                        "left": 112,
+                        "top": 96,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "Wall_77",
+                "class": "Wall",
+                "data": {
+                  "class": "Wall",
+                  "id": "Wall_77",
+                  "slot_x": 7,
+                  "slot_y": 7,
+                  "item": null,
+                  "clickable": false
+                },
+                "children": [
+                  {
+                    "attr": "drawables[0]",
+                    "data": {
+                      "id": "Wall_77_drawable",
+                      "class": "Basic2D",
+                      "data": {
+                        "id": "Wall_77_drawable",
+                        "class": "Basic2D",
+                        "left": 112,
+                        "top": 112,
+                        "width": 16,
+                        "height": 16,
+                        "src": "world/basic-wall.png",
+                        "srcX": 0,
+                        "srcY": 0,
+                        "srcW": 16,
+                        "srcH": 16,
+                        "normalize": false,
+                        "zIndex": 0
+                      },
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        "children": []
+      },
+      "score": {
+        "id": "e38fa85b0a0216d5",
+        "class": "Score",
+        "data": {
+          "id": "e38fa85b0a0216d5",
+          "score": 0
+        },
+        "children": [
+          {
+            "attr": "text_obj",
+            "data": {
+              "id": "e38fa85b0a0216d5_text",
+              "class": "Text",
+              "data": {
+                "id": "e38fa85b0a0216d5_text",
+                "class": "Text",
+                "left": null,
+                "right": 0.1,
+                "align": "right",
+                "top": null,
+                "bottom": 0.1,
+                "baseline": "bottom",
+                "content": "0",
+                "color": "#FFFFFF",
+                "fontSize": 28,
+                "zIndex": 0
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    "init_args": {
+      "map_nr": "encouraged_division_of_labor"
+    }
+  },
+  "agents": {
+    "player_1216f756": {
+      "initial_state": {
+        "agent_id": "player_1216f756",
+        "x": 40,
+        "y": 40,
+        "item": null,
+        "url_params": {
+          "gameType": [
+            "tomatoSaladOnly"
+          ],
+          "PROLIFIC_PID": [
+            "59f71f797086f80001941493"
+          ],
+          "map": [
+            "encouraged_division_of_labor"
+          ],
+          "cutting_speed_p1": [
+            "1"
+          ],
+          "walking_speed_p1": [
+            "1"
+          ],
+          "cutting_speed_p2": [
+            "1"
+          ],
+          "walking_speed_p2": [
+            "1"
+          ],
+          "slot_x_p1": [
+            "2"
+          ],
+          "slot_y_p1": [
+            "2"
+          ],
+          "slot_x_p2": [
+            "5"
+          ],
+          "slot_y_p2": [
+            "2"
+          ],
+          "EIO": [
+            "4"
+          ],
+          "transport": [
+            "polling"
+          ],
+          "t": [
+            "PZtj_jx"
+          ]
+        },
+        "cut_speed": 1.0,
+        "walk_speed": 30.0,
+        "player_nr": 1
+      }
+    },
+    "player_7acfb40f": {
+      "initial_state": {
+        "agent_id": "player_7acfb40f",
+        "x": 88,
+        "y": 40,
+        "item": null,
+        "url_params": {
+          "gameType": [
+            "tomatoSaladOnly"
+          ],
+          "PROLIFIC_PID": [
+            "646e4572cbed17f6bbacec12"
+          ],
+          "map": [
+            "encouraged_division_of_labor"
+          ],
+          "cutting_speed_p1": [
+            "1"
+          ],
+          "walking_speed_p1": [
+            "1"
+          ],
+          "cutting_speed_p2": [
+            "1"
+          ],
+          "walking_speed_p2": [
+            "1"
+          ],
+          "slot_x_p1": [
+            "2"
+          ],
+          "slot_y_p1": [
+            "2"
+          ],
+          "slot_x_p2": [
+            "5"
+          ],
+          "slot_y_p2": [
+            "2"
+          ],
+          "EIO": [
+            "4"
+          ],
+          "transport": [
+            "polling"
+          ],
+          "t": [
+            "PZtk23g"
+          ]
+        },
+        "cut_speed": 1.0,
+        "walk_speed": 30.0,
+        "player_nr": 2
+      }
+    }
+  },
+  "intents": [
+    {
+      "tick": 70,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_50"
+      }
+    },
+    {
+      "tick": 70,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_50"
+      }
+    },
+    {
+      "tick": 91,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 112,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_40"
+      }
+    },
+    {
+      "tick": 120,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 136,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_40"
+      }
+    },
+    {
+      "tick": 158,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 159,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 187,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_50"
+      }
+    },
+    {
+      "tick": 190,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_34"
+      }
+    },
+    {
+      "tick": 234,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_50"
+      }
+    },
+    {
+      "tick": 249,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_40"
+      }
+    },
+    {
+      "tick": 255,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_20"
+      }
+    },
+    {
+      "tick": 334,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 372,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 395,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 462,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_20"
+      }
+    },
+    {
+      "tick": 477,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_01"
+      }
+    },
+    {
+      "tick": 483,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 501,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 513,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_71"
+      }
+    },
+    {
+      "tick": 536,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 551,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_02"
+      }
+    },
+    {
+      "tick": 604,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 606,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_71"
+      }
+    },
+    {
+      "tick": 627,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_20"
+      }
+    },
+    {
+      "tick": 628,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_50"
+      }
+    },
+    {
+      "tick": 669,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 696,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_20"
+      }
+    },
+    {
+      "tick": 711,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 743,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_60"
+      }
+    },
+    {
+      "tick": 821,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 861,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_60"
+      }
+    },
+    {
+      "tick": 863,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 894,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 921,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 932,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Delivery_64"
+      }
+    },
+    {
+      "tick": 961,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 963,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_60"
+      }
+    },
+    {
+      "tick": 991,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 1003,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 1012,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 1030,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 1047,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Delivery_63"
+      }
+    },
+    {
+      "tick": 1049,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_71"
+      }
+    },
+    {
+      "tick": 1084,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Delivery_63"
+      }
+    },
+    {
+      "tick": 1094,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 1096,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_40"
+      }
+    },
+    {
+      "tick": 1123,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_71"
+      }
+    },
+    {
+      "tick": 1127,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 1128,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_71"
+      }
+    },
+    {
+      "tick": 1171,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_03"
+      }
+    },
+    {
+      "tick": 1180,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 1251,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_02"
+      }
+    },
+    {
+      "tick": 1261,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 1278,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_03"
+      }
+    },
+    {
+      "tick": 1283,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 1298,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_03"
+      }
+    },
+    {
+      "tick": 1301,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Delivery_63"
+      }
+    },
+    {
+      "tick": 1314,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Delivery_64"
+      }
+    },
+    {
+      "tick": 1368,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_40"
+      }
+    },
+    {
+      "tick": 1379,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 1403,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 1408,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_20"
+      }
+    },
+    {
+      "tick": 1429,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_60"
+      }
+    },
+    {
+      "tick": 1458,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 1488,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 1509,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 1522,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_40"
+      }
+    },
+    {
+      "tick": 1548,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 1584,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 1596,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 1623,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 1635,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Delivery_63"
+      }
+    },
+    {
+      "tick": 1664,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_40"
+      }
+    },
+    {
+      "tick": 1666,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 1754,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_34"
+      }
+    },
+    {
+      "tick": 1764,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 1790,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_40"
+      }
+    },
+    {
+      "tick": 1813,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 1832,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_01"
+      }
+    },
+    {
+      "tick": 1851,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 1896,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 1898,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 1901,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 1904,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Delivery_64"
+      }
+    },
+    {
+      "tick": 1904,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 1950,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Dispenser_60"
+      }
+    },
+    {
+      "tick": 1989,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_35"
+      }
+    },
+    {
+      "tick": 2054,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "Counter_32"
+      }
+    },
+    {
+      "tick": 2079,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_33"
+      }
+    },
+    {
+      "tick": 2082,
+      "agent_id": "player_1216f756",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    },
+    {
+      "tick": 2082,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "Counter_34"
+      }
+    },
+    {
+      "tick": 2108,
+      "agent_id": "player_7acfb40f",
+      "action": {
+        "type": "click",
+        "target": "CuttingBoard_10"
+      }
+    }
+  ]
+}
