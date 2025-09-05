@@ -21,6 +21,7 @@ class SessionManager:
         self.is_max_speed = is_max_speed
         self.socketio = socketio
         self.sessions = {}
+        self.by_room = {}
         self.max_game_time = max_game_time
         self.redirect_link = redirect_link
 
@@ -28,9 +29,38 @@ class SessionManager:
         return f"player_{secrets.token_hex(4)}"
 
     def find_or_create_session(self, params=None):
-        for session in self.sessions.values():
-            if not session.is_full(self.n_players):
-                return session
+        room = None
+        if params:
+            # parse_qs returns lists
+            r = params.get("room") or params.get("Room") or params.get("ROOM")
+            room = r[0] if r else None
+
+        if room:
+            sess = self.by_room.get(room)
+            if sess and not sess.is_full(self.n_players):
+                return sess
+
+            new_session = Session(
+                game_factory=self.game_factory,
+                ui_modules=self.ui_modules,
+                agent_map=self.agent_map,
+                tick_rate=self.tick_rate,
+                ai_tick_rate=self.ai_tick_rate,
+                is_max_speed=self.is_max_speed,
+                socketio=self.socketio,
+                max_game_time=self.max_game_time,
+                redirect_link=self.redirect_link,
+                url_params=params,
+            )
+            self.sessions[new_session.id] = new_session
+            self.by_room[room] = new_session
+            return new_session
+
+        # fallback: first non-full
+        for s in self.sessions.values():
+            if not s.is_full(self.n_players):
+                return s
+
         new_session = Session(
             game_factory=self.game_factory,
             ui_modules=self.ui_modules,
@@ -41,7 +71,7 @@ class SessionManager:
             socketio=self.socketio,
             max_game_time=self.max_game_time,
             redirect_link=self.redirect_link,
-            url_params=params
+            url_params=params,
         )
         self.sessions[new_session.id] = new_session
         return new_session

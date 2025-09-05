@@ -1,6 +1,10 @@
+import re
+from typing import Callable
+
 from engine.base_game import BaseGame
 
 from engine.extensions.topDownGridWorld.grid import Grid
+from engine.game_object import GameObject
 from spoiled_broth.world.tiles import Counter, CuttingBoard, Wall
 from spoiled_broth.agent.base import Agent
 
@@ -10,13 +14,17 @@ from spoiled_broth.ui.score import Score
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import random
+import csv
 
 MAP_ID = 'encouraged_division_of_labor'
 
+TICK_LOGGING = True
+
 
 class SpoiledBroth(BaseGame):
-    def __init__(self, map_nr=MAP_ID, url_params=None):
+    def __init__(self, map_nr=MAP_ID, url_params=None, tick_log_path=None):
         super().__init__()
         if map_nr is None:
             map_nr = random.randint(1, 4)
@@ -29,13 +37,25 @@ class SpoiledBroth(BaseGame):
         self.gameObjects['grid'].init_from_img(img_path, COLOR_MAP, self)
         self.gameObjects['score'] = Score()
 
+        self.tick_logging = False
+        self.tick_count = 0
+        # LOGGING
+        if tick_log_path is not None:
+            self.tick_logging = True
+            self._tick_rows = []
+            self._tick_log_path = tick_log_path
+
     def redirect_link(self):
         return "https://spoiledbrothwaitingroom-7135b.web.app/endPage?score=" + str(self.gameObjects['score'].score)
 
     def add_agent(self, agent_id, url_params=None, **kwargs):
 
         grid = self.gameObjects['grid']
-        agent = Agent(agent_id, grid, self, additional_info=url_params)
+        if not 'player_nr' in kwargs:
+            player_nr = len(self.get_agents()) + 1
+        else:
+            player_nr = kwargs['player_nr']
+        agent = Agent(agent_id, grid, self, additional_info=url_params, player_nr=player_nr)
 
         # set agent's initial position to walkable tile
         choices = []
@@ -50,22 +70,92 @@ class SpoiledBroth(BaseGame):
             agent.x = start_tile.slot_x * grid.tile_size + grid.tile_size // 2
         else:
             agent.x = kwargs['x']
-        if 'slot_x' in url_params:
-            agent.x = (int(url_params['slot_x'][0]) * grid.tile_size + grid.tile_size // 2)
+        if f'slot_x_p{player_nr}' in url_params:
+            agent.x = (int(url_params[f'slot_x_p{player_nr}'][0]) * grid.tile_size + grid.tile_size // 2)
+
         if not 'y' in kwargs:
             agent.y = start_tile.slot_y * grid.tile_size + grid.tile_size // 2
         else:
             agent.y = kwargs['y']
-        if 'slot_y' in url_params:
-            agent.y = (int(url_params['slot_y'][0]) * grid.tile_size + grid.tile_size // 2)
+        if f'slot_y_p{player_nr}' in url_params:
+            agent.y = (int(url_params[f'slot_y_p{player_nr}'][0]) * grid.tile_size + grid.tile_size // 2)
         self.gameObjects[agent_id] = agent
 
     def remove_agent(self, agent_id):
         if agent_id in self.gameObjects:
             del self.gameObjects[agent_id]
 
+    def get_agents(self):
+        return [obj for obj in self.gameObjects.values() if hasattr(obj, '_is_agent') and obj._is_agent]
+
     def step(self, actions: dict, delta_time: float):
         super().step(actions, delta_time)
+        self.tick_count += 1
+        if self.tick_logging:
+            self._store_tick_data()
+
+    def _flatten_serialized(self, obj: dict, prefix: str, key_filter: Callable[[str], bool] = lambda k: True) -> dict:
+        flat = {}
+        for key, value in obj.items():
+            if key == "children":
+                continue  # Skip children here; they'll be visited separately
+
+            full_key = f"{prefix}_{key}"
+            if not key_filter(full_key):
+                continue
+
+            if isinstance(value, dict):
+                nested = self._flatten_serialized(value, prefix=full_key, key_filter=key_filter)
+                flat.update(nested)
+            else:
+                flat[full_key] = value
+
+        return flat
+        # Store tick data for debugging or analysis
+
+    def _store_tick_data(self):
+        if not self.tick_logging:
+            return
+
+            # Build snapshot for this tick
+        snapshot = {"tick": self.tick_count}
+
+        def process(obj):
+            serialized = obj.full_serialize()
+            flat = self._flatten_serialized(
+                serialized["data"],
+                prefix=obj.id,
+                key_filter=is_not_excludes
+            )
+            snapshot.update(flat)
+            for child in getattr(obj, "children", []):
+                process(child)
+
+        for obj in self.gameObjects.values():
+            process(obj)
+
+        # Buffer this tick
+        self._tick_rows.append(snapshot)
+
+        # If the session just ended, write the whole thing once
+        if self.tick_count == 2160:
+
+            if not self._tick_rows:
+                return  # nothing to write
+
+            df = pd.DataFrame(self._tick_rows)
+
+            # keep 'tick' as the first column
+            cols = ["tick"] + [c for c in df.columns if c != "tick"]
+            df = df[cols]
+
+            # Write exactly once
+            out_path = getattr(self, "_tick_log_path", "ticks.csv")
+
+            df.to_csv(out_path, index=False)
+
+            # Optional: keep in memory for immediate analysis
+            self._tick_df = df
 
     def initial_args(self) -> dict:
         """
@@ -89,7 +179,43 @@ class SpoiledBroth(BaseGame):
             "url_params": self.gameObjects[agent_id].additional_info,
             "cut_speed": getattr(self.gameObjects[agent_id], "cut_speed", 1.0),
             "walk_speed": getattr(self.gameObjects[agent_id], "speed", 1.0),
+            "player_nr": self.gameObjects[agent_id].player_nr,
         }
+
+
+def is_not_excludes(key: str) -> bool:
+    if re.search(r'_drawable_', key):
+        return False
+    if re.search(r'_text_', key):
+        return False
+    if re.search('_additional_info', key):
+        if not re.search(r'_PROLIFIC_PID', key):
+            return False
+    if key.endswith('id'):
+        return False
+    if key == 'grid_tiles':
+        return False
+    if key.startswith('Floor_'):
+        return False
+    if key.startswith('Wall_'):
+        return False
+    if key.endswith('left'):
+        return False
+    if key.endswith('top'):
+        return False
+    if key.endswith('width'):
+        return False
+    if key.endswith('height'):
+        return False
+    if key.endswith('isClickable'):
+        return False
+    if key == 'grid_tile_size':
+        return False
+    if key.endswith('clickable'):
+        return False
+    if key.endswith('class'):
+        return False
+    return True
 
 
 MAX_PLAYERS = 4  # or import if needed

@@ -9,9 +9,14 @@ export function setStateUpdateHandler(handler) {
     onStateUpdate = handler;
 }
 const urlParams = new URLSearchParams(window.location.search);
-const query = Object.fromEntries(urlParams.entries());
+const auth = Object.fromEntries(urlParams.entries()); // <- send these
 // Connect with Socket.IO
-socket = io({query: query}); // Automatically uses same host + port, and correct protocol
+socket = io("/", {
+  transports: ["websocket"], // <-- no polling
+  upgrade: false,            // <-- skip upgrade handshake
+  forceNew: true,
+    auth
+}); // Automatically uses same host + port, and correct protocol
 
 socket.on("connect", () => {
     console.log("[Engine] Socket.IO connected");

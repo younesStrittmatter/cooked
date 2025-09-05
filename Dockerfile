@@ -1,23 +1,33 @@
-# Use a lightweight official Python image
-FROM python:3.11-slim
+# Dockerfile
+FROM python:3.12-slim
 
-# Set working directory
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    EVENTLET_NO_GREENDNS=1
+
+# System deps (clean build; wheels cover most libs like orjson/eventlet)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Install system dependencies (if needed)
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy and install dependencies
-COPY requirements.txt .
+# If you have a requirements.txt, use it; else pip install from pyproject
+COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
-COPY . .
+# Your code
+COPY . /app
 
-# Expose Cloud Run port
-EXPOSE 8080
+# Cloud Run provides $PORT; we’ll bind gunicorn to it
+ENV APP_PATH="wsgi:app" \
+    MODE="single" \
+    SOCKIO_FORCE_BASE=1 \
+    SOCKIO_COMPRESS=0 \
+    FLASK_SKIP_DOTENV=1
 
-# Entrypoint
-CMD ["gunicorn", "-k", "eventlet", "-w", "1", "--bind", "0.0.0.0:8080", "main:app"]
+# Small, Cloud Run–friendly entrypoint
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+CMD ["/app/entrypoint.sh"]

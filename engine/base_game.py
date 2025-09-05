@@ -48,5 +48,6 @@ class BaseGame(ABC):
     @classmethod
     def from_state(cls, state_dict: dict):
         init_args = state_dict.get("init_args", {})
+        init_args['tick_log_path'] = state_dict.get("tick_log_path")
         game = cls(**init_args)
         return game

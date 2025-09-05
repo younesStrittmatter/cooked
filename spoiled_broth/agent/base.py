@@ -9,8 +9,9 @@ BASE_CUTTING_SPEED = 1
 BASE_WALKING_SPEED = 30
 
 
+
 class Agent(agent.Agent):
-    def __init__(self, agent_id, grid, game, additional_info=None):
+    def __init__(self, agent_id, grid, game, additional_info=None, player_nr=1):
         super().__init__(agent_id, grid)
         self.game = game
         self.path = []
@@ -19,17 +20,15 @@ class Agent(agent.Agent):
         self.additional_info = additional_info
         self.cut_speed = BASE_CUTTING_SPEED
         self.speed = BASE_WALKING_SPEED
-        if 'cutting_speed' in additional_info:
-            self.cut_speed = float(additional_info['cutting_speed'][0]) * BASE_CUTTING_SPEED
-        if 'walking_speed' in additional_info:
-            self.speed = float(additional_info['walking_speed'][0]) * BASE_WALKING_SPEED
-
+        self.player_nr = player_nr
+        if f'cutting_speed_p{self.player_nr}' in additional_info:
+            self.cut_speed = BASE_CUTTING_SPEED * float(additional_info[f'cutting_speed_p{self.player_nr}'][0])
+        if f'walking_speed_p{self.player_nr}' in additional_info:
+                self.speed = BASE_WALKING_SPEED * float(additional_info[f'walking_speed_p{self.player_nr}'][0])
         self.item = None
 
-        z_index_base = 0
-        if 'player' in additional_info:
 
-            z_index_base = 1 if additional_info['player'][0] == 'p1' else 4
+        z_index_base = 1 if player_nr > 1 else 4
 
         print('[Agent] z_index_base:', z_index_base)
 
@@ -39,25 +38,39 @@ class Agent(agent.Agent):
         mustache_n = random.randint(0, 8)
         skin_n = random.randint(0, 8)
 
-        husk_2d = Basic2D(src='agent/cook-husk.png', z_index=1 + z_index_base, src_y=0, src_w=16, src_h=16, width=16,
+        husk_2d = Basic2D(
+            id=f'agent_husk_drawable_{self.id}',
+            src='agent/cook-husk.png', z_index=1 + z_index_base, src_y=0, src_w=16, src_h=16, width=16,
+            height=16,
+            normalize=False)
+        hair_2d = Basic2D(
+            id=f'agent_hair_drawable_{self.id}',
+            src=f'agent/hair/{hair_n}.png', z_index=2 + z_index_base, src_w=16, src_h=16, width=16,
                           height=16,
                           normalize=False)
-        hair_2d = Basic2D(src=f'agent/hair/{hair_n}.png', z_index=2 + z_index_base, src_w=16, src_h=16, width=16,
-                          height=16,
-                          normalize=False)
-        mustache_2d = Basic2D(src=f'agent/mustache/{mustache_n}.png', z_index=2 + z_index_base, src_w=16, src_h=16,
+        mustache_2d = Basic2D(
+            id=f'agent_mustache_drawable_{self.id}',
+            src=f'agent/mustache/{mustache_n}.png', z_index=2 + z_index_base, src_w=16, src_h=16,
                               width=16,
                               height=16, normalize=False)
-        head_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2 + z_index_base, src_y=0, src_w=16, src_h=16,
+        head_2d = Basic2D(
+            id=f'agent_head_drawable_{self.id}',
+            src=f'agent/skin/{skin_n}.png', z_index=2 + z_index_base, src_y=0, src_w=16, src_h=16,
                           width=16, height=16,
                           normalize=False)
-        hands_no_item_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2 + z_index_base, src_y=16, src_w=16,
+        hands_no_item_2d = Basic2D(
+            id=f'agent_hands_no_item_drawable_{self.id}',
+            src=f'agent/skin/{skin_n}.png', z_index=2 + z_index_base, src_y=16, src_w=16,
                                    src_h=16, width=16,
                                    height=16, normalize=False)
-        hands_with_item_2d = Basic2D(src=f'agent/skin/{skin_n}.png', z_index=2 + z_index_base, src_y=32, src_w=16,
+        hands_with_item_2d = Basic2D(
+            id=f'agent_hands_with_item_drawable_{self.id}',
+            src=f'agent/skin/{skin_n}.png', z_index=2 + z_index_base, src_y=32, src_w=16,
                                      src_h=16, width=0,
                                      height=0, normalize=False)
-        item_held_2d = Basic2D(src='agent/items-held.png', z_index=3 + z_index_base, src_y=0, src_w=16, src_h=16,
+        item_held_2d = Basic2D(
+            id=f'agent_item_held_drawable_{self.id}',
+            src='agent/items-held.png', z_index=3 + z_index_base, src_y=0, src_w=16, src_h=16,
                                width=0, height=0,
                                normalize=False)
 
@@ -146,3 +159,17 @@ class Agent(agent.Agent):
     item: {self.item}\n
 """
         return _p
+
+    def serialize(self) -> dict:
+        return {
+            "id": self.id,
+            "x": self.x,
+            "y": self.y,
+            "move_target": self.move_target,
+            "item": self.item,
+            "score": self.score,
+            "additional_info": self.additional_info,
+            "cut_speed": self.cut_speed,
+            "speed": self.speed,
+
+        }

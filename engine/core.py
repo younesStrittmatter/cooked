@@ -1,31 +1,28 @@
 import time
+import threading
 from typing import Dict, Optional
-
 
 class Engine:
     def __init__(self,
                  game,
                  tick_rate: int,
                  is_max_speed: bool,
-                 replay_recorder=None
-                 ):
+                 replay_recorder=None):
         self.game = game
         self.tick_interval = 1.0 / tick_rate
         self.running = False
         self.tick_count = 0
-
-        if not is_max_speed:
-            self.start_time = time.time()
-            self.last_time = self.start_time
-        else:
-            self.start_time = 0
-            self.last_time = 0
-
         self.is_max_speed = is_max_speed
+
+        # Use monotonic clock for scheduling
+        self._mono = time.monotonic
+
         self.on_tick_callbacks = []
         self.on_game_end_callbacks = []
         self.recorder = replay_recorder
 
+        # Intent buffer + tiny lock for safety across greenlets/threads
+        self._intent_lock = threading.Lock()
         self.intent_buffer: Dict[str, str] = {}
 
     def add_on_game_end_callback(self, fn):
@@ -35,15 +32,35 @@ class Engine:
         self.on_tick_callbacks.append(fn)
 
     def submit_intent(self, agent_id: str, action: str):
-        self.intent_buffer[agent_id] = action
+        # Safe insert; cheap critical section
+        with self._intent_lock:
+            if isinstance(action, str):
+                action = {"type": action}
+            elif action is None:
+                action = {}
+            self.intent_buffer[agent_id] = action
+
+
+    def _drain_intents(self) -> Dict[str, str]:
+        # Swap buffer to avoid holding the lock while stepping
+        with self._intent_lock:
+            intents = self.intent_buffer
+            self.intent_buffer = {}
+        return intents
 
     def tick(self, delta_time: Optional[float] = None):
-        for agent_id, intent in self.intent_buffer.items():
-            self.recorder.log_intent(self.tick_count, agent_id, intent)
-        self.game.step(self.intent_buffer, delta_time)
-        self.intent_buffer.clear()
+        intents = self._drain_intents()
+        # Log intents deterministically at this tick
+        if self.recorder and intents:
+            for agent_id, intent in intents.items():
+                self.recorder.log_intent(self.tick_count, agent_id, intent)
+
+        # Advance game one fixed step
+        self.game.step(intents, delta_time)
+
         self.tick_count += 1
 
+        # Callbacks should be lightweight (mark-only for emit, etc.)
         for callback in self.on_tick_callbacks:
             try:
                 callback()
@@ -51,44 +68,51 @@ class Engine:
                 print(f"[Engine] Tick callback failed: {e}")
 
     def start_loop(self, max_ticks: Optional[int] = None):
+        """Fixed-timestep loop with exact scheduling and catch-up."""
         self.running = True
-        tick_interval = self.tick_interval
-        self.accumulated_lag = 0.0
+        dt = self.tick_interval
+        mono = self._mono
 
-        if not self.is_max_speed:
-            self.last_time = time.time()
+        # Next deadline in monotonic time
+        next_deadline = mono()
 
-        while self.running and not self.game.done:
-            if max_ticks is not None and self.tick_count >= max_ticks:
-                break
+        try:
+            while self.running and not self.game.done:
+                now = mono()
 
-            if self.is_max_speed:
-                # Max speed: no timing, just tick as fast as possible
-                self.tick(tick_interval)
-            else:
-                # Real-time mode: accumulate actual time
-                current_time = time.time()
-                frame_time = current_time - self.last_time
-                self.last_time = current_time
+                # Catch-up: run as many ticks as deadlines we’ve passed
+                # Clamp catch-up to avoid spiral-of-death (e.g., 0.25s worth)
+                catchup_limit = 0.25
+                late = now - next_deadline
+                if late > catchup_limit:
+                    # Skip ahead to avoid doing hundreds of back-to-back ticks
+                    skipped = int(late // dt) - int(catchup_limit // dt)
+                    next_deadline += skipped * dt
 
-                # Clamp to avoid spiral of death
-                frame_time = min(frame_time, 0.25)
-                self.accumulated_lag += frame_time
+                while now >= next_deadline and not self.game.done:
+                    self.tick(dt)
+                    next_deadline += dt
 
-                # Run as many ticks as we’re behind
-                while self.accumulated_lag >= tick_interval:
-                    self.tick(tick_interval)
-                    self.accumulated_lag -= tick_interval
+                    if max_ticks is not None and self.tick_count >= max_ticks:
+                        self.running = False
+                        break
 
-                # Sleep to maintain pacing
-                sleep_time = tick_interval - self.accumulated_lag
+                    now = mono()
+
+                # Sleep until next deadline (cooperative under Eventlet)
+                sleep_time = max(0.0, next_deadline - now)
+                # Avoid very tiny sleeps that lead to spin; still yields cooperatively
                 if sleep_time > 0:
                     time.sleep(sleep_time)
-        for cb in self.on_game_end_callbacks:
-            try:
-                cb()
-            except Exception as e:
-                print(f"[Engine] Game end callback failed: {e}")
+                else:
+                    # We're late; yield minimally
+                    time.sleep(0)
+        finally:
+            for cb in self.on_game_end_callbacks:
+                try:
+                    cb()
+                except Exception as e:
+                    print(f"[Engine] Game end callback failed: {e}")
 
     def stop(self):
         self.running = False

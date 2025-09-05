@@ -355,6 +355,18 @@ class CuttingBoard(SoiledBrothTile):
         if self.cut_stage >= 3 or self.cut_time_accumulated <= frame_duration:
             self.drawables[3].src_x = 0
 
+    def serialize(self):
+        return {
+            'class': self.__class__.__name__,
+            'id': self.id,
+            'slot_x': self.slot_x,
+            'slot_y': self.slot_y,
+            'item': self._item,
+            'clickable': self.clickable is not None,
+            'cut_time_accumulated': self.cut_time_accumulated,
+            'cut_stage': self.cut_stage
+        }
+
 
 
     def get_intent(self, agent):
