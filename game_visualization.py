@@ -37,15 +37,15 @@ import signal
 import sys
 import socket
 
-training_map_nr = 'simple_kitchen'
-playing_map_nr = training_map_nr
+training_map_nr = sys.argv[1]
+num_agents = int(sys.argv[2])
+intent_version = sys.argv[3]
+cooperative = int(sys.argv[4])
+game_version = sys.argv[5]  # classic, competition
+training_id = sys.argv[6]
+checkpoint_number = int(sys.argv[7])
 
-num_agents = int(sys.argv[1])
-intent_version = sys.argv[2]
-cooperative = int(sys.argv[3])
-game_version = sys.argv[4]  # classic, competition
-training_id = sys.argv[5]
-checkpoint_number = int(sys.argv[6])
+playing_map_nr = training_map_nr
 
 def find_free_port(start_port=5000, max_tries=100):
     port = start_port
@@ -204,8 +204,8 @@ class VideoRecorder:
 
 def capture_canvas_frames(
     url="http://localhost:5000",
-    duration_seconds=60,
-    fps=15,
+    duration_seconds=180,
+    fps=60,
     frame_skip=1,
     video_speed_multiplier=1.0
 ):
@@ -213,62 +213,55 @@ def capture_canvas_frames(
 
     # Setup Chrome options
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--headless=new")  # modern headless
+    chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1280,720")
 
     driver = None
     try:
-        service = Service(log_output=os.devnull)
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver = webdriver.Chrome(options=chrome_options)
         driver.get(url)
 
-        # Wait for the canvas
-        wait = WebDriverWait(driver, 20)
-        canvas = wait.until(EC.presence_of_element_located((By.ID, "scene")))
+        time.sleep(2)  # wait for the page to load
 
-        time.sleep(5)  # let the game load
-
-        # Adjust output FPS according to speed multiplier
-        output_fps = fps * video_speed_multiplier
-        recorder = VideoRecorder(
-            output_path=f"{base_path}/ai_only_recording_checkpoint_{checkpoint_number}.mp4",
-            fps=output_fps
-        )
+        recorder = VideoRecorder(output_path=f"{base_path}/ai_only_recording_checkpoint_{checkpoint_number}.mp4", fps=fps)
         recorder.start_recording()
 
+        total_frames = int(duration_seconds * fps)
         start_time = time.time()
-        frame_count = 0
 
-        while time.time() - start_time < duration_seconds:
+        for frame_idx in range(total_frames):
             try:
-                if frame_count % frame_skip == 0:
-                    # Capture canvas as base64
-                    canvas_base64 = driver.execute_script("""
-                        var canvas = document.getElementById('scene');
-                        if (!canvas) {
-                            throw new Error('Canvas element not found');
-                        }
-                        return canvas.toDataURL('image/png').substring(22);
-                    """)
+                # Grab canvas -> base64
+                canvas_base64 = driver.execute_script("""
+                    var canvas = document.getElementById('scene');
+                    if (!canvas) { throw new Error('Canvas not found'); }
+                    return canvas.toDataURL('image/png').substring(22);
+                """)
+                img_data = base64.b64decode(canvas_base64)
+                img = Image.open(BytesIO(img_data))
+                frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-                    # Decode image
-                    img_data = base64.b64decode(canvas_base64)
-                    img = Image.open(BytesIO(img_data))
-                    frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+                # Get scores from running engine
+                session = engine_app.get_session()
+                scores = session.engine.game.agent_scores
 
-                    # Get scores
-                    session = engine_app.get_session()
-                    scores = session.engine.game.agent_scores
+                recorder.capture_frame(frame, scores=scores)
 
-                    recorder.capture_frame(frame, scores=scores)
+                # Log progress once per second
+                if frame_idx % fps == 0:
+                    elapsed = time.time() - start_time
+                    progress = (frame_idx / total_frames) * 100
+                    print(f"Progress: {progress:.1f}% ({elapsed:.1f}s elapsed)")
 
-                frame_count += 1
-                time.sleep(1.0 / fps)  # constant FPS timing
+                # Keep real-time pacing
+                target_time = start_time + (frame_idx + 1) / fps
+                sleep_time = target_time - time.time()
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
 
             except Exception as e:
-                print(f"Error capturing frame {frame_count}: {e}")
+                print(f"Error capturing frame {frame_idx}: {e}")
                 continue
 
         recorder.stop_recording()
