@@ -81,24 +81,24 @@ class Agent(agent.Agent):
             self.drawables[6].height = 16
             if self.item == 'tomato':
                 self.drawables[6].src_y = 0
-            #if self.item == 'pumpkin':
-            #    self.drawables[6].src_y = 16
-            #if self.item == 'cabbage':
-            #    self.drawables[6].src_y = 32
+            if self.item == 'pumpkin':
+                self.drawables[6].src_y = 16
+            if self.item == 'cabbage':
+                self.drawables[6].src_y = 32
             if self.item == 'plate':
                 self.drawables[6].src_y = 48
             if self.item == 'tomato_cut':
                 self.drawables[6].src_y = 9 * 16
-            #if self.item == 'pumpkin_cut':
-            #    self.drawables[6].src_y = 10 * 16
-            #if self.item == 'cabbage_cut':
-            #    self.drawables[6].src_y = 11 * 16
+            if self.item == 'pumpkin_cut':
+                self.drawables[6].src_y = 10 * 16
+            if self.item == 'cabbage_cut':
+                self.drawables[6].src_y = 11 * 16
             if self.item == 'tomato_salad':
                 self.drawables[6].src_y = 15 * 16
-            #if self.item == 'pumpkin_salad':
-            #    self.drawables[6].src_y = 16 * 16
-            #if self.item == 'cabbage_salad':
-            #    self.drawables[6].src_y = 17 * 16
+            if self.item == 'pumpkin_salad':
+                self.drawables[6].src_y = 16 * 16
+            if self.item == 'cabbage_salad':
+                self.drawables[6].src_y = 17 * 16
         else:
             self.drawables[4].width = 16
             self.drawables[4].height = 16

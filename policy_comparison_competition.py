@@ -1,122 +1,74 @@
 import numpy as np
+import copy
+import os
 import matplotlib.pyplot as plt
-from stable_baselines3 import PPO
+from ray.rllib.algorithms.ppo import PPO
 from spoiled_broth.game import SpoiledBroth
-from spoiled_broth.world.tiles import Counter, CuttingBoard
 from pathlib import Path
+from spoiled_broth.rl.game_env_competition import get_action_type, ACTION_TYPE_OWN_USEFUL_CUTTING_BOARD, ACTION_TYPE_OTHER_USEFUL_CUTTING_BOARD, ACTION_TYPE_OWN_USEFUL_DELIVERY, ACTION_TYPE_OTHER_USEFUL_DELIVERY
+from spoiled_broth.game import game_to_obs_matrix_competition
+from spoiled_broth.game import SpoiledBroth
+from spoiled_broth.rl.game_env_competition import init_game
 
 EPOCH = 10000  # Epoch to load
-DATETIME = "2023-08-31_10-00-00"  # Date of training run
+DATETIME = "2025-08-06_18-59-00"  # Date of training run
 MAP_NR = "simple_kitchen_competition"  # Map used in training
 ATTITUDE_1 = "competitive"  # or "cooperative"
-ATTITUDE_2 = "cooperative"  # or "competitive"
+ATTITUDE_2 = "individualistic"  # or "competitive"
 INTENT_VERSION = "v3.1"
 
-def generate_key_observations(agent_id="ai_rl_1", agent_food_type="tomato"):
+def generate_key_observations(agent_id="ai_rl_1"):
     """
-    Generates all key decision point observations for different item states:
-    1. Having raw food (own/other) - should look for cutting board
-    2. Having cut food (own/other) - should look for counter with plate
-    3. Having salad (own/other) - should look for delivery
+    Generates only observations where the agent holds a raw, cut, or salad item and can perform an own/other action (as defined in game_env_competition.py).
+    For each, classifies the possible actions as own_action or other_action using get_action_type.
     """
-    game = SpoiledBroth(map_nr="simple_kitchen_competition")
+    game = SpoiledBroth(map_nr=MAP_NR, grid_size=GRID_SIZE, intent_version=INTENT_VERSION)
     game.add_agent("ai_rl_1")
     game.add_agent("ai_rl_2")
-    
+
     agent_food_types = {
-        "ai_rl_1": agent_food_type,
-        "ai_rl_2": "pumpkin"  # Different food type for other agent
+        "ai_rl_1": "tomato",
+        "ai_rl_2": "pumpkin"
     }
-    
-    observations = []
+
+    if agent_id == "ai_rl_1":
+        other_agent_id = "ai_rl_2"
+    else:
+        other_agent_id = "ai_rl_1"
+
     agent = game.gameObjects[agent_id]
-    
-    # Place agent in a valid position
     walkable_positions = []
     for x in range(game.grid.width):
         for y in range(game.grid.height):
             if (game.grid.tiles[x][y] and game.grid.tiles[x][y].is_walkable):
                 walkable_positions.append((x, y))
-    
-    if not walkable_positions:
-        raise ValueError("No walkable positions found in the map")
-        
-    pos = walkable_positions[0]
-    agent.x = pos[0] * game.grid.tile_size + game.grid.tile_size // 2
-    agent.y = pos[1] * game.grid.tile_size + game.grid.tile_size // 2
-    
-    # Test scenarios with different items
+
     scenarios = [
-        # Raw food scenarios
         {"item": agent_food_types[agent_id], "label": "own_food"},
-        {"item": agent_food_types["ai_rl_2"], "label": "other_food"},
-        
-        # Cut food scenarios
+        {"item": agent_food_types[other_agent_id], "label": "other_food"},
         {"item": f"{agent_food_types[agent_id]}_cut", "label": "own_food_cut"},
-        {"item": f"{agent_food_types['ai_rl_2']}_cut", "label": "other_food_cut"},
-        
-        # Salad scenarios
+        {"item": f"{agent_food_types[other_agent_id]}_cut", "label": "other_food_cut"},
         {"item": f"{agent_food_types[agent_id]}_salad", "label": "own_salad"},
-        {"item": f"{agent_food_types['ai_rl_2']}_salad", "label": "other_salad"},
+        {"item": f"{agent_food_types[other_agent_id]}_salad", "label": "other_salad"},
     ]
-    
+
+    observations = []
     for scenario in scenarios:
-        agent.item = scenario["item"]
-        obs, _ = game.game_to_obs_matrix_competition(game, agent_id, agent_food_types)
-        observations.append({
-            "obs": obs,
-            "item": scenario["label"],
-            "holding": scenario["item"]
-        })
-
-    return observations
-
-def compare_policies(policy1, policy2, observations):
-    """
-    Compare two policies on the key decision points
-    Returns percentage of agreement and detailed differences
-    """
-    agreements = 0
-    differences = []
-    
-    for obs_dict in observations:
-        obs = obs_dict["obs"]
-        action1 = policy1(obs)
-        action2 = policy2(obs)
-        
-        if action1 == action2:
-            agreements += 1
-        else:
-            differences.append({
-                "item": obs_dict["item"],
-                "position": obs_dict["position"],
-                "action1": action1,
-                "action2": action2
+        for pos in walkable_positions:
+            # For each scenario and position, just create the agent state
+            game_copy = copy.deepcopy(game)
+            agent_copy = game_copy.gameObjects[agent_id]
+            agent_copy.x = pos[0] * game_copy.grid.tile_size + game_copy.grid.tile_size // 2
+            agent_copy.y = pos[1] * game_copy.grid.tile_size + game_copy.grid.tile_size // 2
+            agent_copy.item = scenario["item"]
+            obs, _ = game_to_obs_matrix_competition(game_copy, agent_id, agent_food_types)
+            observations.append({
+                "obs": obs,
+                "item": scenario["label"],
+                "holding": scenario["item"],
+                "position": (pos[0], pos[1])
             })
-    
-    agreement_rate = agreements / len(observations)
-    return agreement_rate, differences
-
-def analyze_policy(policy, observations):
-    """
-    Analyze a single policy's behavior on key decision points
-    """
-    results = {
-        "own_food": [],
-        "other_food": [],
-        "own_salad": [],
-        "other_salad": []
-    }
-    
-    for obs_dict in observations:
-        obs = obs_dict["obs"]
-        action = policy(obs)
-        results[obs_dict["item"]].append({
-            "position": obs_dict["position"],
-            "action": action
-        })
-    
-    return results
+    return observations
 
 def load_policy(map_nr, attitude, date, epoch, game_version="COMPETITION", intent_version=None):
     """
@@ -130,7 +82,7 @@ def load_policy(map_nr, attitude, date, epoch, game_version="COMPETITION", inten
         intent_version: Optional intent version if used in training
     """
     # Construct path following the training script structure
-    base_path = Path("data/samuel_lozano/cooked")
+    base_path = Path("/data/samuel_lozano/cooked")
     
     if game_version == "CLASSIC":
         base_path = base_path / "classic"
@@ -142,8 +94,8 @@ def load_policy(map_nr, attitude, date, epoch, game_version="COMPETITION", inten
     
     model_path = (base_path / f"map_{map_nr}" / attitude.lower() / 
                  f"Training_{date}" / f"checkpoint_{epoch}")
-    
-    model = PPO.load(str(model_path))
+    print(model_path)
+    model = PPO.from_checkpoint(str(model_path))
     return lambda obs: model.predict(obs, deterministic=True)[0]
 
 def visualize_policy_comparison(policy_results, title):
@@ -214,6 +166,7 @@ def visualize_policy_comparison(policy_results, title):
 # Configuration
 training_configs = [
     {
+        "agent_id": "ai_rl_1",
         "map_nr": MAP_NR,
         "attitude": ATTITUDE_1.lower(),
         "date": DATETIME,  # Replace with actual training date
@@ -223,6 +176,7 @@ training_configs = [
         "label": ATTITUDE_1  # Label for the plot
     },
     {
+        "agent_id": "ai_rl_2",
         "map_nr": MAP_NR,
         "attitude": ATTITUDE_2.lower(),
         "date": DATETIME,  # Replace with actual training date
@@ -233,10 +187,103 @@ training_configs = [
     }
 ]
 
-observations = generate_key_observations()
 
-# Analyze each policy
+# --- New Policy Evaluation and Action Classification ---
+from spoiled_broth.rl.game_env_competition import get_action_type, ACTION_TYPE_OWN_USEFUL_CUTTING_BOARD, ACTION_TYPE_OTHER_USEFUL_CUTTING_BOARD, ACTION_TYPE_OWN_USEFUL_DELIVERY, ACTION_TYPE_OTHER_USEFUL_DELIVERY
+from spoiled_broth.rl.game_env_competition import ACTION_TYPE_OWN_USEFUL_FOOD_DISPENSER, ACTION_TYPE_OTHER_USEFUL_FOOD_DISPENSER
+
+def classify_action(action_type):
+    if action_type == ACTION_TYPE_OWN_USEFUL_DELIVERY:
+        return "deliver_own"
+    elif action_type == ACTION_TYPE_OTHER_USEFUL_DELIVERY:
+        return "deliver_other"
+    elif action_type == ACTION_TYPE_OWN_USEFUL_CUTTING_BOARD:
+        return "cut_own"
+    elif action_type == ACTION_TYPE_OTHER_USEFUL_CUTTING_BOARD:
+        return "cut_other"
+    elif action_type == ACTION_TYPE_OWN_USEFUL_FOOD_DISPENSER:
+        return "get_own_food"
+    elif action_type == ACTION_TYPE_OTHER_USEFUL_FOOD_DISPENSER:
+        return "get_other_food"
+    else:
+        return "other"
+
+def decode_action_index_to_tile(game, action_idx, clickable_indices):
+    # clickable_indices: list of indices (y * width + x)
+    if action_idx >= len(clickable_indices):
+        return None  # do nothing
+    idx = clickable_indices[action_idx]
+    width = game.grid.width
+    x = idx % width
+    y = idx // width
+    return (x, y)
+
+def evaluate_policy_on_observations(policy, observations, agent_id="ai_rl_1"):
+    # Rebuild a game for decoding action indices
+    game = SpoiledBroth(map_nr=MAP_NR)
+    game.add_agent("ai_rl_1")
+    game.add_agent("ai_rl_2")
+    agent_food_types = {"ai_rl_1": "tomato", "ai_rl_2": "pumpkin"}
+    # Get clickable indices for this map
+    _, _, _, clickable_indices = init_game(["ai_rl_1", "ai_rl_2"], map_nr=MAP_NR, grid_size=GRID_SIZE, intent_version=INTENT_VERSION, seed=None)
+
+    results = []
+    for obs_dict in observations:
+        obs = obs_dict["obs"]
+        action_idx = policy(obs)
+        tile = decode_action_index_to_tile(game, action_idx, clickable_indices)
+        # Rebuild agent state for get_action_type
+        game_copy = copy.deepcopy(game)
+        agent_copy = game_copy.gameObjects[agent_id]
+        agent_copy.x = obs_dict["position"][0] * game_copy.grid.tile_size + game_copy.grid.tile_size // 2
+        agent_copy.y = obs_dict["position"][1] * game_copy.grid.tile_size + game_copy.grid.tile_size // 2
+        agent_copy.item = obs_dict["holding"]
+        # The action_type is now determined from the action performed (tile chosen by the policy)
+        if tile is not None:
+            tile_obj = game_copy.grid.tiles[tile[0]][tile[1]]
+            action_type = get_action_type(tile_obj, agent_copy, agent_id, agent_food_types)
+        else:
+            action_type = "do_nothing"
+        action_label = classify_action(action_type)
+        results.append({
+            "item": obs_dict["item"],
+            "position": obs_dict["position"],
+            "chosen_action": action_label,
+            "raw_action_type": action_type,
+            "tile": tile
+        })
+    return results
+
+def analyze_action_results(results):
+    from collections import Counter, defaultdict
+    summary = defaultdict(Counter)
+    for r in results:
+        summary[r["item"]][r["chosen_action"]] += 1
+    return summary
+
+def print_action_summary(summary):
+    for item, counter in summary.items():
+        print(f"\nItem: {item}")
+        total = sum(counter.values())
+        for action, count in counter.items():
+            print(f"  {action}: {count} ({count/total*100:.1f}%)")
+
+# Determine grid size from map file (text format)
+map_txt_path = os.path.join(os.path.dirname(__file__), 'spoiled_broth', 'maps', f'{MAP_NR}.txt')
+if not os.path.exists(map_txt_path):
+    raise FileNotFoundError(f"Map file {map_txt_path} not found.")
+with open(map_txt_path, 'r') as f:
+    map_lines = [line.rstrip('\n') for line in f.readlines()]
+rows = len(map_lines)
+cols = len(map_lines[0]) if rows > 0 else 0
+if rows != cols:
+    raise ValueError(f"Map must be square, but got {rows} rows and {cols} columns.")
+GRID_SIZE = (rows, cols)
+
+# --- Main evaluation loop ---
 for config in training_configs:
+    observations = generate_key_observations(agent_id=config["agent_id"])
+    print(f"\nEvaluating policy: {config['label']} (epoch {config['epoch']})")
     policy = load_policy(
         map_nr=config["map_nr"],
         attitude=config["attitude"],
@@ -245,44 +292,6 @@ for config in training_configs:
         game_version=config["game_version"],
         intent_version=config["intent_version"]
     )
-    results = analyze_policy(policy, observations)
-    
-    visualize_policy_comparison(
-        results, 
-        f"{config['label']} Policy (epoch {config['epoch']})"
-    )
-    
-    print(f"\nAnalysis for {config['attitude']} policy:")
-    for item_type, actions in results.items():
-        interact_count = sum(1 for a in actions if a['action'] in [3, 4])
-        total_count = len(actions)
-        if total_count > 0:
-            print(f"{item_type}: {interact_count}/{total_count} interactions " +
-                  f"({interact_count/total_count*100:.1f}%)")
-
-# Compare policies if we have exactly 2
-if len(training_configs) == 2:
-    policy1 = load_policy(
-        map_nr=training_configs[0]["map_nr"],
-        attitude=training_configs[0]["attitude"],
-        date=training_configs[0]["date"],
-        epoch=training_configs[0]["epoch"],
-        game_version=training_configs[0]["game_version"],
-        intent_version=training_configs[0]["intent_version"]
-    )
-    policy2 = load_policy(
-        map_nr=training_configs[1]["map_nr"],
-        attitude=training_configs[1]["attitude"],
-        date=training_configs[1]["date"],
-        epoch=training_configs[1]["epoch"],
-        game_version=training_configs[1]["game_version"],
-        intent_version=training_configs[1]["intent_version"]
-    )
-    
-    agreement_rate, differences = compare_policies(policy1, policy2, observations)
-    print(f"\nPolicies agree on {agreement_rate*100:.1f}% of key decisions")
-    print("\nKey differences:")
-    for diff in differences:
-        print(f"When holding {diff['item']} at {diff['position']}:")
-        print(f"  {training_configs[0]['attitude']} chose: {diff['action1']}")
-        print(f"  {training_configs[1]['attitude']} chose: {diff['action2']}\n")
+    results = evaluate_policy_on_observations(policy, observations)
+    summary = analyze_action_results(results)
+    print_action_summary(summary)

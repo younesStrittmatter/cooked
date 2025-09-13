@@ -2,14 +2,15 @@ import os
 import torch
 import numpy as np
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
-from spoiled_broth.game import game_to_obs_matrix
+from spoiled_broth.game import game_to_obs_matrix, game_to_obs_matrix_competition
 from engine.extensions.topDownGridWorld.ai_controller._base_controller import Controller
 
 class RLlibController(Controller):
-    def __init__(self, agent_id, checkpoint_path, policy_id):
+    def __init__(self, agent_id, checkpoint_path, policy_id, competition=False):
         super().__init__(agent_id)
         self.agent_id = agent_id
         self.policy_id = policy_id
+        self.competition = competition
         # RLModule inside the checkpoint
         rl_module_path = os.path.join(
             checkpoint_path,
@@ -27,8 +28,19 @@ class RLlibController(Controller):
         self.policy_module = self.multi_rl_module[self.policy_id]
 
     def choose_action(self, observation):
-        # Use the new observation space: flatten (channels, H, W) + (2, 4) inventory
-        obs_matrix, agent_inventory = game_to_obs_matrix(self.agent.game, self.agent_id)
+        # Select correct obs function
+        self.agent_food_type = {
+            "ai_rl_1": "tomato",
+            "ai_rl_2": "pumpkin",
+        }
+        if self.competition:
+            obs_matrix, agent_inventory = game_to_obs_matrix_competition(
+                self.agent.game, self.agent_id, self.agent_food_type
+            )
+        else:
+            obs_matrix, agent_inventory = game_to_obs_matrix(
+                self.agent.game, self.agent_id
+            )
         obs_vector = np.concatenate([obs_matrix.flatten(), agent_inventory.flatten()]).astype(np.float32)
         input_dict = {"obs": torch.tensor(obs_vector, dtype=torch.float32)}
 

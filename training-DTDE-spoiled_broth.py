@@ -11,7 +11,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 ##### Cluster config ##################
 NUM_GPUS = 1
 NUM_CPUS = 24
-CLUSTER = 'brigit'  # Options: 'brigit', 'local', 'cuenca'
+CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
 
 # Read input file
 input_path = sys.argv[1]
@@ -28,6 +28,9 @@ if len(sys.argv) > 8:
         raise ValueError("NUM_AGENTS must be 1 or 2")
 else:
     NUM_AGENTS = 2  # Default to 2 agents for backward compatibility
+
+# Optional checkpoint paths for loading pretrained policies
+CHECKPOINT = sys.argv[9] if len(sys.argv) > 9 else None
 
 with open(input_path, "r") as f:
     lines = f.readlines()
@@ -54,6 +57,18 @@ elif CLUSTER == 'local':
 else:
     raise ValueError("Invalid cluster specified. Choose from 'brigit', 'cuenca', or 'local'.")
 
+pretrained_policies = {}
+
+if CHECKPOINT:
+    CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/classic/{INTENT_VERSION}/map_{MAP_NR}/competitive/Training_{CHECKPOINT}/checkpoint_final'
+    if NUM_AGENTS == 1:
+        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
+
+    elif NUM_AGENTS == 2:
+        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
+        pretrained_policies["ai_rl_2"] = {"path": CHECKPOINT_PATH}
+
+
 # Hiperparámetros
 NUM_ENVS = 1
 NUM_INNER_STEPS = 450
@@ -75,9 +90,9 @@ if NUM_AGENTS == 1:
 else: 
     raw_dir = f'{local}/data/samuel_lozano/cooked'
 
-if GAME_VERSION == "CLASSIC":
+if GAME_VERSION.upper() == "CLASSIC":
     game_dir = f'{raw_dir}/classic'
-elif GAME_VERSION == "COMPETITION":
+elif GAME_VERSION.upper() == "COMPETITION":
     game_dir = f'{raw_dir}/competition'
 else:
     game_dir = f'{raw_dir}'
@@ -120,10 +135,11 @@ config = {
     "COOPERATIVE": COOPERATIVE,
     "REWARD_WEIGHTS": reward_weights,
     "INTENT_VERSION": INTENT_VERSION,
-    "GAME_VERSION": GAME_VERSION,
+    "GAME_VERSION": GAME_VERSION.upper(),
     "PAYOFF_MATRIX": PAYOFF_MATRIX,
     "INITIAL_SEED": SEED,
     "SAVE_DIR": save_dir,
+    "pretrained_policies": pretrained_policies,  # Add pretrained policies configuration
     # RLlib specific parameters
     "NUM_UPDATES": 10,  # Number of updates of the policy
     "GAMMA": 0.975,  # Discount factor
@@ -156,5 +172,6 @@ path = os.path.join(config["SAVE_DIR"], f"Training_{current_date}")
 os.makedirs(path, exist_ok=True)
 
 # Save the final policy
+final_checkpoint = trainer.save(os.path.join(path, f"checkpoint_final"))
 final_checkpoint = trainer.save(os.path.join(path, f"checkpoint_{NUM_EPOCHS}"))
 print(f"Final checkpoint saved at {final_checkpoint}")

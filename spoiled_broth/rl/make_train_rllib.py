@@ -1,6 +1,8 @@
 import os
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
+from ray.rllib.algorithms.ppo import PPO
 from ray.tune.registry import register_env
 from spoiled_broth.rl.game_env import GameEnv
 from spoiled_broth.rl.game_env_competition import GameEnvCompetition
@@ -133,6 +135,61 @@ def make_train_rllib(config):
 
     # Build algorithm with error handling
     trainer = ppo_config.build_algo()
+
+    # Load pretrained policies if specified in config
+    if "pretrained_policies" in config:
+        # First, find and load the ai_rl_1 policy
+        ai_rl_1_policy_module = None
+        
+        for agent_id, checkpoint_info in config["pretrained_policies"].items():
+            if agent_id == "ai_rl_1" and checkpoint_info and "path" in checkpoint_info:
+                try:
+                    checkpoint_path = checkpoint_info["path"]
+                    policy_id = f"policy_{agent_id}"
+    
+                    # --- Load the MultiRLModule directly from checkpoint ---
+                    rl_module_path = os.path.join(
+                        checkpoint_path,
+                        "learner_group",
+                        "learner",
+                        "rl_module"
+                    )
+                    multi_rl_module = MultiRLModule.from_checkpoint(rl_module_path)
+    
+                    if policy_id not in multi_rl_module.keys():
+                        raise ValueError(f"Policy {policy_id} not found in the checkpoint.")
+    
+                    # --- Extract the ai_rl_1 policy module ---
+                    ai_rl_1_policy_module = multi_rl_module[policy_id]
+                    print(f"Loaded ai_rl_1 policy module from {checkpoint_path}")
+                    break
+                
+                except Exception as e:
+                    print(f"Error loading ai_rl_1 policy: {e}")
+                    raise
+                
+        if ai_rl_1_policy_module is None:
+            raise ValueError("ai_rl_1 policy not found in pretrained_policies config")
+        
+        # Now load the ai_rl_1 policy into ALL policies
+        for agent_id, checkpoint_info in config["pretrained_policies"].items():
+            if checkpoint_info and "path" in checkpoint_info:
+                try:
+                    policy_id = f"policy_{agent_id}"
+                    
+                    def load_weights(learner):
+                        if policy_id in learner.module:
+                            current_module = learner.module[policy_id]
+                            # Load ai_rl_1 weights into this policy
+                            current_module.load_state_dict(ai_rl_1_policy_module.state_dict())
+                    
+                    trainer.learner_group.foreach_learner(load_weights)
+                    
+                    print(f"Successfully loaded ai_rl_1 policy weights into {agent_id}")
+    
+                except Exception as e:
+                    print(f"Error loading ai_rl_1 weights into {agent_id}: {e}")
+                    raise
 
     for epoch in range(config["NUM_EPOCHS"]): 
         result = trainer.train()

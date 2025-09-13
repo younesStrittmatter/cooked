@@ -7,6 +7,7 @@ from pathlib import Path
 from spoiled_broth.config import *
 from functools import partial
 from spoiled_broth.rl.game_env import GameEnv
+from spoiled_broth.rl.game_env_competition import GameEnvCompetition
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -42,8 +43,9 @@ playing_map_nr = training_map_nr
 num_agents = int(sys.argv[1])
 intent_version = sys.argv[2]
 cooperative = int(sys.argv[3])
-training_id = sys.argv[4]
-checkpoint_number = int(sys.argv[5])
+game_version = sys.argv[4]  # classic, competition
+training_id = sys.argv[5]
+checkpoint_number = int(sys.argv[6])
 
 def find_free_port(start_port=5000, max_tries=100):
     port = start_port
@@ -70,26 +72,19 @@ cols = len(map_lines[0]) if rows > 0 else 0
 grid_size = (cols, rows)  # (width, height)
 
 # Configuration for game duration and actions
-cf_AI_TICK_RATE = 1  # Actions per second (low rate for complete actions)
-ACTIONS_PER_AGENT = 100  # Reduced from 4000 to reduce load
+FIXED_DURATION_SECONDS = 180  # 3 minutos exactos
 
-# Video speed configuration
-VIDEO_FPS = 60  # Increased from 15 for faster playback
-VIDEO_SPEED_MULTIPLIER = 2.0  # Makes video play 2x faster
-FRAME_SKIP = 1  # Capture every Nth frame (1=no skip, 2=every other frame, etc.)
-ENABLE_VIDEO_RECORDING = True  # Set to False to skip video recording entirely
-
-# Calculate AI tick rate to achieve desired number of actions in desired duration
-DESIRED_DURATION_SECONDS = ACTIONS_PER_AGENT / cf_AI_TICK_RATE
+# Configuración de grabación de vídeo
+VIDEO_FPS = 60
+VIDEO_SPEED_MULTIPLIER = 1.0
+FRAME_SKIP = 1
+ENABLE_VIDEO_RECORDING = True
 
 print(f"Game Configuration:")
-print(f"  Desired Duration: {DESIRED_DURATION_SECONDS} seconds")
-print(f"  Actions per Agent: {ACTIONS_PER_AGENT}")
-print(f"  AI Tick Rate: {cf_AI_TICK_RATE:.2f} actions/second")
-print(f"  Expected Actions per Agent: {cf_AI_TICK_RATE * DESIRED_DURATION_SECONDS:.0f}")
+print(f"  Fixed Duration: {FIXED_DURATION_SECONDS} seconds")
 print(f"  Video FPS: {VIDEO_FPS}")
 print(f"  Video Speed Multiplier: {VIDEO_SPEED_MULTIPLIER}x")
-print(f"  Frame Skip: {FRAME_SKIP} (capture every {FRAME_SKIP}th frame)")
+print(f"  Frame Skip: {FRAME_SKIP}")
 print(f"  Effective Video FPS: {VIDEO_FPS * VIDEO_SPEED_MULTIPLIER:.0f}")
 print(f"  Actual Capture FPS: {VIDEO_FPS / FRAME_SKIP:.1f}")
 print(f"  Video Recording: {'Enabled' if ENABLE_VIDEO_RECORDING else 'Disabled'}")
@@ -105,14 +100,14 @@ else:
     raw_dir = f'{local}/data/samuel_lozano/cooked'
 
 if intent_version is not None:
-    intent_dir = f'{raw_dir}/{intent_version}'
+    intent_dir = f'{raw_dir}/{game_version}/{intent_version}'
 else:
-    intent_dir = f'{raw_dir}'
+    intent_dir = f'{raw_dir}/{game_version}'
 
 if cooperative: 
-    base_path = Path(f"{intent_dir}/map_{training_map_nr}/cooperative/{training_id}")
+    base_path = Path(f"{intent_dir}/map_{training_map_nr}/cooperative/Training_{training_id}")
 else:
-    base_path = Path(f"{intent_dir}/map_{training_map_nr}/competitive/{training_id}")
+    base_path = Path(f"{intent_dir}/map_{training_map_nr}/competitive/Training_{training_id}")
 
 config_path = base_path / "config.txt"
 if config_path.exists():
@@ -131,11 +126,17 @@ print(f"\n--- Using checkpoint number: {checkpoint_number} ---\n")
 def env_creator(config):
     return GameEnv(**config)
 
+def env_creator_competition(config):
+    return GameEnvCompetition(**config)
+
 # Initialize Ray manually BEFORE RLlib does it automatically
 ray.shutdown()
 ray.init(local_mode=True, ignore_reinit_error=True, include_dashboard=False)
 
-register_env("spoiled_broth", lambda config: ParallelPettingZooEnv(env_creator(config)))
+if game_version.upper() == "CLASSIC":
+    register_env("spoiled_broth", lambda config: ParallelPettingZooEnv(env_creator(config)))
+elif game_version.upper() == "COMPETITION":
+    register_env("spoiled_broth", lambda config: ParallelPettingZooEnv(env_creator_competition(config)))
 
 log = logging.getLogger('werkzeug')
 log.disabled = True
@@ -160,35 +161,32 @@ class VideoRecorder:
         
     def capture_frame(self, frame, scores=None):
         if self.recording:
-            # Draw the scores on a separate black bar above the frame
             if scores is not None:
-                text = " | ".join([f"{agent}: {score}" for agent, score in scores.items()])
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 font_scale = 0.7
-                color = (0, 255, 0)  # bright green
+                color = (0, 255, 0)
                 thickness = 2
 
-                # Compute text size to center it if you want
-                text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
-                text_height = text_size[1]
-                bar_height = text_height + 20  # add some padding
-
-                # Create a new black bar image
+                # Crear una barra negra lo suficientemente alta para n agentes
+                line_height = 25
+                bar_height = line_height * len(scores) + 20
                 bar = np.zeros((bar_height, frame.shape[1], 3), dtype=np.uint8)
 
-                # Put text onto the bar
-                text_x = 10
-                text_y = bar_height - 10
-                cv2.putText(bar, text, (text_x, text_y), font, font_scale, color, thickness, cv2.LINE_AA)
+                # Escribir cada contador en una línea distinta
+                for i, (agent, score) in enumerate(scores.items()):
+                    text = f"{agent}: {score}"
+                    y = (i + 1) * line_height
+                    cv2.putText(bar, text, (10, y), font, font_scale, color, thickness, cv2.LINE_AA)
 
-                # Stack the bar on top of the frame
+                # Apilar la barra encima del frame
                 frame = np.vstack((bar, frame))
+
 
             # Initialize writer if needed
             if self.video_writer is None:
                 height, width = frame.shape[:2]
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                self.video_writer = cv2.VideoWriter(self.output_path, fourcc, self.fps, (width, height))
+                self.video_writer = cv2.VideoWriter(self.output_path, fourcc, int(self.fps * VIDEO_SPEED_MULTIPLIER), (width, height))
 
             self.video_writer.write(frame)
             self.frame_count += 1
@@ -204,64 +202,49 @@ class VideoRecorder:
         # This method is no longer needed as frames are written directly
         pass
 
-def capture_canvas_frames(url="http://localhost:5000", duration_seconds=60, fps=15, frame_skip=1):
-    """Capture frames from the game canvas using Selenium for a specified duration"""
-    
-    # Calculate number of frames based on duration and fps
-    num_frames = int(duration_seconds * fps)
-    frames_to_capture = num_frames // frame_skip
-    
-    # Setup Chrome options for headless browsing with better compatibility
+def capture_canvas_frames(
+    url="http://localhost:5000",
+    duration_seconds=60,
+    fps=15,
+    frame_skip=1,
+    video_speed_multiplier=1.0
+):
+    """Capture frames from the game canvas using Selenium for a fixed duration (real time)."""
+
+    # Setup Chrome options
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=800,600")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-web-security")
-    chrome_options.add_argument("--allow-running-insecure-content")
-    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
-    chrome_options.add_argument("--remote-debugging-port=9222")
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    
+    chrome_options.add_argument("--window-size=1280,720")
+
     driver = None
     try:
-        print(f"Starting Chrome WebDriver...")
-        # Try to use service for better compatibility
-        try:
-            service = Service(log_output=os.devnull)  # Suppress service logs
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-        except Exception as service_error:
-            print(f"Service-based WebDriver failed, trying direct initialization: {service_error}")
-            driver = webdriver.Chrome(options=chrome_options)
-        
-        print(f"Chrome WebDriver started successfully")
-        
-        print(f"Navigating to {url}...")
+        service = Service(log_output=os.devnull)
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get(url)
-        print(f"Page loaded successfully")
-        
-        # Wait for the canvas to be available
-        print(f"Waiting for canvas element...")
-        wait = WebDriverWait(driver, 20)  # Increased timeout
+
+        # Wait for the canvas
+        wait = WebDriverWait(driver, 20)
         canvas = wait.until(EC.presence_of_element_located((By.ID, "scene")))
-        print(f"Canvas element found")
-        
-        # Wait a bit for the game to load
-        print(f"Waiting for game to load...")
-        time.sleep(5)  # Increased wait time
-        
-        recorder = VideoRecorder(output_path=f"{base_path}/ai_only_recording_checkpoint_{checkpoint_number}.mp4", fps=fps)
+
+        time.sleep(5)  # let the game load
+
+        # Adjust output FPS according to speed multiplier
+        output_fps = fps * video_speed_multiplier
+        recorder = VideoRecorder(
+            output_path=f"{base_path}/ai_only_recording_checkpoint_{checkpoint_number}.mp4",
+            fps=output_fps
+        )
         recorder.start_recording()
-        
-        print(f"Capturing {frames_to_capture} frames over {duration_seconds} seconds (every {frame_skip}th frame)...")
-        
+
+        start_time = time.time()
         frame_count = 0
-        for i in range(num_frames):
+
+        while time.time() - start_time < duration_seconds:
             try:
-                # Only capture every Nth frame
-                if i % frame_skip == 0:
-                    # Capture the canvas as base64
+                if frame_count % frame_skip == 0:
+                    # Capture canvas as base64
                     canvas_base64 = driver.execute_script("""
                         var canvas = document.getElementById('scene');
                         if (!canvas) {
@@ -269,54 +252,30 @@ def capture_canvas_frames(url="http://localhost:5000", duration_seconds=60, fps=
                         }
                         return canvas.toDataURL('image/png').substring(22);
                     """)
-                    
-                    # Convert base64 to numpy array
+
+                    # Decode image
                     img_data = base64.b64decode(canvas_base64)
                     img = Image.open(BytesIO(img_data))
                     frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-                    
+
+                    # Get scores
                     session = engine_app.get_session()
                     scores = session.engine.game.agent_scores
 
                     recorder.capture_frame(frame, scores=scores)
-                    frame_count += 1
-                
-                # Wait for next frame
-                time.sleep(1.0 / fps)
-                
-                if (i + 1) % (10 * frame_skip) == 0:
-                    elapsed_time = (i + 1) / fps
-                    print(f"Captured {frame_count}/{frames_to_capture} frames ({elapsed_time:.1f}s/{duration_seconds}s)")
-                    
+
+                frame_count += 1
+                time.sleep(1.0 / fps)  # constant FPS timing
+
             except Exception as e:
-                print(f"Error capturing frame {i}: {e}")
-                print(f"Frame capture error details: {type(e).__name__}")
-                # Continue with next frame instead of stopping
+                print(f"Error capturing frame {frame_count}: {e}")
                 continue
-        
+
         recorder.stop_recording()
-    
-        
-    except Exception as e:
-        print(f"Error capturing frames: {e}")
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error details: {str(e)}")
-        
-        # Try to get more information about the driver state
-        if driver:
-            try:
-                print(f"Current URL: {driver.current_url}")
-                print(f"Page title: {driver.title}")
-                print(f"Page source length: {len(driver.page_source)}")
-            except Exception as debug_e:
-                print(f"Could not get debug info: {debug_e}")
+
     finally:
         if driver:
-            try:
-                driver.quit()
-                print("Chrome WebDriver closed successfully")
-            except Exception as e:
-                print(f"Error closing WebDriver: {e}")
+            driver.quit()
 
 use_lstm = False
 if config_path.exists():
@@ -336,12 +295,12 @@ controller_cls = RLlibControllerLSTM if use_lstm else RLlibController
 # Create the agent_map dynamically
 if num_agents == 1:
     agent_map = {
-        "ai_rl_1": controller_cls("ai_rl_1", checkpoint_dir, "policy_ai_rl_1")
+        "ai_rl_1": controller_cls("ai_rl_1", checkpoint_dir, "policy_ai_rl_1", competition=(game_version.upper() == "COMPETITION"))
     }
 else:
     agent_map = {
-        "ai_rl_1": controller_cls("ai_rl_1", checkpoint_dir, "policy_ai_rl_1"),
-        "ai_rl_2": controller_cls("ai_rl_2", checkpoint_dir, "policy_ai_rl_2")
+        "ai_rl_1": controller_cls("ai_rl_1", checkpoint_dir, "policy_ai_rl_1", competition=(game_version.upper() == "COMPETITION")),
+        "ai_rl_2": controller_cls("ai_rl_2", checkpoint_dir, "policy_ai_rl_2", competition=(game_version.upper() == "COMPETITION"))
     }
 
 # Create the AI-only engine app
@@ -371,17 +330,21 @@ if __name__ == "__main__":
     
     if ENABLE_VIDEO_RECORDING:
         try:
-            # Capture video frames
-            capture_canvas_frames(url=f"http://localhost:{free_port}", duration_seconds=DESIRED_DURATION_SECONDS, fps=VIDEO_FPS, frame_skip=FRAME_SKIP)
+            # Captura frames durante 180s
+            capture_canvas_frames(
+                url=f"http://localhost:{free_port}",
+                duration_seconds=FIXED_DURATION_SECONDS,
+                fps=VIDEO_FPS,
+                frame_skip=FRAME_SKIP
+            )
         except Exception as e:
             print(f"Video recording failed: {e}")
             print("Falling back to running game without video recording...")
-            time.sleep(DESIRED_DURATION_SECONDS)
+            time.sleep(FIXED_DURATION_SECONDS)
     else:
         print("Video recording disabled. Running game for specified duration...")
-        time.sleep(DESIRED_DURATION_SECONDS)
-    
+        time.sleep(FIXED_DURATION_SECONDS)
+
     # Stop the session
     engine_app.stop()
-    
     print("Game execution completed!")
