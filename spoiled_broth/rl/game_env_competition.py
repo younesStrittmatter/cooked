@@ -424,12 +424,16 @@ class GameEnvCompetition(ParallelEnv):
 
             tile.click(agent_id)
 
-        def decode_action(action_int):
-            if action_int == len(self.clickable_indices):
-                # do nothing action
-                return None
-            else:
-                return {"type": "click", "target": int(self.clickable_indices[action_int])}
+        def decode_action(self, action_int):
+            if len(self.clickable_indices) == 0:
+                print("Warning: No clickable indices available in the environment.")
+                return None  # No valid actions available
+
+            if action_int >= len(self.clickable_indices):
+                print(f"Warning: action {action_int} out of range for {len(self.clickable_indices)} clickable indices")
+                action_int = len(self.clickable_indices) - 1  # Use last valid action
+
+            return {"type": "click", "target": int(self.clickable_indices[action_int])}
 
         actions_dict = {agent_id: decode_action(action) for agent_id, action in actions.items()} # Some entries might now be None (when agent chose to do nothing)
         # Filter out None (do nothing) actions

@@ -9,10 +9,10 @@ from spoiled_broth.maps.accessibility_maps import get_accessibility_map
 from spoiled_broth.game import SpoiledBroth, random_game_state, game_to_obs_matrix
 #from spoiled_broth.world.tiles import Counter
 
-DO_NOTHING_PENALTY = 0.3  # Penalty for choosing to do nothing
-USELESS_ACTION_PENALTY = 0.2 # Penalty for performing a useless action
-NO_ACTION_PENALTY = 0.01
-INACCESSIBLE_TILE_PENALTY = 0.25  # Harsh penalty for trying to access unreachable tiles
+DO_NOTHING_PENALTY = 0.05  # Penalty for choosing to do nothing
+USELESS_ACTION_PENALTY = 0.1 # Penalty for performing a useless action
+INACCESSIBLE_TILE_PENALTY = 0.5  # Harsh penalty for trying to access unreachable tiles
+WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next step
 
 REWARDS_BY_VERSION = {
     "v1": {
@@ -161,31 +161,29 @@ def get_action_type(tile, agent, x=None, y=None, accessibility_map=None):
 def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None, seed=None):
     num_agents = len(agents)
     game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size, intent_version=intent_version, num_agents=num_agents, seed=seed)
-    for agent_id in agents:
-        if intent_version is not None:
-            game.add_agent(agent_id, intent_version=intent_version)
-        else:
-            game.add_agent(agent_id)
-
-    clickable_indices = []
-    for x in range(game.grid.width):
-        for y in range(game.grid.height):
-            tile = game.grid.tiles[x][y]
-            if tile and tile.clickable is not None:
-                index = y * game.grid.width + x
-                clickable_indices.append(index)
-
+    
+    # Calculate action spaces based on clickable indices
+    clickable_indices = game.clickable_indices
     action_spaces = {
-        agent: spaces.Discrete(len(clickable_indices) + 1)  # last action index = do nothing
-        #agent: spaces.Discrete(len(clickable_indices))
+        agent: spaces.Discrete(len(clickable_indices) + 1)  # Action space from 0 to len(clickable_indices)
         for agent in agents
     }
     _clickable_mask = np.zeros(game.grid.width * game.grid.height, dtype=np.int8)
     for idx in clickable_indices:
         _clickable_mask[idx] = 1
-
+    
+    # Add agents after setting up clickable indices
+    for agent_id in agents:
+        if intent_version is not None:
+            game.add_agent(agent_id, intent_version=intent_version)
+        else:
+            game.add_agent(agent_id)
+        # Get the agent and ensure its game reference has the clickable indices
+        agent = game.gameObjects[agent_id]
+        if hasattr(agent, 'game'):
+            agent.game.clickable_indices = clickable_indices
+    
     return game, action_spaces, _clickable_mask, clickable_indices
-
 
 class GameEnv(ParallelEnv):
     metadata = {"render_modes": ["human"], "name": "game_v0"}
@@ -201,6 +199,7 @@ class GameEnv(ParallelEnv):
             intent_version=None,
             payoff_matrix=None,
             initial_seed=0,
+            wait_for_completion=True,  # New parameter to control action completion waiting
     ):
         super().__init__()
         self.map_nr = map_nr
@@ -215,6 +214,7 @@ class GameEnv(ParallelEnv):
         self.grid_size = grid_size
         self.intent_version = intent_version
         self.seed = initial_seed
+        self.clickable_indices = None  # Initialize clickable indices storage
 
         # Load the accessibility map for this map
         self.accessibility_map = get_accessibility_map(map_nr)
@@ -228,6 +228,7 @@ class GameEnv(ParallelEnv):
 
         default_weights = {agent: (1.0, 0.0) for agent in self.agents}
         self.reward_weights = reward_weights if reward_weights is not None else default_weights
+        self.wait_for_completion = wait_for_completion
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
         self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
@@ -257,6 +258,11 @@ class GameEnv(ParallelEnv):
             agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents
         }
 
+        # Initialize action completion states for all agents
+        for agent_id, agent in self.agent_map.items():
+            agent.action_complete = True
+            agent.current_action = None
+
         # --- New observation space: flatten (channels, H, W) + (2, 4) inventory ---
         obs_matrix, agent_inventory = game_to_obs_matrix(self.game, self.agents[0])
         obs_size = obs_matrix.size + agent_inventory.size
@@ -283,7 +289,7 @@ class GameEnv(ParallelEnv):
         self.agents = self.possible_agents[:]
 
         self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version, seed=episode_seed)
-
+        self.game.clickable_indices = self.clickable_indices
         random_game_state(self.game)
 
         self.agent_map = {
@@ -350,17 +356,18 @@ class GameEnv(ParallelEnv):
             agent_obj = self.game.gameObjects[agent_id]
 
             # Check if agent wants to do nothing
-            if action == len(self.clickable_indices):
+            if action == len(self.clickable_indices):  # Last action index = do nothing
                 self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING] = self.total_action_types[agent_id].get(ACTION_TYPE_DO_NOTHING, 0) + 1
-                # Agent chose to do nothing
                 agent_penalties[agent_id] += DO_NOTHING_PENALTY  
                 continue  # skip issuing an intent
 
-            # Only allow a new action if the agent is not moving and has no unfinished intents
+            # Skip if the agent's current action is not complete
+            if not getattr(agent_obj, "action_complete", True):
+                continue  # Skip this agent's action processing
+                
+            # Skip if the agent is moving or has unfinished intents
             if getattr(agent_obj, "is_moving", False) or getattr(agent_obj, "intents", []):
-                self.total_actions_not_performed[agent_id] += 1
-                agent_penalties[agent_id] += NO_ACTION_PENALTY
-                continue  # Skip this agent's new action, let it finish its current one
+                continue  # Skip this agent's action processing
 
             # Map action to actual clickable tile index
             tile_index = self.clickable_indices[action]
@@ -384,6 +391,10 @@ class GameEnv(ParallelEnv):
             if action_type.startswith("useless"):
                 agent_penalties[agent_id] += USELESS_ACTION_PENALTY
 
+            # Set the action as not complete before executing it
+            agent_obj.action_complete = False
+            
+            # Execute the action
             tile.click(agent_id)
 
         def decode_action(action_int):
@@ -394,13 +405,33 @@ class GameEnv(ParallelEnv):
                 return {"type": "click", "target": int(self.clickable_indices[action_int])}
 
         actions_dict = {agent_id: decode_action(action) for agent_id, action in actions.items()} # Some entries might now be None (when agent chose to do nothing)
-        # Filter out None (do nothing) actions
-        filtered_actions_dict = {k: v for k, v in actions_dict.items() if v is not None}
+        # Validate and prepare actions before sending to game
+        validated_actions = {}
+        for agent_id, action in actions_dict.items():
+            agent = self.game.gameObjects[agent_id]
+            
+            # Skip agents that are still completing their previous action
+            if not getattr(agent, 'action_complete', True):
+                continue
+                
+            # Skip agents that are moving or currently interacting
+            if getattr(agent, 'is_moving', False):
+                continue
+                
+            # Only include valid actions (not None and properly structured)
+            if action is not None and isinstance(action, dict) and 'type' in action:
+                validated_actions[agent_id] = action
+                # Mark action as not complete when starting a new one
+                agent.action_complete = False
 
-        # Advance the game state by one step (simulate one tick)
-        self.game.step(filtered_actions_dict, delta_time=1 / cf_AI_TICK_RATE)
-
-        # Detect agent that performed the action and reward
+        # Advance the game state by one step with validated actions
+        self.game.step(validated_actions, delta_time=1 / cf_AI_TICK_RATE)
+        
+        # Each agent can immediately proceed with their next action
+        # as long as their own previous action is complete
+        # We don't need to wait for other agents to complete
+        
+        # Initialize tracking for rewards
         agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
         step_action_types = {agent_id: {ACTION_TYPE_USEFUL_FOOD_DISPENSER: 0,
                                         ACTION_TYPE_USEFUL_PLATE_DISPENSER: 0,
@@ -441,14 +472,15 @@ class GameEnv(ParallelEnv):
         # Get reward from delivering items
         rewards_cfg = self.get_rewards_for_version()
         event_rewards = {agent_id: 0.0 for agent_id in self.agents}
+        deliver_rewards = {agent_id: 0.0 for agent_id in self.agents}
         action_rewards = {agent_id: 0.0 for agent_id in self.agents}
         for agent_id in self.agents:
             # Event rewards: only positive events
             event_rewards[agent_id] = (
-                agent_events[agent_id]["delivered"] * rewards_cfg["delivered"]
-                + agent_events[agent_id]["cut"] * rewards_cfg["item_cut"]
+                agent_events[agent_id]["cut"] * rewards_cfg["item_cut"]
                 + agent_events[agent_id]["salad"] * rewards_cfg["salad_created"]
             )
+            deliver_rewards[agent_id] = agent_events[agent_id]["delivered"] * rewards_cfg["delivered"]
             # Action rewards: only individual actions
             action_rewards[agent_id] = (
                 step_action_types[agent_id][ACTION_TYPE_USEFUL_FOOD_DISPENSER] * rewards_cfg["useful_food_dispenser"]
@@ -457,19 +489,19 @@ class GameEnv(ParallelEnv):
             )
 
         if self.cooperative == 1:
-            shared_event_reward = sum(event_rewards.values())
+            shared_deliver_reward = sum(deliver_rewards.values())
 
         for agent_id in self.agents:
             if self.cooperative == 1:
-                reward = shared_event_reward + action_rewards[agent_id]
+                reward = shared_deliver_reward + event_rewards[agent_id] + action_rewards[agent_id]
             else:
-                reward = event_rewards[agent_id] + action_rewards[agent_id]
+                reward = deliver_rewards[agent_id] + event_rewards[agent_id] + action_rewards[agent_id]
             self.cumulated_pure_rewards[agent_id] += reward
 
             alpha, beta = self.reward_weights.get(agent_id, (1.0, 0.0))
             other_agents = [a for a in self.agents if a != agent_id]
             avg_other_reward = (
-                sum(event_rewards[a] + action_rewards[a] for a in other_agents) / len(other_agents)
+                sum(deliver_rewards[a] + event_rewards[a] + action_rewards[a] for a in other_agents) / len(other_agents)
                 if other_agents else 0.0
             )  # in case there is only one agent
 

@@ -22,6 +22,9 @@ class SpoiledBroth(BaseGame):
         self.num_agents = num_agents
         self.intent_version = intent_version
         self.agent_start_tiles = {}
+        self.clickable_indices = []  # Initialize clickable indices storage
+        # Track action completion status for each agent
+        self.agent_action_status = {}
         self.grid = Grid("grid", width, height, 16)
         map_path_img = Path(__file__).parent / "maps" / f"{map_nr}.png"
         map_path_txt = Path(__file__).parent / "maps" / f"{map_nr}.txt"
@@ -49,6 +52,15 @@ class SpoiledBroth(BaseGame):
                         a2_tile = tile
         self.agent_start_tiles = {'1': a1_tile, '2': a2_tile}
 
+        # Calculate clickable indices first
+        for x in range(self.grid.width):
+            for y in range(self.grid.height):
+                tile = self.grid.tiles[x][y]
+                # Only include tiles that are actually interactable
+                if (tile and tile.clickable is not None):  # Exclude floor (0) and walls (1)
+                    index = y * self.grid.width + x
+                    self.clickable_indices.append(index)
+
     def add_agent(self, agent_id, intent_version=None):
         # Use the game's intent_version if not explicitly provided
         if intent_version is None:
@@ -60,19 +72,16 @@ class SpoiledBroth(BaseGame):
         a1_tile = self.agent_start_tiles.get('1', None)
         a2_tile = self.agent_start_tiles.get('2', None)
 
-        num_current_agents = len([aid for aid in self.gameObjects if aid.startswith('ai_rl_')])
+        # Extract agent number from the ID (e.g., 'ai_rl_1' -> 1)
+        agent_number = int(agent_id.split('_')[-1])
 
         if a1_tile and a2_tile:
-            # Fixed position logic
-            if len(self.agent_start_tiles) == 2:
-                if self.num_agents == 1:
-                    start_tile = self.rng.choice([a1_tile, a2_tile])
-                else:  # assume num_agents == 2
-                    start_tile = a1_tile if num_current_agents == 0 else a2_tile
-            else:
+            if self.num_agents == 1:
                 start_tile = self.rng.choice([a1_tile, a2_tile])
+            else:  # assume num_agents == 2
+                start_tile = a1_tile if agent_number == 1 else a2_tile
         else:
-            # Random walkable tile
+            # Fallback to random walkable tile if no fixed positions found
             choices = []
             for x in range(self.grid.width):
                 for y in range(self.grid.height):
@@ -89,7 +98,16 @@ class SpoiledBroth(BaseGame):
 
 
     def step(self, actions: dict, delta_time: float):
-        super().step(actions, delta_time)
+        # Filter out None actions and ensure proper structure
+        filtered_actions = {}
+        for agent_id, action in actions.items():
+            if action is not None and isinstance(action, dict):
+                filtered_actions[agent_id] = action
+            elif hasattr(self.gameObjects.get(agent_id), 'action_complete'):
+                # If no valid action but agent exists, ensure it's marked as complete
+                self.gameObjects[agent_id].action_complete = True
+        
+        super().step(filtered_actions, delta_time)
 
     @property
     def agent_scores(self):

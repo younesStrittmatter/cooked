@@ -72,7 +72,7 @@ cols = len(map_lines[0]) if rows > 0 else 0
 grid_size = (cols, rows)  # (width, height)
 
 # Configuration for game duration and actions
-FIXED_DURATION_SECONDS = 180  # 3 minutos exactos
+FIXED_DURATION_SECONDS = 180  # 3 minutes
 
 # Configuración de grabación de vídeo
 VIDEO_FPS = 60
@@ -90,8 +90,8 @@ print(f"  Actual Capture FPS: {VIDEO_FPS / FRAME_SKIP:.1f}")
 print(f"  Video Recording: {'Enabled' if ENABLE_VIDEO_RECORDING else 'Disabled'}")
 print()
 
-#local = '/mnt/lustre/home/samuloza'
-local = ''
+local = '/mnt/lustre/home/samuloza'
+#local = ''
 #local = 'C:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
 
 if num_agents == 1:
@@ -205,9 +205,7 @@ class VideoRecorder:
 def capture_canvas_frames(
     url="http://localhost:5000",
     duration_seconds=180,
-    fps=60,
-    frame_skip=1,
-    video_speed_multiplier=1.0
+    fps=60
 ):
     """Capture frames from the game canvas using Selenium for a fixed duration (real time)."""
 
@@ -310,6 +308,30 @@ engine_app = AIOnlySessionApp(
 app = engine_app.app
 
 if __name__ == "__main__":
+    # Initialize recording setup before starting the game
+    driver = None
+    recorder = None
+    
+    # Prepare everything before starting the actual game
+    if ENABLE_VIDEO_RECORDING:
+        try:
+            # Setup Chrome options before starting the app
+            chrome_options = Options()
+            chrome_options.add_argument("--headless=new")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--window-size=1280,720")
+            driver = webdriver.Chrome(options=chrome_options)
+            
+            # Initialize recorder
+            recorder = VideoRecorder(
+                output_path=f"{base_path}/ai_only_recording_checkpoint_{checkpoint_number}.mp4",
+                fps=VIDEO_FPS
+            )
+        except Exception as e:
+            print(f"Failed to initialize video recording: {e}")
+            if driver:
+                driver.quit()
+
     # Start the Flask app in a separate thread
     def run_app():
         app.run(port=free_port, debug=False, use_reloader=False)
@@ -318,24 +340,71 @@ if __name__ == "__main__":
     app_thread.daemon = True
     app_thread.start()
     
-    # Wait for the app to start
-    time.sleep(3)
-    
-    if ENABLE_VIDEO_RECORDING:
+    # Wait for the Flask app to start
+    time.sleep(2)
+
+    if ENABLE_VIDEO_RECORDING and driver and recorder:
+        # Load the page before starting the game
+        driver.get(f"http://localhost:{free_port}")
+        time.sleep(1)  # Wait for page to load
+        
+        # Start recording before game begins
+        recorder.start_recording()
+        print("Starting game and recording...")
+        
+        # Now start the game session
+        engine_app.session_manager.start_session()
+
+    if ENABLE_VIDEO_RECORDING and driver and recorder:
         try:
-            # Captura frames durante 180s
-            capture_canvas_frames(
-                url=f"http://localhost:{free_port}",
-                duration_seconds=FIXED_DURATION_SECONDS,
-                fps=VIDEO_FPS,
-                frame_skip=FRAME_SKIP
-            )
+            # Load the page
+            driver.get(f"http://localhost:{free_port}")
+            time.sleep(1)  # Short wait for initial render
+
+            start_time = time.time()
+            total_frames = int(FIXED_DURATION_SECONDS * VIDEO_FPS)
+
+            for frame_idx in range(total_frames):
+                try:
+                    # Grab canvas
+                    canvas_base64 = driver.execute_script("""
+                        var canvas = document.getElementById('scene');
+                        if (!canvas) { throw new Error('Canvas not found'); }
+                        return canvas.toDataURL('image/png').substring(22);
+                    """)
+                    img_data = base64.b64decode(canvas_base64)
+                    img = Image.open(BytesIO(img_data))
+                    frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
+                    # Get scores
+                    session = engine_app.get_session()
+                    scores = session.engine.game.agent_scores
+
+                    recorder.capture_frame(frame, scores=scores)
+
+                    if frame_idx % VIDEO_FPS == 0:
+                        elapsed = time.time() - start_time
+                        progress = (frame_idx / total_frames) * 100
+                        print(f"Recording progress: {progress:.1f}% ({elapsed:.1f}s elapsed)")
+
+                    # Maintain precise timing
+                    target_time = start_time + (frame_idx + 1) / VIDEO_FPS
+                    sleep_time = target_time - time.time()
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+
+                except Exception as e:
+                    print(f"Error capturing frame {frame_idx}: {e}")
+
+            recorder.stop_recording()
         except Exception as e:
             print(f"Video recording failed: {e}")
-            print("Falling back to running game without video recording...")
-            time.sleep(FIXED_DURATION_SECONDS)
+        finally:
+            if driver:
+                driver.quit()
     else:
-        print("Video recording disabled. Running game for specified duration...")
+        # If not recording, just wait for the duration
+        print("Running game without video recording...")
         time.sleep(FIXED_DURATION_SECONDS)
 
     # Stop the session

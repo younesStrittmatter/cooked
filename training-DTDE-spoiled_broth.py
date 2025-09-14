@@ -11,7 +11,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 ##### Cluster config ##################
 NUM_GPUS = 1
 NUM_CPUS = 24
-CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
+CLUSTER = 'brigit'  # Options: 'brigit', 'local', 'cuenca'
 
 # Read input file
 input_path = sys.argv[1]
@@ -21,7 +21,7 @@ COOPERATIVE = int(sys.argv[4])
 ## If game_version = CLASSIC, one type of food (tomato); if game_version = COMPETITION, two types of food (tomato and potato)
 GAME_VERSION = sys.argv[5]
 INTENT_VERSION = sys.argv[6]
-SEED = int(sys.argv[7])
+SEED = int(sys.argv[7]) if len(sys.argv) > 7 else 0
 if len(sys.argv) > 8:
     NUM_AGENTS = int(sys.argv[8])
     if NUM_AGENTS not in [1, 2]:
@@ -30,7 +30,8 @@ else:
     NUM_AGENTS = 2  # Default to 2 agents for backward compatibility
 
 # Optional checkpoint paths for loading pretrained policies
-CHECKPOINT = sys.argv[9] if len(sys.argv) > 9 else None
+CHECKPOINT_ID = str(sys.argv[9]) if len(sys.argv) > 9 else None
+PRETRAINING = str(sys.argv[10]) if len(sys.argv) > 10 else None
 
 with open(input_path, "r") as f:
     lines = f.readlines()
@@ -57,22 +58,10 @@ elif CLUSTER == 'local':
 else:
     raise ValueError("Invalid cluster specified. Choose from 'brigit', 'cuenca', or 'local'.")
 
-pretrained_policies = {}
-
-if CHECKPOINT:
-    CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/classic/{INTENT_VERSION}/map_{MAP_NR}/competitive/Training_{CHECKPOINT}/checkpoint_final'
-    if NUM_AGENTS == 1:
-        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
-
-    elif NUM_AGENTS == 2:
-        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
-        pretrained_policies["ai_rl_2"] = {"path": CHECKPOINT_PATH}
-
-
 # Hiperparámetros
 NUM_ENVS = 1
 NUM_INNER_STEPS = 450
-NUM_EPOCHS = 7500
+NUM_EPOCHS = 15000
 NUM_MINIBATCHES = 20
 SHOW_EVERY_N_EPOCHS = 1000
 SAVE_EVERY_N_EPOCHS = 500
@@ -109,6 +98,23 @@ else:
 
 os.makedirs(save_dir, exist_ok=True)
 
+pretrained_policies = {}
+
+print(CHECKPOINT_ID)
+if CHECKPOINT_ID is not None:
+    if PRETRAINING.upper() == "YES":
+        CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/classic/{INTENT_VERSION}/map_{MAP_NR}/competitive/Training_{CHECKPOINT_ID}/checkpoint_final'
+
+    else:
+        CHECKPOINT_PATH = f'{save_dir}/Training_{CHECKPOINT_ID}/checkpoint_final'
+
+    if NUM_AGENTS == 1:
+        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
+
+    elif NUM_AGENTS == 2:
+        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
+        pretrained_policies["ai_rl_2"] = {"path": CHECKPOINT_PATH}
+
 # Determine grid size from map file (text format)
 map_txt_path = os.path.join(os.path.dirname(__file__), 'spoiled_broth', 'maps', f'{MAP_NR}.txt')
 if not os.path.exists(map_txt_path):
@@ -139,7 +145,8 @@ config = {
     "PAYOFF_MATRIX": PAYOFF_MATRIX,
     "INITIAL_SEED": SEED,
     "SAVE_DIR": save_dir,
-    "pretrained_policies": pretrained_policies,  # Add pretrained policies configuration
+    "CHECKPOINT_ID_USED": pretrained_policies,  # Add pretrained policies configuration
+    "PRETRAINED": PRETRAINING if PRETRAINING else "No",
     # RLlib specific parameters
     "NUM_UPDATES": 10,  # Number of updates of the policy
     "GAMMA": 0.975,  # Discount factor
@@ -147,7 +154,7 @@ config = {
     "ENT_COEF": 0.07,  # Entropy coefficient
     "CLIP_EPS": 0.2,  # PPO clip parameter
     "VF_COEF": 0.5,  # Value function coefficient
-    "CONV_FILTERS": CONV_FILTERS,
+    #"CONV_FILTERS": CONV_FILTERS,
     "GRID_SIZE": GRID_SIZE,
     # MLP/LSTM model config
     "USE_LSTM": USE_LSTM,  # Set to True to use LSTM

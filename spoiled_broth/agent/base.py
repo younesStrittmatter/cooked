@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 from engine.extensions.renderer2d.basic_2d import Basic2D
 from engine.extensions.topDownGridWorld import agent
@@ -19,6 +20,8 @@ class Agent(agent.Agent):
         self.cut_speed = 1
         self.action = None
         self.score = 0
+        self.current_action = None
+        self.action_complete = True  # Initially no action is in progress
         hair_n = random.randint(0, 8)
         mustache_n = random.randint(0, 8)
         skin_n = random.randint(0, 8)
@@ -56,6 +59,29 @@ class Agent(agent.Agent):
 
     def update(self, actions: dict, delta_time: float):
         super().update(actions, delta_time)
+
+        # Check if there are actions for this agent
+        if self.id in actions:
+            # If we're getting a new action but the current one isn't complete, ignore it
+            if not self.action_complete:
+                # Remove the new action from the actions dict to prevent it from being processed
+                actions.pop(self.id)
+            else:
+                # New action is starting
+                if actions[self.id] is not None:
+                    self.action_complete = False
+                    self.current_action = actions[self.id]
+        
+        # Check if current action has completed
+        if not self.action_complete and not self.is_moving:
+            # If we're not moving and had an action, it means it's complete
+            self.action_complete = True
+            self.current_action = None
+            # Log the action completion if we have an action tracker
+            if hasattr(self.game, 'action_tracker'):
+                self.game.action_tracker.end_action(self.id, time.time())
+
+        # Handle animation updates
         if not self.is_moving:
             self.animation_time = 0
             self.x = self.slot_x * self.grid.tile_size + self.grid.tile_size // 2

@@ -1,8 +1,8 @@
 WBBWTTXW
 M  W   X
 M  M   W
-M  M  DD
-W  M  DD
+M  M  DW
+W  M  DW
 W  M   W
 W 1  2 W
 WWWWWWWW
