@@ -200,12 +200,13 @@ class GameEnv(ParallelEnv):
             payoff_matrix=None,
             initial_seed=0,
             wait_for_completion=True,  # New parameter to control action completion waiting
+            start_epoch=0
     ):
         super().__init__()
         self.map_nr = map_nr
         self.cooperative = cooperative  # Store cooperative mode as instance variable
         self._step_counter = 0
-        self.episode_count = 0
+        self.episode_count = start_epoch
         self._max_steps_per_episode = step_per_episode
         self.render_mode = None
         self.write_header = True

@@ -67,6 +67,36 @@ def make_train_rllib(config):
             )
         policies_to_train.append(f"policy_{agent_id}")
 
+    start_epoch = 0
+    end_epoch = config["NUM_EPOCHS"]
+    checkpoint_epochs = []
+    if "CHECKPOINT_ID_USED" in config and not ("PRETRAINED" in config and config["PRETRAINED"] == "Yes"): 
+        for agent_id, checkpoint_info in config["CHECKPOINT_ID_USED"].items():
+            if checkpoint_info and "path" in checkpoint_info:
+                try:
+                    checkpoint_path = checkpoint_info["path"]
+                    stats_path = os.path.join(checkpoint_info["path"], "training_stats.csv")
+                    if os.path.exists(stats_path):
+                        with open(stats_path, "r") as f:
+                            lines = f.readlines()
+                            if lines:
+                                last_line = lines[-1].strip()
+                                if last_line:
+                                    epoch_str = last_line.split(",")[0]
+                                    try:
+                                        checkpoint_epochs.append(int(epoch_str))
+                                    except Exception:
+                                        pass
+
+                except Exception as e:
+                    msg = f"\nError loading {agent_id} policy: {e}"
+                    checkpoint_log_lines.append(msg)
+                    raise
+
+        if checkpoint_epochs:
+            start_epoch = min(checkpoint_epochs) + 1
+            end_epoch = start_epoch + config["NUM_EPOCHS"]
+
     def dynamic_policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
         return f"policy_{agent_id}"
 
@@ -108,6 +138,8 @@ def make_train_rllib(config):
                 "intent_version": config.get("INTENT_VERSION", None),
                 "payoff_matrix": config.get("PAYOFF_MATRIX", [1,1,-2]),
                 "initial_seed": config.get("INITIAL_SEED", 0),
+                "wait_for_completion": config.get("WAIT_FOR_COMPLETION", True),
+                "start_epoch": start_epoch
             },
             clip_actions=True,
         )
@@ -157,6 +189,7 @@ def make_train_rllib(config):
                         # --- Load the MultiRLModule directly from checkpoint ---
                         rl_module_path = os.path.join(
                             checkpoint_path,
+                            "checkpoint_final",
                             "learner_group",
                             "learner",
                             "rl_module"
@@ -214,6 +247,7 @@ def make_train_rllib(config):
                         # --- Load the MultiRLModule directly from checkpoint ---
                         rl_module_path = os.path.join(
                             checkpoint_path,
+                            "checkpoint_final",
                             "learner_group",
                             "learner",
                             "rl_module"
@@ -237,6 +271,10 @@ def make_train_rllib(config):
                         msg = f"\nError loading {agent_id} policy: {e}"
                         checkpoint_log_lines.append(msg)
                         raise
+
+            if checkpoint_epochs:
+                start_epoch = min(checkpoint_epochs) + 1
+                end_epoch = start_epoch + config["NUM_EPOCHS"]
     else:
         msg = f"No checkpoint specified, training from scratch."
         checkpoint_log_lines.append(msg)
@@ -245,17 +283,17 @@ def make_train_rllib(config):
     log_path = os.path.join(path, "checkpoint_load_log.txt")
     with open(log_path, "w") as logf:
         for line in checkpoint_log_lines:
-            logf.write(line + "\n")
+            logf.write(line + "\n")        
 
-    for epoch in range(config["NUM_EPOCHS"]): 
+    for epoch in range(start_epoch, end_epoch):
         result = trainer.train()
 
         # Log metrics
-        if epoch % config["SHOW_EVERY_N_EPOCHS"] == 0:
+        if (epoch - start_epoch) % config["SHOW_EVERY_N_EPOCHS"] == 0:
             print(f"Epoch {epoch} complete.")
 
         # Save checkpoint
-        if epoch % config["SAVE_EVERY_N_EPOCHS"] == 0:
+        if (epoch - start_epoch) % config["SAVE_EVERY_N_EPOCHS"] == 0:
             checkpoint_path = trainer.save(os.path.join(path, f"checkpoint_{epoch}"))
             print(f"Checkpoint saved at {checkpoint_path}")
 

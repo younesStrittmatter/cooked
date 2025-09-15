@@ -103,10 +103,10 @@ pretrained_policies = {}
 print(CHECKPOINT_ID)
 if CHECKPOINT_ID is not None:
     if PRETRAINING.upper() == "YES":
-        CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/classic/{INTENT_VERSION}/map_{MAP_NR}/competitive/Training_{CHECKPOINT_ID}/checkpoint_final'
+        CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/classic/{INTENT_VERSION}/map_{MAP_NR}/competitive/Training_{CHECKPOINT_ID}'
 
     else:
-        CHECKPOINT_PATH = f'{save_dir}/Training_{CHECKPOINT_ID}/checkpoint_final'
+        CHECKPOINT_PATH = f'{save_dir}/Training_{CHECKPOINT_ID}'
 
     if NUM_AGENTS == 1:
         pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
@@ -144,6 +144,7 @@ config = {
     "GAME_VERSION": GAME_VERSION.upper(),
     "PAYOFF_MATRIX": PAYOFF_MATRIX,
     "INITIAL_SEED": SEED,
+    "WAIT_FOR_COMPLETION": True,
     "SAVE_DIR": save_dir,
     "CHECKPOINT_ID_USED": pretrained_policies,  # Add pretrained policies configuration
     "PRETRAINED": PRETRAINING if PRETRAINING else "No",
@@ -180,5 +181,4 @@ os.makedirs(path, exist_ok=True)
 
 # Save the final policy
 final_checkpoint = trainer.save(os.path.join(path, f"checkpoint_final"))
-final_checkpoint = trainer.save(os.path.join(path, f"checkpoint_{NUM_EPOCHS}"))
 print(f"Final checkpoint saved at {final_checkpoint}")
