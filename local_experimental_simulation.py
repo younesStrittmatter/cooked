@@ -6,6 +6,7 @@ from spoiled_broth.rl.rllib_controller_lstm import RLlibControllerLSTM
 from spoiled_broth.rl.game_env import GameEnv
 from spoiled_broth.rl.game_env_competition import GameEnvCompetition
 from engine.extensions.renderer2d.renderer_2d_offline import Renderer2DOffline
+from engine.extensions.renderer2d.renderer_ui import Renderer2DModule
 from pathlib import Path
 from spoiled_broth.config import *
 import warnings, os, logging, time, threading, csv, sys
@@ -16,6 +17,10 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 os.environ["RAY_DISABLE_IMPORT_WARNING"] = "1"
 
+# Cluster configuration
+CLUSTER = 'cuenca'  # 'brigit', 'cuenca', or 'local'
+
+# Simulation parameters
 training_map_nr = sys.argv[1]
 num_agents = int(sys.argv[2])
 intent_version = sys.argv[3]
@@ -26,7 +31,18 @@ checkpoint_number = sys.argv[7]
 ENABLE_VIDEO_RECORDING = False if len(sys.argv) > 8 and str(sys.argv[8]).lower() == "false" else True
 
 timestamp = time.strftime("%Y_%m_%d-%H_%M_%S")
-base_path = Path(f"/mnt/lustre/home/samuloza/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{training_map_nr}")
+
+if CLUSTER == 'brigit':
+    local = '/mnt/lustre/home/samuloza'
+elif CLUSTER == 'cuenca':
+    local = ''
+elif CLUSTER == 'local':
+    local = 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
+else:
+    raise ValueError("Invalid cluster specified. Choose from 'brigit', 'cuenca', or 'local'.")
+
+base_path = Path(f"{local}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{training_map_nr}")
+
 if cooperative:
     base_path = base_path / f"cooperative/Training_{training_id}"
 else:
@@ -34,6 +50,8 @@ else:
 
 path_root = Path().resolve() / "spoiled_broth"
 checkpoint_dir = base_path / f"checkpoint_{checkpoint_number}"
+saving_path = base_path / "simulations"
+os.makedirs(saving_path, exist_ok=True)
 
 # Determine grid size from map
 map_txt_path = path_root / "maps" / f"{training_map_nr}.txt"
@@ -58,11 +76,14 @@ controller_cls = RLlibControllerLSTM if use_lstm else RLlibController
 agent_map = {}
 for i in range(1, num_agents + 1):
     agent_id = f"ai_rl_{i}"
-    agent_map[agent_id] = controller_cls(agent_id, checkpoint_dir, f"policy_{agent_id}",
-                                         competition=(game_version.upper() == "COMPETITION"))
+    try:
+        agent_map[agent_id] = controller_cls(agent_id, checkpoint_dir, f"policy_{agent_id}",
+                                             competition=(game_version.upper() == "COMPETITION"))
+    except Exception as e:
+        print(f"Failed to initialize controller {agent_id}: {e}")
 
 # CSV logging
-csv_filename = base_path / f"simulation_log_checkpoint_{checkpoint_number}_{timestamp}.csv"
+csv_filename = saving_path / f"simulation_log_checkpoint_{checkpoint_number}_{timestamp}.csv"
 state_logger = None
 class GameStateLogger:
     def __init__(self, csv_path):
@@ -104,50 +125,122 @@ class VideoRecorder:
             self.writer.release()
 
 recorder = None
-renderer = Renderer2DOffline(path_root=path_root, tile_size=16)
+renderer = None
 
 # Game factory
 def game_factory():
     game = Game(map_nr=training_map_nr, grid_size=grid_size, intent_version=intent_version)
+
+    # Ensure initial state has no items on tiles or in agents' hands right after creation
+    try:
+        grid = getattr(game, 'grid', None)
+        if grid is not None:
+            for x in range(grid.width):
+                for y in range(grid.height):
+                    tile = grid.tiles[x][y]
+                    if tile is None:
+                        continue
+                    if hasattr(tile, 'item'):
+                        tile.item = None
+                    if hasattr(tile, 'cut_time_accumulated'):
+                        try:
+                            tile.cut_time_accumulated = 0
+                        except Exception:
+                            pass
+                    if hasattr(tile, 'cut_by'):
+                        try:
+                            tile.cut_by = None
+                        except Exception:
+                            pass
+        # Also ensure any pre-existing agents have empty hands
+        for aid, obj in list(game.gameObjects.items()):
+            if aid.startswith('ai_rl_') and obj is not None:
+                if hasattr(obj, 'item'):
+                    obj.item = None
+                if hasattr(obj, 'action_complete'):
+                    obj.action_complete = True
+                if hasattr(obj, 'current_action'):
+                    obj.current_action = None
+    except Exception as _e:
+        print(f"Warning (game_factory): could not clear initial items: {_e}")
+
     return game
 
 # AI-only session
 engine_app = AIOnlySessionApp(
     game_factory=game_factory,
-    ui_modules=[],  # no Renderer2DModule
+    ui_modules=[Renderer2DModule()],
     agent_map=agent_map,
     path_root=path_root,
     tick_rate=24,
     ai_tick_rate=cf_AI_TICK_RATE,
-    is_max_speed=True
+    is_max_speed=False
 )
-engine_app.session_manager.start_session()
 session = engine_app.get_session()
 game = session.engine.game
+
+# Ensure initial state has no items on tiles or in agents' hands
+try:
+    grid = getattr(game, 'grid', None)
+    if grid is not None:
+        for x in range(grid.width):
+            for y in range(grid.height):
+                tile = grid.tiles[x][y]
+                if tile is None:
+                    continue
+                # Clear any placed item on counters/cutting boards
+                if hasattr(tile, 'item'):
+                    tile.item = None
+                # Reset cutting progress if present
+                if hasattr(tile, 'cut_stage'):
+                    try:
+                        tile.cut_stage = 0
+                    except Exception:
+                        pass
+    # Clear any items agents might be holding and reset action state
+    for aid, obj in list(game.gameObjects.items()):
+        if aid.startswith('ai_rl_') and obj is not None:
+            if hasattr(obj, 'item'):
+                obj.item = None
+            if hasattr(obj, 'action_complete'):
+                obj.action_complete = True
+            if hasattr(obj, 'current_action'):
+                obj.current_action = None
+except Exception as _e:
+    print(f"Warning: could not clear initial items: {_e}")
+
+# Debug: print runner and agent thread status
+runner = getattr(session, '_runner', None)
+if runner:
+    print(f"EngineRunner created: tick_rate={runner.tick_rate}, ai_tick_rate={runner.ai_tick_rate}, is_max_speed={runner.is_max_speed}")
+    print(f"Engine thread alive: {runner.engine_thread.is_alive()}")
+    if runner.agent_thread:
+        print(f"Agent thread alive: {runner.agent_thread.is_alive()}")
+    else:
+        print("No agent thread attached (agent_map may be empty)")
 
 # Simulation loop
 FIXED_DURATION_SECONDS = 180
 total_frames = FIXED_DURATION_SECONDS * VIDEO_FPS
 
-def game_to_render_state(game):
-    """Convert gameObjects to renderer-friendly dicts with 'id', 'x', 'y', 'type'."""
-    state = []
-    for obj_id, obj in game.gameObjects.items():
-        state.append({
-            "id": obj_id,
-            "x": getattr(obj, "x", 0),
-            "y": getattr(obj, "y", 0),
-            "type": getattr(obj, "_type", "agent")
-        })
-    return {"gameObjects": state}
+def serialize_ui_state(game, engine, agent_id=None):
+    """Serialize payload using UI modules (same output as /state route).
+
+    This uses the session.ui_modules (CoreUIModule + Renderer2DModule) to produce
+    the same `gameObjects` list the browser uses, so offline rendering matches online.
+    """
+    payload = {}
+    for module in session.ui_modules:
+        try:
+            payload.update(module.serialize_for_agent(game, engine, agent_id))
+        except Exception as e:
+            print(f"UI module serialization failed: {e}")
+    payload["tick"] = engine.tick_count
+    return payload
 
 frame_idx = 0
 
-# Video recorder initialization
-if ENABLE_VIDEO_RECORDING:
-    first_frame = renderer.render_to_array(None, game_to_render_state(game), 0)
-    recorder = VideoRecorder(base_path / f"offline_recording_{timestamp}.mp4")
-    recorder.start(first_frame.shape)
+# Video recorder will be initialized lazily once we produce the first frame
 
 prev_state = None
 progress_step = int(total_frames * 0.05)
@@ -155,23 +248,27 @@ next_progress = progress_step
 for frame_idx in range(total_frames):
     t = (frame_idx % (VIDEO_FPS/24)) / (VIDEO_FPS/24)  # interpolation factor
 
-    prev_state = prev_state or game_to_render_state(game)
-    curr_state = game_to_render_state(game)
+    # Serialize UI state via the installed UI modules
+    curr_state = serialize_ui_state(game, session.engine)
+    prev_state = prev_state or curr_state
 
-    frame = renderer.render_to_array(prev_state, curr_state, t)
+    if renderer is None:
+        renderer = Renderer2DOffline(path_root=path_root, tile_size=16)
+        # initialize writer with a first generated frame
+        first_frame = renderer.render_to_array(prev_state, curr_state, 0.0)
+        if ENABLE_VIDEO_RECORDING:
+            recorder = VideoRecorder(saving_path / f"offline_recording_{timestamp}.mp4")
+            recorder.start(first_frame.shape)
+
+    frame = renderer.render_to_array(prev_state, curr_state, 0.0)
 
     # Log agent states
     state_logger.log_state(frame_idx, game)
 
-    # Video recording
-    if ENABLE_VIDEO_RECORDING:
+    if ENABLE_VIDEO_RECORDING and recorder:
         recorder.write(frame)
 
     prev_state = curr_state
-
-    # --- Advance game logic ---
-    actions = {aid: None for aid in game.gameObjects if aid.startswith("ai_rl_")}
-    game.step(actions, 1/VIDEO_FPS)  # reemplaza game.update({})
 
     # Print progress every 5%
     if frame_idx + 1 >= next_progress:
