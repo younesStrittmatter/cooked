@@ -128,27 +128,30 @@ game = session.engine.game
 # Simulation loop
 FIXED_DURATION_SECONDS = 180
 total_frames = FIXED_DURATION_SECONDS * VIDEO_FPS
+
+def game_to_render_state(game):
+    """Convert gameObjects to renderer-friendly dicts with 'id', 'x', 'y', 'type'."""
+    state = []
+    for obj_id, obj in game.gameObjects.items():
+        state.append({
+            "id": obj_id,
+            "x": getattr(obj, "x", 0),
+            "y": getattr(obj, "y", 0),
+            "type": getattr(obj, "_type", "agent")
+        })
+    return {"gameObjects": state}
+
 frame_idx = 0
 
+# Video recorder initialization
 if ENABLE_VIDEO_RECORDING:
-    # Render first frame
-    def game_to_render_state(game):
-        """Convert gameObjects to renderer-friendly dicts with 'id', 'x', 'y', 'type'."""
-        state = []
-        for obj_id, obj in game.gameObjects.items():
-            state.append({
-                "id": obj_id,
-                "x": getattr(obj, "x", 0),
-                "y": getattr(obj, "y", 0),
-                "type": getattr(obj, "_type", "agent")
-            })
-        return {"gameObjects": state}
-
     first_frame = renderer.render_to_array(None, game_to_render_state(game), 0)
     recorder = VideoRecorder(base_path / f"offline_recording_{timestamp}.mp4")
     recorder.start(first_frame.shape)
 
 prev_state = None
+progress_step = int(total_frames * 0.05)
+next_progress = progress_step
 for frame_idx in range(total_frames):
     t = (frame_idx % (VIDEO_FPS/24)) / (VIDEO_FPS/24)  # interpolation factor
 
@@ -169,6 +172,12 @@ for frame_idx in range(total_frames):
     # --- Advance game logic ---
     actions = {aid: None for aid in game.gameObjects if aid.startswith("ai_rl_")}
     game.step(actions, 1/VIDEO_FPS)  # reemplaza game.update({})
+
+    # Print progress every 5%
+    if frame_idx + 1 >= next_progress:
+        percent = int(100 * (frame_idx + 1) / total_frames)
+        print(f"Simulation progress: {percent}% ({frame_idx + 1}/{total_frames} frames)")
+        next_progress += progress_step
 
 # --- Finalizar ---
 if recorder:
