@@ -86,18 +86,39 @@ class Agent(agent.Agent):
                     # Use the tracker's forced end helper when available
                     if hasattr(self.game, 'action_tracker'):
                         try:
-                            self.game.action_tracker._force_end(self.id, time.time(), reason='timeout_forced_end')
+                            self.game.action_tracker._force_complete_action(self.id, self.game, getattr(self.game, 'engine', None))
                         except Exception:
                             # Fallback to normal end_action
-                            self.game.action_tracker.end_action(self.id, time.time())
+                            try:
+                                self.game.action_tracker.end_action(self.id, time.time())
+                            except Exception:
+                                pass
                     self.action_complete = True
                     self.current_action = None
-                # Normal completion when agent finished moving
+                # For normal completion, check if agent finished moving AND minimum duration has passed
                 elif not self.is_moving:
-                    self.action_complete = True
-                    self.current_action = None
-                    if hasattr(self.game, 'action_tracker'):
-                        self.game.action_tracker.end_action(self.id, time.time())
+                    # Check if the action tracker allows completion
+                    can_complete = True
+                    if hasattr(self.game, 'action_tracker') and hasattr(self.game, 'engine'):
+                        current_frame = getattr(self.game.engine, 'tick_count', 0)
+                        can_complete = self.game.action_tracker.can_complete_action(self.id, current_frame)
+                    
+                    if can_complete:
+                        # Try to end the action through the tracker
+                        action_ended = False
+                        if hasattr(self.game, 'action_tracker'):
+                            try:
+                                self.game.action_tracker.end_action(self.id, time.time())
+                                action_ended = True
+                            except Exception:
+                                # If tracker end fails, don't mark as complete yet
+                                pass
+                        
+                        # Only mark as complete if tracker successfully ended it, or if no tracker
+                        if action_ended or not hasattr(self.game, 'action_tracker'):
+                            self.action_complete = True
+                            self.current_action = None
+                    # else: action is not ready to complete yet, keep it active
             except Exception:
                 # If something goes wrong reading start_time, clear the action to avoid permanent stuck state
                 self.action_complete = True

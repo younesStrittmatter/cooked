@@ -29,6 +29,24 @@ class RLlibController(Controller):
         self.policy_module = self.multi_rl_module[self.policy_id]
 
     def choose_action(self, observation):
+        # Check if a previous action just completed and needs to be logged
+        if hasattr(self.agent, 'current_action') and self.agent.current_action is not None:
+            if getattr(self.agent, 'action_complete', True):
+                # Action just completed, log its end
+                if hasattr(self.agent.game, 'action_tracker'):
+                    # Try to end the action, but don't force it if minimum duration hasn't passed
+                    action_ended = self.agent.game.action_tracker.end_action(self.agent_id, time.time())
+                    if action_ended:
+                        # Action successfully ended
+                        self.agent.current_action = None
+                    else:
+                        # Action not ready to end yet, keep it active
+                        return None  # Don't choose new action yet
+                else:
+                    print(f"[CONTROLLER] No action_tracker found on agent.game for {self.agent_id}")
+                    # Clear the current action
+                    self.agent.current_action = None
+        
         # If a previous action is still in progress, don't choose a new one.
         # NOTE: Do NOT mutate agent state here; the Engine/Agent update loop is
         # responsible for marking actions complete. Controllers called from an
@@ -39,7 +57,7 @@ class RLlibController(Controller):
         # Don't choose a new action if current one is still in progress
         if not self.agent.action_complete:
             return None
-
+        
         # Select correct obs function
         self.agent_food_type = {
             "ai_rl_1": "tomato",
@@ -74,6 +92,7 @@ class RLlibController(Controller):
             # Handle "do nothing" action
             if action_number == -1:
                 if hasattr(self.agent.game, 'action_tracker'):
+                    # Track do_nothing as a start - let it be ended later like other actions
                     self.agent.game.action_tracker.start_action(
                         self.agent_id,
                         "do_nothing",
@@ -81,8 +100,15 @@ class RLlibController(Controller):
                         time.time(),
                         action_number=-1
                     )
-                self.agent.action_complete = True
-                return None
+                else:
+                    print(f"[CONTROLLER] No action_tracker found for do_nothing")
+                # Set up action state like other actions
+                self.agent.action_complete = False
+                self.agent.current_action = {
+                    "type": "do_nothing", 
+                    "start_time": time.time()
+                }
+                return self.agent.current_action
     
             if 0 <= action < len(clickable_indices):
                 tile_index = clickable_indices[action]
@@ -96,10 +122,12 @@ class RLlibController(Controller):
                         self.agent.game.action_tracker.start_action(
                             self.agent_id,
                             "click",
-                            tile,  # Pass the entire tile object instead of just the ID
+                            tile,
                             time.time(),
                             action_number=action
                         )
+                    else:
+                        print(f"[CONTROLLER] No action_tracker found for click")
                     self.agent.action_complete = False
                     self.agent.current_action = {
                         "type": "click", 
@@ -129,7 +157,7 @@ class RLlibController(Controller):
                     self.agent.game.action_tracker.start_action(
                         self.agent_id,
                         "click",
-                        tile,  # Pass the full tile object
+                        tile,
                         time.time(),
                         action_number=action
                     )
@@ -142,8 +170,6 @@ class RLlibController(Controller):
                 return self.agent.current_action
         
         # If we reach here, no valid action was taken
-        if hasattr(self.agent.game, 'action_tracker'):
-            self.agent.game.action_tracker.end_action(self.agent_id, time.time())
         return None
 
     # Compatibility wrapper used by external watchers that try multiple method names/signatures

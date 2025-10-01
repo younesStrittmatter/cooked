@@ -58,7 +58,7 @@ elif CLUSTER == 'local':
 else:
     raise ValueError("Invalid cluster specified. Choose from 'brigit', 'cuenca', or 'local'.")
 
-# Hiperparámetros
+# Hyperparameters
 NUM_ENVS = 1
 NUM_INNER_STEPS = 450
 NUM_EPOCHS = 25000
