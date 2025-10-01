@@ -70,7 +70,24 @@ class Tile(GameObject):
             self.clickable = Clickable2D(None, left, top, tiles_size, tiles_size, on_click)
 
     def update(self, actions, delta_time):
-        pass
+        # Process click actions that target this tile.
+        # Controllers submit intents as a dict: agent_id -> action.
+        # If an action is a click and its target matches this tile's id,
+        # invoke the tile click handler so the agent receives the intents
+        # (e.g., MoveToIntent + PickUpIntent).
+        if actions:
+            for agent_id, action in list(actions.items()):
+                try:
+                    if isinstance(action, dict) and action.get('type') == 'click' and action.get('target') == self.id:
+                        # call the tile click which invokes the on_click handler
+                        try:
+                            self.click(agent_id)
+                        except Exception:
+                            # non-fatal: continue processing other actions
+                            pass
+                except Exception:
+                    # ignore malformed actions
+                    pass
 
     def add_drawable(self, drawable: Basic2D):
         self.drawables.append(drawable)

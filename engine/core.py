@@ -25,6 +25,13 @@ class Engine:
         self.intent_buffer: Dict[str, str] = {}
 
     def submit_intent(self, agent_id: str, action: str):
+        # Log when an existing intent for the agent is being overwritten.
+        prev = self.intent_buffer.get(agent_id)
+        if prev is not None and prev != action:
+            try:
+                print(f"Engine: overwriting intent for {agent_id} at tick={getattr(self, 'tick_count', None)} prev={prev} new={action}")
+            except Exception:
+                pass
         self.intent_buffer[agent_id] = action
 
     def tick(self, delta_time: Optional[float] = None):

@@ -139,15 +139,28 @@ class Renderer2DOffline:
                 top_px = int(top)
 
             # Determine sprite: either simple src sprite (with optional cropping) or composed agent
+            # Skip rendering objects that explicitly set width/height to 0 (hidden drawables)
+            obj_width = obj.get("width") if obj.get("width") is not None else obj.get("width")
+            obj_height = obj.get("height") if obj.get("height") is not None else obj.get("height")
+            # If the serialized object includes width/height and they are <= 0, skip rendering
+            if obj_width is not None and obj_height is not None:
+                try:
+                    if int(obj_width) <= 0 or int(obj_height) <= 0:
+                        continue
+                except Exception:
+                    # If conversion fails, fall back to normal rendering
+                    pass
+
             src = obj.get("src")
             if src:
                 sprite = self.load_sprite(src)
 
                 # cropping
-                srcX = obj.get("srcX", 0) or 0
-                srcY = obj.get("srcY", 0) or 0
-                srcW = obj.get("srcW") or sprite.width
-                srcH = obj.get("srcH") or sprite.height
+                # Accept either camelCase or snake_case keys
+                srcX = obj.get("srcX", obj.get("src_x", 0)) or 0
+                srcY = obj.get("srcY", obj.get("src_y", 0)) or 0
+                srcW = obj.get("srcW", obj.get("src_w")) or sprite.width
+                srcH = obj.get("srcH", obj.get("src_h")) or sprite.height
 
                 try:
                     crop = sprite.crop((int(srcX), int(srcY), int(srcX + srcW), int(srcY + srcH)))

@@ -174,3 +174,5 @@ input*
 output*
 brigit*
 cuenca*
+*.out
+*.log

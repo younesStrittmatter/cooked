@@ -57,6 +57,10 @@ class CuttingBoardIntent(_base_intent.Intent):
         self.version = version
         self.has_ended = False
         self.has_started = False
+        # elapsed cutting time while agent is at the board
+        self._elapsed = 0.0
+        # required cutting duration in seconds for the normal behavior
+        self._required_cut_time = 3.0
 
     def update(self, agent, delta_time: float):
         if not self.has_started:
@@ -101,7 +105,41 @@ class CuttingBoardIntent(_base_intent.Intent):
                 else:
                     self.has_ended = True
         else:
-            self.tile.cut_time_accumulated += agent.cut_speed * delta_time
+            # accumulate local elapsed time while agent stays on the cutting board
+            # agent.cut_speed may be used to scale speed, but we implement a fixed
+            # wall-clock duration of 3.0 seconds (scaled by agent.cut_speed for
+            # backwards compatibility if cut_speed != 1.0)
+            try:
+                speed = float(getattr(agent, 'cut_speed', 1.0))
+            except Exception:
+                speed = 1.0
+
+            self._elapsed += delta_time * speed
+
+            # also keep the tile-level accumulator in sync for compatibility
+            try:
+                self.tile.cut_time_accumulated += delta_time * speed
+            except Exception:
+                pass
+
+            # When required duration reached, transfer cut item to agent and finish
+            if self._elapsed >= self._required_cut_time:
+                # Only perform the transfer if there is an ingredient on the board
+                if self.tile.item is not None:
+                    orig = self.tile.item
+                    agent.item = f"{orig}_cut"
+                    self.tile.cut_by = agent.id
+                    self.tile.cut_item = agent.item
+                    # Reset tile state: if agent took a basic ingredient back, place it
+                    # otherwise clear the tile
+                    # For this implementation, after cutting we clear the tile
+                    self.tile.item = None
+                    # Reset tile accumulator
+                    try:
+                        self.tile.cut_time_accumulated = 0
+                    except Exception:
+                        pass
+                self.has_ended = True
 
     def finished(self, agent):
         return self.has_ended

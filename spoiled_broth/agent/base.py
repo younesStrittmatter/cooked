@@ -22,6 +22,8 @@ class Agent(agent.Agent):
         self.score = 0
         self.current_action = None
         self.action_complete = True  # Initially no action is in progress
+        # Maximum time (seconds) to consider an action valid before forcing completion
+        self.ACTION_TIMEOUT = 5.0
         hair_n = random.randint(0, 8)
         mustache_n = random.randint(0, 8)
         skin_n = random.randint(0, 8)
@@ -72,14 +74,39 @@ class Agent(agent.Agent):
                     self.action_complete = False
                     self.current_action = actions[self.id]
         
-        # Check if current action has completed
-        if not self.action_complete and not self.is_moving:
-            # If we're not moving and had an action, it means it's complete
-            self.action_complete = True
-            self.current_action = None
-            # Log the action completion if we have an action tracker
-            if hasattr(self.game, 'action_tracker'):
-                self.game.action_tracker.end_action(self.id, time.time())
+        # Check if current action has completed or timed out
+        if not self.action_complete:
+            try:
+                start_ts = None
+                if isinstance(self.current_action, dict):
+                    start_ts = self.current_action.get('start_time')
+
+                # If action has exceeded timeout, force-end it
+                if start_ts is not None and (time.time() - start_ts) > self.ACTION_TIMEOUT:
+                    # Use the tracker's forced end helper when available
+                    if hasattr(self.game, 'action_tracker'):
+                        try:
+                            self.game.action_tracker._force_end(self.id, time.time(), reason='timeout_forced_end')
+                        except Exception:
+                            # Fallback to normal end_action
+                            self.game.action_tracker.end_action(self.id, time.time())
+                    self.action_complete = True
+                    self.current_action = None
+                # Normal completion when agent finished moving
+                elif not self.is_moving:
+                    self.action_complete = True
+                    self.current_action = None
+                    if hasattr(self.game, 'action_tracker'):
+                        self.game.action_tracker.end_action(self.id, time.time())
+            except Exception:
+                # If something goes wrong reading start_time, clear the action to avoid permanent stuck state
+                self.action_complete = True
+                self.current_action = None
+                if hasattr(self.game, 'action_tracker'):
+                    try:
+                        self.game.action_tracker.end_action(self.id, time.time())
+                    except Exception:
+                        pass
 
         # Handle animation updates
         if not self.is_moving:
