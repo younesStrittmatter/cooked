@@ -6,10 +6,10 @@ This script runs simulations of trained RL agents with comprehensive logging,
 video recording, and data collection capabilities.
 
 Usage:
-    python experimental_simulation_new.py <map_name> <num_agents> <intent_version> <cooperative> <game_version> <training_id> <checkpoint_number> [options]
+    python experimental_simulation.py <map_nr> <num_agents> <intent_version> <cooperative> <game_version> <training_id> <checkpoint_number> [options]
 
 Example:
-    python experimental_simulation_new.py simple_kitchen_circular 2 v3.1 1 competition training_001 50 --enable-video true --cluster cuenca
+    python experimental_simulation.py simple_kitchen_circular 2 v3.1 1 competition training_001 50 --enable-video true --cluster cuenca
 """
 
 import sys
@@ -33,7 +33,7 @@ def main():
     enable_video = args.enable_video.lower() == 'true'
     
     print(f"Starting experimental simulation...")
-    print(f"Map: {args.map_name}")
+    print(f"Map: {args.map_nr}")
     print(f"Agents: {args.num_agents}")
     print(f"Intent version: {args.intent_version}")
     print(f"Cooperative: {'Yes' if args.cooperative else 'No'}")
@@ -48,7 +48,7 @@ def main():
     try:
         # Run main simulation pipeline
         output_paths = main_simulation_pipeline(
-            map_name=args.map_name,
+            map_nr=args.map_nr,
             num_agents=args.num_agents,
             intent_version=args.intent_version,
             cooperative=bool(args.cooperative),

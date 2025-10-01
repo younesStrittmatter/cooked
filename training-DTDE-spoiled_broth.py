@@ -1,3 +1,5 @@
+# USE: nohup python training-DTDE-spoiled_broth.py <input_path> <map_nr> <lr> <cooperative> <game_version> <intent_version> <seed> [<num_agents>] [<checkpoint_id>] [<pretraining>] > log_training.txt &
+
 import os
 import sys
 from spoiled_broth.rl.make_train_rllib import make_train_rllib
@@ -18,8 +20,8 @@ input_path = sys.argv[1]
 MAP_NR = sys.argv[2]
 LR = float(sys.argv[3])
 COOPERATIVE = int(sys.argv[4])
-## If game_version = CLASSIC, one type of food (tomato); if game_version = COMPETITION, two types of food (tomato and potato)
-GAME_VERSION = sys.argv[5]
+## If game_version = classic, one type of food (tomato); if game_version = competition, two types of food (tomato and potato)
+GAME_VERSION = str(sys.argv[5]).lower()
 INTENT_VERSION = sys.argv[6]
 SEED = int(sys.argv[7]) if len(sys.argv) > 7 else 0
 if len(sys.argv) > 8:
@@ -79,9 +81,9 @@ if NUM_AGENTS == 1:
 else: 
     raw_dir = f'{local}/data/samuel_lozano/cooked'
 
-if GAME_VERSION.upper() == "CLASSIC":
+if GAME_VERSION == "classic":
     game_dir = f'{raw_dir}/classic'
-elif GAME_VERSION.upper() == "COMPETITION":
+elif GAME_VERSION == "competition":
     game_dir = f'{raw_dir}/competition'
 else:
     game_dir = f'{raw_dir}'
@@ -141,7 +143,7 @@ config = {
     "COOPERATIVE": COOPERATIVE,
     "REWARD_WEIGHTS": reward_weights,
     "INTENT_VERSION": INTENT_VERSION,
-    "GAME_VERSION": GAME_VERSION.upper(),
+    "GAME_VERSION": GAME_VERSION,
     "PAYOFF_MATRIX": PAYOFF_MATRIX,
     "INITIAL_SEED": SEED,
     "WAIT_FOR_COMPLETION": True,

@@ -85,14 +85,14 @@ class PathManager:
     def __init__(self, config: SimulationConfig):
         self.config = config
     
-    def setup_paths(self, map_name: str, num_agents: int, intent_version: str,
+    def setup_paths(self, map_nr: str, num_agents: int, intent_version: str,
                    cooperative: bool, game_version: str, training_id: str,
                    checkpoint_number: int) -> Dict[str, Path]:
         """
         Set up all necessary paths for a simulation run.
         
         Args:
-            map_name: Name of the map
+            map_nr: Name of the map
             num_agents: Number of agents
             intent_version: Intent version identifier
             cooperative: Whether this is a cooperative simulation
@@ -103,7 +103,7 @@ class PathManager:
         Returns:
             Dictionary containing all relevant paths
         """
-        base_path = Path(f"{self.config.local_path}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_name}")
+        base_path = Path(f"{self.config.local_path}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}")
         
         training_type = "cooperative" if cooperative else "competitive"
         training_path = base_path / f"{training_type}/Training_{training_id}"
@@ -112,9 +112,9 @@ class PathManager:
             'base_path': base_path,
             'training_path': training_path,
             'checkpoint_dir': training_path / f"checkpoint_{checkpoint_number}",
-            'saving_path': training_path / "simulations",
+            'saving_path': training_path / "simulations" / f"simulations_{checkpoint_number}",
             'path_root': Path().resolve() / "spoiled_broth",
-            'map_txt_path': Path().resolve() / "spoiled_broth" / "maps" / f"{map_name}.txt",
+            'map_txt_path': Path().resolve() / "spoiled_broth" / "maps" / f"{map_nr}.txt",
             'config_path': training_path / "config.txt"
         }
         
@@ -250,8 +250,8 @@ class DataLogger:
         self.simulation_dir = base_saving_path / f"simulation_{timestamp}"
         os.makedirs(self.simulation_dir, exist_ok=True)
         
-        self.state_csv_path = self.simulation_dir / f"simulation_log_checkpoint_{checkpoint_number}_{timestamp}.csv"
-        self.action_csv_path = self.simulation_dir / f"actions_checkpoint_{checkpoint_number}_{timestamp}.csv"
+        self.state_csv_path = self.simulation_dir / f"simulation.csv"
+        self.action_csv_path = self.simulation_dir / f"actions.csv"
         self.config_path = self.simulation_dir / "config.txt"
         
         self._initialize_state_logger()
@@ -274,7 +274,7 @@ class DataLogger:
             "[SIMULATION_INFO]",
             f"SIMULATION_ID: {self.timestamp}",
             f"CHECKPOINT_NUMBER: {self.checkpoint_number}",
-            f"MAP_NAME: {self.simulation_config.get('map_name', 'unknown')}",
+            f"MAP_NR: {self.simulation_config.get('map_nr', 'unknown')}",
             f"NUM_AGENTS: {self.simulation_config.get('num_agents', 'unknown')}",
             f"INTENT_VERSION: {self.simulation_config.get('intent_version', 'unknown')}",
             f"COOPERATIVE: {self.simulation_config.get('cooperative', 'unknown')}",
@@ -777,13 +777,13 @@ class GameManager:
     def __init__(self, config: SimulationConfig):
         self.config = config
     
-    def create_game_factory(self, map_name: str, grid_size: Tuple[int, int], 
+    def create_game_factory(self, map_nr: str, grid_size: Tuple[int, int], 
                            intent_version: str) -> Callable:
         """
         Create a game factory function for the simulation.
         
         Args:
-            map_name: Name of the map to load
+            map_nr: Name of the map to load
             grid_size: Grid size tuple (width, height)
             intent_version: Intent version identifier
             
@@ -794,7 +794,7 @@ class GameManager:
             from spoiled_broth.game import SpoiledBroth as Game
             
             game = Game(
-                map_nr=map_name, 
+                map_nr=map_nr, 
                 grid_size=grid_size, 
                 intent_version=intent_version
             )
@@ -850,14 +850,14 @@ class SimulationRunner:
         self.ray_manager = RayManager()
         self.game_manager = GameManager(config)
         
-    def run_simulation(self, map_name: str, num_agents: int, intent_version: str,
+    def run_simulation(self, map_nr: str, num_agents: int, intent_version: str,
                       cooperative: bool, game_version: str, training_id: str,
                       checkpoint_number: int, timestamp: str) -> Dict[str, Path]:
         """
         Run a complete simulation.
         
         Args:
-            map_name: Name of the map
+            map_nr: Name of the map
             num_agents: Number of agents
             intent_version: Intent version identifier
             cooperative: Whether this is cooperative
@@ -869,7 +869,7 @@ class SimulationRunner:
         Returns:
             Dictionary containing output file paths
         """
-        print(f"Starting simulation: {map_name}, {num_agents} agents, {intent_version}")
+        print(f"Starting simulation: {map_nr}, {num_agents} agents, {intent_version}")
         
         # Initialize Ray
         self.ray_manager.initialize_ray()
@@ -877,7 +877,7 @@ class SimulationRunner:
         try:
             # Setup paths
             paths = self.path_manager.setup_paths(
-                map_name, num_agents, intent_version, cooperative,
+                map_nr, num_agents, intent_version, cooperative,
                 game_version, training_id, checkpoint_number
             )
             
@@ -895,25 +895,25 @@ class SimulationRunner:
             
             # Setup logging with simulation configuration
             simulation_config = {
-                'map_name': map_name,
-                'num_agents': num_agents,
-                'intent_version': intent_version,
-                'cooperative': cooperative,
-                'game_version': game_version,
-                'training_id': training_id,
-                'cluster': self.config.cluster,
-                'duration': self.config.duration_seconds,
-                'tick_rate': self.config.engine_tick_rate,
-                'ai_tick_rate': self.config.ai_tick_rate,
-                'agent_speed': self.config.agent_speed_px_per_sec,
-                'grid_size': grid_size,
-                'tile_size': self.config.tile_size,
-                'enable_video': self.config.enable_video,
-                'video_fps': self.config.video_fps,
-                'controller_type': controller_type,
-                'use_lstm': controller_type == 'lstm',
-                'checkpoint_dir': str(paths['checkpoint_dir']),
-                'map_file': str(paths['map_txt_path'])
+                'MAP_NR': map_nr,
+                'NUM_AGENTS': num_agents,
+                'INTENT_VERSION': intent_version,
+                'COOPERATIVE': cooperative,
+                'GAME_VERSION': game_version,
+                'TRAINING_ID': training_id,
+                'CLUSTER': self.config.cluster,
+                'DURATION': self.config.duration_seconds,
+                'TICK_RATE': self.config.engine_tick_rate,
+                'AI_TICK_RATE': self.config.ai_tick_rate,
+                'AGENT_SPEED': self.config.agent_speed_px_per_sec,
+                'GRID_SIZE': grid_size,
+                'TILE_SIZE': self.config.tile_size,
+                'ENABLE_VIDEO': self.config.enable_video,
+                'VIDEO_FPS': self.config.video_fps,
+                'CONTROLLER_TYPE': controller_type,
+                'USE_LSTM': controller_type == 'lstm',
+                'CHECKPOINT_DIR': str(paths['checkpoint_dir']),
+                'MAP_FILE': str(paths['map_txt_path'])
             }
             
             data_logger = DataLogger(paths['saving_path'], checkpoint_number, timestamp, simulation_config)
@@ -921,7 +921,7 @@ class SimulationRunner:
             
             # Setup game
             game_factory = self.game_manager.create_game_factory(
-                map_name, grid_size, intent_version
+                map_nr, grid_size, intent_version
             )
             
             # Run the simulation
@@ -1121,7 +1121,7 @@ def setup_simulation_argument_parser() -> argparse.ArgumentParser:
     )
     
     parser.add_argument(
-        'map_name',
+        'map_nr',
         type=str,
         help='Map name identifier'
     )
@@ -1203,7 +1203,7 @@ def setup_simulation_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main_simulation_pipeline(map_name: str, num_agents: int, intent_version: str,
+def main_simulation_pipeline(map_nr: str, num_agents: int, intent_version: str,
                            cooperative: bool, game_version: str, training_id: str,
                            checkpoint_number: int, enable_video: bool = True,
                            cluster: str = 'cuenca', duration: int = 180,
@@ -1212,8 +1212,8 @@ def main_simulation_pipeline(map_name: str, num_agents: int, intent_version: str
     Main simulation pipeline that can be used by different simulation scripts.
     
     Args:
-        map_name: Map name identifier
-        num_agents: Number of agents
+        MAP_NR: Map name identifier
+        NUM_AGENTS: Number of agents
         intent_version: Intent version identifier
         cooperative: Whether simulation is cooperative
         game_version: Game version identifier
@@ -1244,7 +1244,7 @@ def main_simulation_pipeline(map_name: str, num_agents: int, intent_version: str
     runner = SimulationRunner(config)
     
     output_paths = runner.run_simulation(
-        map_name=map_name,
+        map_nr=map_nr,
         num_agents=num_agents,
         intent_version=intent_version,
         cooperative=cooperative,
