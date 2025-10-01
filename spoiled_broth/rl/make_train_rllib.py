@@ -36,10 +36,10 @@ def make_train_rllib(config):
         for key, val in config.items():
             f.write(f"{key}: {val}\n")
 
-    if config["GAME_VERSION"] == "CLASSIC":
+    if config["GAME_VERSION"] == "classic":
         # Register the environment with RLLib
         register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator(cfg)))
-    elif config["GAME_VERSION"] == "COMPETITION":
+    elif config["GAME_VERSION"] == "competition":
         # Register the environment with RLLib
         register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator_competition(cfg)))
     else:
@@ -51,14 +51,14 @@ def make_train_rllib(config):
     policies = {}
     policies_to_train = []
     for agent_id in agent_ids:
-        if config["GAME_VERSION"] == "CLASSIC":
+        if config["GAME_VERSION"] == "classic":
             policies[f"policy_{agent_id}"] = (
                 None,  # Use default PPO policy
                 env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space(agent_id),
                 env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space(agent_id),
                 {}
             )
-        elif config["GAME_VERSION"] == "COMPETITION":
+        elif config["GAME_VERSION"] == "competition":
             policies[f"policy_{agent_id}"] = (
                 None,  # Use default PPO policy
                 env_creator_competition({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space(agent_id),
