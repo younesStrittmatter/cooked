@@ -28,24 +28,20 @@ class RLlibController(Controller):
         # Obtain the specific policy module
         self.policy_module = self.multi_rl_module[self.policy_id]
 
-    def choose_action(self, observation):
+    def choose_action(self, observation):      
         # Check if a previous action just completed and needs to be logged
         if hasattr(self.agent, 'current_action') and self.agent.current_action is not None:
             if getattr(self.agent, 'action_complete', True):
                 # Action just completed, log its end
                 if hasattr(self.agent.game, 'action_tracker'):
-                    # Try to end the action, but don't force it if minimum duration hasn't passed
+                    # Force end the action - the game engine says it's complete
                     action_ended = self.agent.game.action_tracker.end_action(self.agent_id, time.time())
-                    if action_ended:
-                        # Action successfully ended
-                        self.agent.current_action = None
-                    else:
-                        # Action not ready to end yet, keep it active
-                        return None  # Don't choose new action yet
+                    print(f"[CONTROLLER] Forced end of completed action for {self.agent_id}: {action_ended}")
                 else:
                     print(f"[CONTROLLER] No action_tracker found on agent.game for {self.agent_id}")
-                    # Clear the current action
-                    self.agent.current_action = None
+                
+                # Always clear the current action when game engine says it's complete
+                self.agent.current_action = None
         
         # If a previous action is still in progress, don't choose a new one.
         # NOTE: Do NOT mutate agent state here; the Engine/Agent update loop is
@@ -55,7 +51,7 @@ class RLlibController(Controller):
             return None
             
         # Don't choose a new action if current one is still in progress
-        if not self.agent.action_complete:
+        if not getattr(self.agent, 'action_complete', True):
             return None
         
         # Select correct obs function
@@ -92,13 +88,13 @@ class RLlibController(Controller):
             # Handle "do nothing" action
             if action_number == -1:
                 if hasattr(self.agent.game, 'action_tracker'):
-                    # Track do_nothing as a start - let it be ended later like other actions
+                    # Track do_nothing with proper action number
                     self.agent.game.action_tracker.start_action(
                         self.agent_id,
                         "do_nothing",
                         None,
                         time.time(),
-                        action_number=-1
+                        action_number=None  # Let tracker generate proper action number
                     )
                 else:
                     print(f"[CONTROLLER] No action_tracker found for do_nothing")

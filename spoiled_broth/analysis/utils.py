@@ -106,6 +106,7 @@ class DataProcessor:
         csv_path = os.path.join(folder_path, "training_stats.csv")
         
         if not (os.path.exists(config_path) and os.path.exists(csv_path)):
+            print(f"Missing config or CSV in {folder_path}")
             return None
         
         # Parse config file
@@ -114,11 +115,13 @@ class DataProcessor:
         
         matches = self.reward_pattern.findall(config_contents)
         if len(matches) != num_agents:
+            print(f"Expected {num_agents} agents, found {len(matches)} in {folder_path}")
             return None
         
         # Extract learning rate
         lr_match = re.search(r"LR:\s*([0-9.eE+-]+)", config_contents)
         if not lr_match:
+            print(f"Learning rate not found in {folder_path}")
             return None
         lr = float(lr_match.group(1))
         
@@ -166,7 +169,8 @@ class DataProcessor:
             "Competitive": paths['competitive_dir'],
             "Cooperative": paths['cooperative_dir']
         }
-        
+        print("Loading experiment data from directories:", base_dirs.items())
+
         for game_type, base_dir in base_dirs.items():
             if not os.path.exists(base_dir):
                 continue
@@ -230,8 +234,8 @@ class DataProcessor:
             df["pure_reward_total"] = df["pure_reward_ai_rl_1"]
             df["total_deliveries"] = np.where(
                 df["game_type"] == 1,
-                df["total_deliveries_ai_rl_1"],
-                df["total_deliveries_ai_rl_1"]
+                df["delivered_ai_rl_1"],
+                df["delivered_ai_rl_1"]
             )
         else:  # num_agents == 2
             df["attitude_key"] = df.apply(
@@ -239,11 +243,8 @@ class DataProcessor:
                 axis=1
             )
             df["pure_reward_total"] = df["pure_reward_ai_rl_1"] + df["pure_reward_ai_rl_2"]
-            df["total_deliveries"] = np.where(
-                df["game_type"] == 1,
-                df["total_deliveries_ai_rl_1"],
-                df["total_deliveries_ai_rl_1"] + df["total_deliveries_ai_rl_2"]
-            )
+            # For classic experiments, total deliveries is always the sum of both agents
+            df["total_deliveries"] = df["delivered_ai_rl_1"] + df["delivered_ai_rl_2"]
         
         return df
 
@@ -702,7 +703,8 @@ def main_analysis_pipeline(experiment_type: str, intent_version: str, map_name: 
     paths = processor.setup_directories(experiment_type, intent_version, map_name, cluster)
     
     # Determine number of agents based on experiment type
-    num_agents = 2 if experiment_type == 'competition' else 1
+    # Classic experiments are actually 2-agent experiments
+    num_agents = 2
     
     # Load and process data
     raw_df = processor.load_experiment_data(paths, num_agents)

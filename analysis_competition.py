@@ -6,10 +6,10 @@ This script analyzes training results from two-agent competitive experiments,
 generating comprehensive visualizations and statistics.
 
 Usage:
-    python analysis_competition.py <intent_version> <map_name> [options]
+nohup python analysis_competition.py <intent_version> <map_name> [options] > analysis_competition.log 2>&1 &
 
 Example:
-    python analysis_competition.py v3.1 simple_kitchen_competition --cluster cuenca --smoothing-factor 15
+nohup python analysis_competition.py v3.1 simple_kitchen_competition --cluster cuenca --smoothing-factor 15 > analysis_competition.log 2>&1 &
 """
 
 import sys

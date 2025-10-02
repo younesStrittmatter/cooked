@@ -6,10 +6,10 @@ This script analyzes training results from experiments using pretrained models,
 generating comprehensive visualizations and statistics.
 
 Usage:
-    python analysis_pretrained.py <intent_version> <map_name> [options]
+nohup python analysis_pretrained.py <intent_version> <map_name> [options] > analysis_pretrained.log 2>&1 &
 
 Example:
-    python analysis_pretrained.py v3.1 simple_kitchen_circular --cluster cuenca --smoothing-factor 15
+nohup python analysis_pretrained.py v3.1 simple_kitchen_circular --cluster cuenca --smoothing-factor 15 > analysis_pretrained.log 2>&1 &
 """
 
 import sys
