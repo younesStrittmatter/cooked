@@ -77,6 +77,8 @@ class GameManager:
                         obj.action_complete = True
                     if hasattr(obj, 'current_action'):
                         obj.current_action = None
+                    if hasattr(obj, 'is_busy'):
+                        obj.is_busy = False
                     if hasattr(obj, 'speed'):
                         obj.speed = self.config.agent_speed_px_per_sec
                         

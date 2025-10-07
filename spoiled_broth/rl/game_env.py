@@ -252,6 +252,7 @@ class GameEnv(ParallelEnv):
         }
         self.total_actions_asked = {agent_id: 0 for agent_id in self.agents}
         self.total_actions_not_performed = {agent_id: 0 for agent_id in self.agents}
+        self.total_actions_inaccessible = {agent_id: 0 for agent_id in self.agents}
 
         self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version, seed=self.seed)
 
@@ -263,6 +264,8 @@ class GameEnv(ParallelEnv):
         for agent_id, agent in self.agent_map.items():
             agent.action_complete = True
             agent.current_action = None
+            agent.is_busy = False
+            agent.is_busy = False
 
         # --- New observation space: flatten (channels, H, W) + (2, 4) inventory ---
         obs_matrix, agent_inventory = game_to_obs_matrix(self.game, self.agents[0])
@@ -356,6 +359,11 @@ class GameEnv(ParallelEnv):
             self.total_actions_asked[agent_id] += 1
             agent_obj = self.game.gameObjects[agent_id]
 
+            # Check if agent is busy (e.g., cutting)
+            if getattr(agent_obj, "is_busy", False):
+                self.total_actions_not_performed[agent_id] += 1
+                continue  # Skip this agent's action processing
+
             # Check if agent wants to do nothing
             if action == len(self.clickable_indices):  # Last action index = do nothing
                 self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING] = self.total_action_types[agent_id].get(ACTION_TYPE_DO_NOTHING, 0) + 1
@@ -411,6 +419,10 @@ class GameEnv(ParallelEnv):
         for agent_id, action in actions_dict.items():
             agent = self.game.gameObjects[agent_id]
             
+            # Skip agents that are busy (e.g., cutting)
+            if getattr(agent, 'is_busy', False):
+                continue
+                
             # Skip agents that are still completing their previous action
             if not getattr(agent, 'action_complete', True):
                 continue

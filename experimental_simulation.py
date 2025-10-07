@@ -17,7 +17,7 @@ For background execution:
 nohup python experimental_simulation.py <map_nr> <num_agents> <intent_version> <cooperative> <game_version> <training_id> <checkpoint_number> [options] > experimental_simulation.log 2>&1 &
 
 Example:
-python experimental_simulation.py simple_kitchen_circular 2 v3.1 1 competition training_001 50 --enable-video true --cluster cuenca --duration 600 --tick-rate 24 --video-fps 24
+nohup python experimental_simulation.py simple_kitchen_circular 2 v3.1 1 competition training_001 50 --enable_video true --cluster cuenca --duration 600 --tick_rate 24 --video-fps 24 > experimental_simulation.log 2>&1 &
 """
 
 import sys
@@ -32,7 +32,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from spoiled_broth.simulations import (
     setup_simulation_argument_parser, 
     main_simulation_pipeline,
-    analyze_meaningful_actions
+    analyze_meaningful_actions,
+    generate_agent_position_files,
+    generate_agent_action_files
 )
 
 
@@ -168,6 +170,50 @@ def main():
             except Exception as e:
                 print(f"\nError during meaningful actions analysis: {e}")
                 print("Continuing without meaningful actions analysis...")
+            
+            # Generate agent position files
+            print("\n" + "=" * 50)
+            print("GENERATING AGENT POSITION FILES")
+            print("=" * 50)
+            
+            try:
+                # Generate position files for each agent
+                position_files = generate_agent_position_files(
+                    simulation_df, 
+                    output_paths['simulation_dir']
+                )
+                
+                print(f"\nAgent position files generated:")
+                for agent_id, filepath in position_files.items():
+                    print(f"  {agent_id}: {filepath}")
+                    
+            except Exception as e:
+                print(f"\nError during position file generation: {e}")
+                print("Continuing without position file generation...")
+            
+            # Generate agent action files
+            print("\n" + "=" * 50)
+            print("GENERATING AGENT ACTION FILES")
+            print("=" * 50)
+            
+            try:
+                # Generate action files for each agent
+                action_files = generate_agent_action_files(
+                    meaningful_df,
+                    simulation_df, 
+                    output_paths['simulation_dir'],
+                    map_name=args.map_nr,
+                    simulation_id=output_paths['simulation_dir'].name,
+                    engine_tick_rate=args.tick_rate
+                )
+                
+                print(f"\nAgent action files generated:")
+                for agent_id, filepath in action_files.items():
+                    print(f"  {agent_id}: {filepath}")
+                    
+            except Exception as e:
+                print(f"\nError during action file generation: {e}")
+                print("Continuing without action file generation...")
             
             print("=" * 50)
             print(f"\nExecution completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

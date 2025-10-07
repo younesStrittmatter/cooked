@@ -100,14 +100,16 @@ class CSVDataExtractor:
             base_cluster_dir = "C:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado"
         else:
             base_cluster_dir = ""
-            
+
+        base_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}")
+
         simulation_path = Path(
-            f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/"
-            f"{intent_version}/map_{map_nr}/{cooperative_dir}/Training_{training_id}/"
+            f"{base_dir}/{cooperative_dir}/Training_{training_id}/"
             f"simulations_{checkpoint_number}/simulation_{simulation_id}"
         )
-        
-        return simulation_path
+
+        saving_path = base_dir / "sindy_models" / f"Training_{training_id}" / f"simulations_{checkpoint_number}"
+        return simulation_path, saving_path
     
     def find_all_simulations(self, map_nr: str, training_id: str, checkpoint_number: str, 
                            **kwargs) -> List[str]:
@@ -176,7 +178,7 @@ class CSVDataExtractor:
         Returns:
             Dictionary containing 'simulation' and 'actions' DataFrames
         """
-        sim_path = self.get_simulation_path(map_nr, training_id, checkpoint_number, 
+        sim_path, saving_path = self.get_simulation_path(map_nr, training_id, checkpoint_number, 
                                           simulation_id, **kwargs)
         
         sim_csv = sim_path / "simulation.csv"
@@ -203,7 +205,7 @@ class CSVDataExtractor:
             'checkpoint_number': checkpoint_number,
             'simulation_id': simulation_id,
             'path': sim_path,
-            'sindy_output_dir': sim_path / 'sindy_models'
+            'sindy_output_dir': saving_path
         }
         
         return data
@@ -261,7 +263,7 @@ class CSVDataExtractor:
         print(f"Combined data: {len(combined_simulation)} simulation rows, {len(combined_actions)} action rows")
         
         # Get metadata from first simulation
-        first_sim_path = self.get_simulation_path(map_nr, training_id, checkpoint_number, simulation_ids[0], **kwargs)
+        first_sim_path, saving_path = self.get_simulation_path(map_nr, training_id, checkpoint_number, simulation_ids[0], **kwargs)
         
         return {
             'simulation': combined_simulation,
@@ -273,7 +275,7 @@ class CSVDataExtractor:
                 'simulation_ids': simulation_ids,
                 'num_simulations': len(simulation_ids),
                 'path': first_sim_path.parent,  # Use simulations_* directory
-                'sindy_output_dir': first_sim_path.parent / 'sindy_models_combined'
+                'sindy_output_dir': saving_path
             }
         }
 

@@ -9,7 +9,7 @@ Usage:
 nohup python analysis_classic.py <intent_version> <map_name> [options] > analysis_classic.log 2>&1 &
  
 Example:
-nohup python analysis_classic.py v3.1 simple_kitchen_circular --cluster cuenca --smoothing-factor 15 > analysis_classic.log 2>&1 &
+nohup python analysis_classic.py v3.1 baseline_division_of_labor > analysis_classic.log 2>&1 &
 """
 
 import sys

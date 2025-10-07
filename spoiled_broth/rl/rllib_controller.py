@@ -54,6 +54,10 @@ class RLlibController(Controller):
         if not getattr(self.agent, 'action_complete', True):
             return None
         
+        # Don't choose a new action if agent is busy (e.g., cutting)
+        if getattr(self.agent, 'is_busy', False):
+            return None
+        
         # Select correct obs function
         self.agent_food_type = {
             "ai_rl_1": "tomato",
@@ -104,6 +108,9 @@ class RLlibController(Controller):
                     "type": "do_nothing", 
                     "start_time": time.time()
                 }
+                # Ensure agent is not marked as busy for do_nothing actions
+                if hasattr(self.agent, 'is_busy'):
+                    self.agent.is_busy = False
                 return self.agent.current_action
     
             if 0 <= action < len(clickable_indices):

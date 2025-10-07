@@ -43,6 +43,18 @@ from .meaningful_actions import (
     analyze_meaningful_actions_from_files
 )
 
+# Human-like data extraction
+from .positions_extraction_like_humans import (
+    generate_agent_position_files,
+    extract_agent_trajectories
+)
+
+from .actions_extraction_like_humans import (
+    generate_agent_action_files,
+    extract_detailed_action_sequences,
+    merge_actions_with_positions
+)
+
 __all__ = [
     # Configuration
     'SimulationConfig',
@@ -67,5 +79,12 @@ __all__ = [
     
     # Meaningful actions analysis
     'analyze_meaningful_actions',
-    'analyze_meaningful_actions_from_files'
+    'analyze_meaningful_actions_from_files',
+    
+    # Human-like data extraction
+    'generate_agent_position_files',
+    'extract_agent_trajectories',
+    'generate_agent_action_files',
+    'extract_detailed_action_sequences',
+    'merge_actions_with_positions'
 ]

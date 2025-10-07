@@ -49,8 +49,74 @@ class ItemExchangeIntent(_base_intent.Intent):
     def finished(self, agent):
         return self.has_ended
 
-
 class CuttingBoardIntent(_base_intent.Intent):
+    def __init__(self, tile, version):
+        super().__init__()
+        self.tile = tile
+        self.version = version
+        self.has_ended = False
+        self.is_cutting = False  # Indicates agent is busy cutting
+        self._elapsed = 0.0
+        self._required_cut_time = 3.0
+
+    def update(self, agent, delta_time: float):
+        if not self.is_cutting:
+            # Single click behavior: start cutting immediately if agent has a valid item
+            if agent.item in ['tomato', 'pumpkin', 'cabbage']:
+                # Put item on board and start cutting process
+                self.tile.item = agent.item
+                agent.item = None
+                self.is_cutting = True
+                self.tile.cut_by = agent.id
+                self.tile.cut_time_accumulated = 0
+                # Mark agent as busy (this prevents new actions)
+                agent.is_busy = True
+            else:
+                # No valid item to cut, end intent
+                self.has_ended = True
+        else:
+            # Agent is cutting - accumulate time
+            try:
+                speed = float(getattr(agent, 'cut_speed', 1.0))
+            except Exception:
+                speed = 1.0
+
+            self._elapsed += delta_time * speed
+
+            # Keep tile accumulator in sync for compatibility
+            try:
+                self.tile.cut_time_accumulated += delta_time * speed
+            except Exception:
+                pass
+
+            # When cutting time is complete, give cut item to agent
+            if self._elapsed >= self._required_cut_time:
+                if self.tile.item is not None:
+                    orig = self.tile.item
+                    agent.item = f"{orig}_cut"
+                    self.tile.cut_item = agent.item
+                    self.tile.item = None  # Clear the cutting board
+                    
+                # Reset tile state
+                try:
+                    self.tile.cut_time_accumulated = 0
+                except Exception:
+                    pass
+                
+                # Release agent from busy state
+                agent.is_busy = False
+                self.has_ended = True
+
+    def finished(self, agent):
+        return self.has_ended
+    
+    def is_agent_busy(self):
+        """Returns True if the agent should not accept new actions"""
+        return self.is_cutting
+
+
+# --------------- LEGACY INTENTS (to be removed) -----------------
+class old_CuttingBoardIntent(_base_intent.Intent):
     def __init__(self, tile, version):
         super().__init__()
         self.tile = tile

@@ -22,6 +22,7 @@ class Agent(agent.Agent):
         self.score = 0
         self.current_action = None
         self.action_complete = True  # Initially no action is in progress
+        self.is_busy = False  # Initially not busy with any time-consuming operation
         # Maximum time (seconds) to consider an action valid before forcing completion
         self.ACTION_TIMEOUT = 5.0
         hair_n = random.randint(0, 8)
@@ -64,8 +65,8 @@ class Agent(agent.Agent):
 
         # Check if there are actions for this agent
         if self.id in actions:
-            # If we're getting a new action but the current one isn't complete, ignore it
-            if not self.action_complete:
+            # If we're getting a new action but the current one isn't complete or agent is busy, ignore it
+            if not self.action_complete or getattr(self, 'is_busy', False):
                 # Remove the new action from the actions dict to prevent it from being processed
                 actions.pop(self.id)
             else:
