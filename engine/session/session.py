@@ -10,7 +10,8 @@ class Session:
                  agent_map,
                  tick_rate,
                  ai_tick_rate,
-                 is_max_speed):
+                 is_max_speed,
+                 agent_initialization_period=15.0):
         self.id = secrets.token_hex(8)
         self.engine = Engine(game_factory(),
                              tick_rate=tick_rate,
@@ -23,7 +24,8 @@ class Session:
             agent_map=agent_map,
             tick_rate=tick_rate,
             ai_tick_rate=ai_tick_rate,
-            is_max_speed=is_max_speed
+            is_max_speed=is_max_speed,
+            agent_initialization_period=agent_initialization_period
         )
 
     def add_agent(self, agent_id):

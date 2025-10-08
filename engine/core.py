@@ -25,6 +25,10 @@ class Engine:
         self.intent_buffer: Dict[str, str] = {}
 
     def submit_intent(self, agent_id: str, action: str):
+        # Don't overwrite existing intents with None - None means "no new action, keep existing"
+        if action is None:
+            return
+            
         # Log when an existing intent for the agent is being overwritten.
         prev = self.intent_buffer.get(agent_id)
         if prev is not None and prev != action:

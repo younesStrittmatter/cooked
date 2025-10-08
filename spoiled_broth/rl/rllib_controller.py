@@ -29,20 +29,6 @@ class RLlibController(Controller):
         self.policy_module = self.multi_rl_module[self.policy_id]
 
     def choose_action(self, observation):      
-        # Check if a previous action just completed and needs to be logged
-        if hasattr(self.agent, 'current_action') and self.agent.current_action is not None:
-            if getattr(self.agent, 'action_complete', True):
-                # Action just completed, log its end
-                if hasattr(self.agent.game, 'action_tracker'):
-                    # Force end the action - the game engine says it's complete
-                    action_ended = self.agent.game.action_tracker.end_action(self.agent_id, time.time())
-                    print(f"[CONTROLLER] Forced end of completed action for {self.agent_id}: {action_ended}")
-                else:
-                    print(f"[CONTROLLER] No action_tracker found on agent.game for {self.agent_id}")
-                
-                # Always clear the current action when game engine says it's complete
-                self.agent.current_action = None
-        
         # If a previous action is still in progress, don't choose a new one.
         # NOTE: Do NOT mutate agent state here; the Engine/Agent update loop is
         # responsible for marking actions complete. Controllers called from an
@@ -85,23 +71,18 @@ class RLlibController(Controller):
         
         # Get clickable indices directly from the game
         clickable_indices = getattr(self.agent.game, 'clickable_indices', None)
+        
+        # Log the raw action integer to CSV if raw_action_logger exists
+        if hasattr(self.agent.game, 'raw_action_logger') and clickable_indices is not None:
+            self.agent.game.raw_action_logger.log_action(
+                self.agent_id, action, self.agent.game, clickable_indices
+            )
         if clickable_indices is not None:
             # Convert action to -1 for "do nothing" when it's the last action
             action_number = -1 if action == len(clickable_indices) else action
             
             # Handle "do nothing" action
             if action_number == -1:
-                if hasattr(self.agent.game, 'action_tracker'):
-                    # Track do_nothing with proper action number
-                    self.agent.game.action_tracker.start_action(
-                        self.agent_id,
-                        "do_nothing",
-                        None,
-                        time.time(),
-                        action_number=None  # Let tracker generate proper action number
-                    )
-                else:
-                    print(f"[CONTROLLER] No action_tracker found for do_nothing")
                 # Set up action state like other actions
                 self.agent.action_complete = False
                 self.agent.current_action = {
@@ -120,17 +101,6 @@ class RLlibController(Controller):
                 y = tile_index // grid.width
                 tile = grid.tiles[x][y]
                 if tile and hasattr(tile, "click"):
-                    # Record action start
-                    if hasattr(self.agent.game, 'action_tracker'):
-                        self.agent.game.action_tracker.start_action(
-                            self.agent_id,
-                            "click",
-                            tile,
-                            time.time(),
-                            action_number=action
-                        )
-                    else:
-                        print(f"[CONTROLLER] No action_tracker found for click")
                     self.agent.action_complete = False
                     self.agent.current_action = {
                         "type": "click", 
@@ -143,8 +113,6 @@ class RLlibController(Controller):
                     # Mark action as complete if tile is invalid
                     self.agent.action_complete = True
                     self.agent.current_action = None
-                    if hasattr(self.agent.game, 'action_tracker'):
-                        self.agent.game.action_tracker.end_action(self.agent_id, time.time())
                     return None
 
         else:
@@ -156,14 +124,6 @@ class RLlibController(Controller):
             tile = grid.tiles[x][y]
             if tile and hasattr(tile, "click"):
                 # Record action start with the full tile object
-                if hasattr(self.agent.game, 'action_tracker'):
-                    self.agent.game.action_tracker.start_action(
-                        self.agent_id,
-                        "click",
-                        tile,
-                        time.time(),
-                        action_number=action
-                    )
                 self.agent.action_complete = False
                 self.agent.current_action = {
                     "type": "click", 

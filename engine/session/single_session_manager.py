@@ -7,7 +7,7 @@ class SingleSessionManager:
     Manages a single session that starts immediately without waiting for human players.
     """
     
-    def __init__(self, game_factory, ui_modules, agent_map, tick_rate, ai_tick_rate, is_max_speed):
+    def __init__(self, game_factory, ui_modules, agent_map, tick_rate, ai_tick_rate, is_max_speed, agent_initialization_period=15.0):
         """
         Initialize the Single Session Manager for AI-only operation.
         
@@ -17,6 +17,7 @@ class SingleSessionManager:
         :param tick_rate: The tick rate of the game
         :param ai_tick_rate: The decision rate of the agents
         :param is_max_speed: Whether the game should run at max speed (useful for training agents)
+        :param agent_initialization_period: The agent initialization period in seconds
         """
         self.game_factory = game_factory
         self.ui_modules = ui_modules
@@ -24,6 +25,7 @@ class SingleSessionManager:
         self.tick_rate = tick_rate
         self.ai_tick_rate = ai_tick_rate
         self.is_max_speed = is_max_speed
+        self.agent_initialization_period = agent_initialization_period
         self.session = None
         self.session_id = None
         
@@ -40,7 +42,8 @@ class SingleSessionManager:
                 self.agent_map,
                 self.tick_rate,
                 self.ai_tick_rate,
-                self.is_max_speed
+                self.is_max_speed,
+                self.agent_initialization_period
             )
             self.session_id = self.session.id
             
@@ -51,7 +54,18 @@ class SingleSessionManager:
             for agent_id in self.agent_map.keys():
                 self.session.add_agent(agent_id)
             
-            # Start the session immediately
+            # Ensure agents are properly positioned before starting the engine
+            import time
+            time.sleep(0.1)  # Small delay to ensure all agents are properly initialized
+            
+            # Verify agent positions are set
+            game = self.session.engine.game
+            for agent_id in self.agent_map.keys():
+                agent = game.gameObjects.get(agent_id)
+                if agent and hasattr(agent, 'x') and hasattr(agent, 'y'):
+                    print(f"Agent {agent_id} initialized at position ({agent.x}, {agent.y})")
+            
+            # Start the session
             self.session.start()
             print(f"AI-only session started with ID: {self.session_id}")
             print(f"Added {len(self.agent_map)} AI agents to the session")

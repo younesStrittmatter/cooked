@@ -63,6 +63,26 @@ class Agent(agent.Agent):
     def update(self, actions: dict, delta_time: float):
         super().update(actions, delta_time)
 
+        # Check if we're in agent initialization period
+        # During this time, agents should not process any actions
+        # Use engine tick information if available, otherwise fall back to frame count
+        if hasattr(self.game, 'engine') and hasattr(self.game.engine, 'tick_count') and hasattr(self.game.engine, 'tick_interval'):
+            game_time = self.game.engine.tick_count * self.game.engine.tick_interval
+        else:
+            # Fallback: assume 24 FPS if engine info not available
+            game_time = getattr(self.game, 'frame_count', 0) / 24.0
+        
+        # Get initialization period from game runner if available, otherwise use default
+        initialization_period = 15.0  # Default fallback
+        if hasattr(self.game, 'engine') and hasattr(self.game.engine, '_runner'):
+            initialization_period = getattr(self.game.engine._runner, 'agent_initialization_period', 15.0)
+        
+        if game_time < initialization_period:
+            # Remove any actions for this agent during initialization
+            if self.id in actions:
+                actions.pop(self.id)
+            return
+
         # Check if there are actions for this agent
         if self.id in actions:
             # If we're getting a new action but the current one isn't complete or agent is busy, ignore it

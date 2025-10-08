@@ -12,16 +12,20 @@ import math
 from pathlib import Path
 
 
-def generate_agent_position_files(simulation_df, output_dir):
+def generate_agent_position_files(simulation_df, output_dir, agent_initialization_period=15.0):
     """
     Generate position CSV files for each agent from simulation data.
     
     Creates individual CSV files for each agent with columns:
     second, x, y, distance_walked, walking_speed, cutting_speed, start_pos
     
+    The function filters out the initialization period and adjusts time so that
+    the first second after initialization becomes second 0.
+    
     Args:
         simulation_df: DataFrame with simulation data or path to CSV file
         output_dir: Directory to save the position files
+        agent_initialization_period: Duration of agent initialization period in seconds (default 15.0)
         
     Returns:
         Dictionary with paths to generated position files {agent_id: filepath}
@@ -42,6 +46,17 @@ def generate_agent_position_files(simulation_df, output_dir):
         agent_data = simulation_df[simulation_df['agent_id'] == agent_id].copy()
         agent_data = agent_data.sort_values('frame').reset_index(drop=True)
         
+        # Filter out initialization period (keep only data after initialization period)
+        agent_data = agent_data[agent_data['second'] >= agent_initialization_period].copy()
+        
+        if agent_data.empty:
+            print(f"Warning: No data for {agent_id} after initialization period of {agent_initialization_period} seconds")
+            continue
+        
+        # Adjust time so that first second after initialization becomes second 0
+        agent_data['second'] = agent_data['second'] - agent_initialization_period
+        agent_data = agent_data.reset_index(drop=True)
+        
         # Calculate distance walked
         agent_data['distance_walked'] = 0.0
         
@@ -57,17 +72,13 @@ def generate_agent_position_files(simulation_df, output_dir):
                 distance_step = math.sqrt((curr_x - prev_x)**2 + (curr_y - prev_y)**2)
                 agent_data.loc[i, 'distance_walked'] = agent_data.loc[i-1, 'distance_walked'] + distance_step
         
-        # Get start position (tile coordinates at frame 0)
-        start_frame_data = agent_data[agent_data['frame'] == 0]
-        if not start_frame_data.empty:
-            start_tile_x = start_frame_data.iloc[0]['tile_x']
-            start_tile_y = start_frame_data.iloc[0]['tile_y']
-            start_pos = f"({start_tile_x}, {start_tile_y})"
-        else:
-            # Fallback to first available frame
+        # Get start position (tile coordinates from first frame after initialization)
+        if not agent_data.empty:
             start_tile_x = agent_data.iloc[0]['tile_x']
             start_tile_y = agent_data.iloc[0]['tile_y']
             start_pos = f"({start_tile_x}, {start_tile_y})"
+        else:
+            start_pos = "(0, 0)"  # Fallback if no data available
         
         # Create the position dataframe with required columns
         position_data = pd.DataFrame({

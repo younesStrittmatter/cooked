@@ -19,7 +19,8 @@ class AIOnlySessionApp:
                  path_root=None,
                  tick_rate=24,
                  ai_tick_rate=5,
-                 is_max_speed=False):
+                 is_max_speed=False,
+                 agent_initialization_period=15.0):
         """
         Initialize the AI-Only Session App (Flask app)
 
@@ -30,6 +31,7 @@ class AIOnlySessionApp:
         :param tick_rate: How often the game updates per second
         :param ai_tick_rate: How often the agents make decisions per seconds
         :param is_max_speed: Whether the game should run at max speed (useful for training agents)
+        :param agent_initialization_period: The agent initialization period in seconds
         """
 
         self.app = Flask(__name__)
@@ -47,7 +49,8 @@ class AIOnlySessionApp:
             agent_map=agent_map or {},
             tick_rate=tick_rate,
             ai_tick_rate=ai_tick_rate,
-            is_max_speed=is_max_speed
+            is_max_speed=is_max_speed,
+            agent_initialization_period=agent_initialization_period
         )
 
         # Use AI-only routes instead of regular engine routes

@@ -10,6 +10,10 @@ agent behaviors based on item state changes.
 The script automatically saves all output (including meaningful actions analysis)
 to a log file in the simulation directory.
 
+IMPORTANT: The simulation includes a 15-second initialization period where agents
+are positioned but do not perform any actions. This ensures complete system
+stabilization and prevents teleportation artifacts.
+
 Usage:
 python experimental_simulation.py <map_nr> <num_agents> <intent_version> <cooperative> <game_version> <training_id> <checkpoint_number> [options]
 
@@ -91,8 +95,11 @@ def main():
     print(f"Checkpoint: {args.checkpoint_number}")
     print(f"Video recording: {'Enabled' if enable_video else 'Disabled'}")
     print(f"Cluster: {args.cluster}")
-    print(f"Duration: {args.duration} seconds")
+    print(f"Duration: {args.duration} seconds gameplay (+ 15s initialization = {args.duration + 15}s total)")
     print(f"Tick rate: {args.tick_rate} FPS")
+    print("Note: First 15 seconds are agent initialization period (no actions)")
+    print("Note: Requested duration refers to active gameplay time, not total simulation time")
+    print("=" * 50)
     
     try:
         # Run main simulation pipeline
@@ -180,7 +187,8 @@ def main():
                 # Generate position files for each agent
                 position_files = generate_agent_position_files(
                     simulation_df, 
-                    output_paths['simulation_dir']
+                    output_paths['simulation_dir'],
+                    agent_initialization_period=15.0  # Default from SimulationConfig
                 )
                 
                 print(f"\nAgent position files generated:")
@@ -204,7 +212,8 @@ def main():
                     output_paths['simulation_dir'],
                     map_name=args.map_nr,
                     simulation_id=output_paths['simulation_dir'].name,
-                    engine_tick_rate=args.tick_rate
+                    engine_tick_rate=args.tick_rate,
+                    agent_initialization_period=15.0  # Default from SimulationConfig
                 )
                 
                 print(f"\nAgent action files generated:")

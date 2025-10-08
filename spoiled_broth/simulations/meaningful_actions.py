@@ -94,10 +94,13 @@ def find_nearby_tiles(agent_x, agent_y, actions_df, tile_types):
     
     for pos_x, pos_y in adjacent_positions:
         # Find actions that target this position with the specified tile types
+        # Filter out actions with NaN coordinates (e.g., do_nothing actions)
         matching_actions = actions_df[
             (actions_df['target_tile_x'] == pos_x) & 
             (actions_df['target_tile_y'] == pos_y) & 
-            (actions_df['target_tile_type'].isin(tile_types))
+            (actions_df['target_tile_type'].isin(tile_types)) &
+            (pd.notna(actions_df['target_tile_x'])) &
+            (pd.notna(actions_df['target_tile_y']))
         ]
         
         for _, action in matching_actions.iterrows():
@@ -289,6 +292,17 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
     print(f"Rows with NaN in tile_x OR tile_y: {simulation_df[['tile_x', 'tile_y']].isna().any(axis=1).sum()}")
     print(f"Unique agent_ids: {simulation_df['agent_id'].unique()}")
     print(f"Frame range: {simulation_df['frame'].min()} to {simulation_df['frame'].max()}")
+    
+    # Check for NaN values in actions DataFrame
+    if 'target_tile_x' in actions_df.columns:
+        nan_actions_x = actions_df['target_tile_x'].isna().sum()
+        print(f"NaN values in actions target_tile_x: {nan_actions_x}")
+        if nan_actions_x > 0:
+            print("Sample actions with NaN target_tile_x (likely do_nothing actions):")
+            nan_actions = actions_df[actions_df['target_tile_x'].isna()]
+            print(nan_actions[['agent_id', 'action_id', 'action_number', 'action_type', 'target_tile_x', 'target_tile_y', 'target_tile_type']].head())
+            print(f"Total actions with NaN coordinates: {len(nan_actions)} out of {len(actions_df)} ({100*len(nan_actions)/len(actions_df):.1f}%)")
+    
     print("=== END NaN DEBUGGING ===\n")
     
     # Load map information
@@ -412,6 +426,11 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                     matched_action = None
                     for check_idx in range(current_action_idx, len(agent_actions)):
                         action = agent_actions.iloc[check_idx]
+                        
+                        # Skip actions with NaN coordinates (e.g., do_nothing actions)
+                        if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                            continue
+                            
                         is_near = is_near_target(agent_tile_x, agent_tile_y, 
                                                action['target_tile_x'], action['target_tile_y'])
                         
@@ -475,6 +494,11 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                         matched_action = None
                         for check_idx in range(current_action_idx, len(agent_actions)):
                             action = agent_actions.iloc[check_idx]
+                            
+                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
+                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                continue
+                                
                             is_near = is_near_target(agent_tile_x, agent_tile_y, 
                                                    action['target_tile_x'], action['target_tile_y'])
 
@@ -570,6 +594,11 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                         # Look for counter actions (like putting down tomato and picking up plate from same counter)
                         for check_idx in range(current_action_idx, len(agent_actions)):
                             action = agent_actions.iloc[check_idx]
+                            
+                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
+                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                continue
+                                
                             is_near = is_near_target(agent_tile_x, agent_tile_y, 
                                                    action['target_tile_x'], action['target_tile_y'])
 
@@ -675,6 +704,11 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                             matched_action = None
                             for check_idx in range(current_action_idx, len(agent_actions)):
                                 action = agent_actions.iloc[check_idx]
+                                
+                                # Skip actions with NaN coordinates (e.g., do_nothing actions)
+                                if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                    continue
+                                    
                                 is_near = is_near_target(agent_tile_x, agent_tile_y, 
                                                        action['target_tile_x'], action['target_tile_y'])
                                 
@@ -791,6 +825,10 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                         for check_idx in range(current_action_idx, len(agent_actions)):
                             action = agent_actions.iloc[check_idx]
                             
+                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
+                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                continue
+                            
                             # Check if agent is near the target tile of this action
                             is_near = is_near_target(agent_tile_x, agent_tile_y, 
                                                    action['target_tile_x'], action['target_tile_y'])
@@ -878,6 +916,10 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                         for check_idx in range(current_action_idx, len(agent_actions)):
                             action = agent_actions.iloc[check_idx]
                             
+                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
+                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                continue
+                            
                             # Check if agent is near the target tile of this action
                             is_near = is_near_target(agent_tile_x, agent_tile_y, 
                                                    action['target_tile_x'], action['target_tile_y'])
@@ -949,6 +991,10 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                         # Start looking from current action index forward (cannot be previous actions)
                         for check_idx in range(current_action_idx, len(agent_actions)):
                             action = agent_actions.iloc[check_idx]
+                            
+                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
+                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                continue
                             
                             # Check if agent is near the target tile of this action
                             is_near = is_near_target(agent_tile_x, agent_tile_y, 

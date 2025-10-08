@@ -27,56 +27,11 @@ import ray
 import numpy as np
 import cv2
 
+from .simulation_config import SimulationConfig
 from engine.app.ai_only_app import AIOnlySessionApp
 from engine.extensions.renderer2d.renderer_2d_offline import Renderer2DOffline
 from engine.extensions.renderer2d.renderer_ui import Renderer2DModule
 
-
-@dataclass
-class SimulationConfig:
-    """Configuration class for simulation parameters."""
-    
-    # Cluster settings
-    cluster: str = 'cuenca'
-    cluster_paths: Dict[str, str] = None
-    
-    # Simulation timing
-    engine_tick_rate: int = 24
-    ai_tick_rate: int = 1
-    duration_seconds: int = 180
-    agent_speed_px_per_sec: int = 32
-    
-    # Video settings
-    enable_video: bool = True
-    video_fps: int = 24
-    
-    # Grid settings
-    default_grid_size: Tuple[int, int] = (8, 8)
-    tile_size: int = 16
-    
-    def __post_init__(self):
-        if self.cluster_paths is None:
-            self.cluster_paths = {
-                'brigit': '/mnt/lustre/home/samuloza',
-                'cuenca': '',
-                'local': 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
-            }
-    
-    def validate_cluster(self):
-        """Validate cluster configuration."""
-        if self.cluster not in self.cluster_paths:
-            raise ValueError(f"Invalid cluster '{self.cluster}'. Choose from {list(self.cluster_paths.keys())}")
-    
-    @property
-    def local_path(self) -> str:
-        """Get the local path for the configured cluster."""
-        self.validate_cluster()
-        return self.cluster_paths[self.cluster]
-    
-    @property
-    def total_frames(self) -> int:
-        """Calculate total frames for the simulation."""
-        return self.duration_seconds * self.engine_tick_rate
 
 
 class PathManager:
@@ -286,10 +241,26 @@ class DataLogger:
     def _create_config_file(self):
         """Create a configuration file with all simulation parameters."""
         import time
+        import platform
+        import sys
+        import os
+        
+        # Calculate derived timing values
+        duration = self.simulation_config.get('DURATION', 0)
+        init_period = self.simulation_config.get('AGENT_INITIALIZATION_PERIOD', 15.0)
+        tick_rate = self.simulation_config.get('TICK_RATE', 24)
+        total_time = duration + init_period
+        total_frames = int(total_time * tick_rate)
+        gameplay_frames = int(duration * tick_rate)
+        init_frames = int(init_period * tick_rate)
         
         config_content = [
             "# Simulation Configuration File",
             f"# Generated on: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"# Platform: {platform.system()} {platform.release()}",
+            f"# Python: {sys.version.split()[0]}",
+            f"# Working Directory: {os.getcwd()}",
+            f"# Command Line: {' '.join(sys.argv) if hasattr(sys, 'argv') else 'N/A'}",
             "",
             "[SIMULATION_INFO]",
             f"SIMULATION_ID: {self.timestamp}",
@@ -301,14 +272,23 @@ class DataLogger:
             f"GAME_VERSION: {self.simulation_config.get('GAME_VERSION', 'unknown')}",
             f"TRAINING_ID: {self.simulation_config.get('TRAINING_ID', 'unknown')}",
             "",
+            "[TIMING_CONFIGURATION]",
+            f"AGENT_INITIALIZATION_PERIOD: {init_period}",
+            f"DURATION_SECONDS: {duration}",
+            f"TOTAL_SIMULATION_TIME: {total_time}",
+            f"ENGINE_TICK_RATE: {tick_rate}",
+            f"AI_TICK_RATE: {self.simulation_config.get('AI_TICK_RATE', 1)}",
+            f"INITIALIZATION_FRAMES: {init_frames}",
+            f"GAMEPLAY_FRAMES: {gameplay_frames}",
+            f"TOTAL_FRAMES: {total_frames}",
+            "",
             "[TECHNICAL_SETTINGS]",
             f"CLUSTER: {self.simulation_config.get('CLUSTER', 'unknown')}",
-            f"DURATION_SECONDS: {self.simulation_config.get('DURATION', 'unknown')}",
-            f"ENGINE_TICK_RATE: {self.simulation_config.get('TICK_RATE', 'unknown')}",
-            f"AI_TICK_RATE: {self.simulation_config.get('AI_TICK_RATE', 1)}",
             f"AGENT_SPEED_PX_PER_SEC: {self.simulation_config.get('AGENT_SPEED', 32)}",
             f"GRID_SIZE: {self.simulation_config.get('GRID_SIZE', 'unknown')}",
+            f"DEFAULT_GRID_SIZE: {self.simulation_config.get('DEFAULT_GRID_SIZE', 'unknown')}",
             f"TILE_SIZE: {self.simulation_config.get('TILE_SIZE', 16)}",
+            f"LOCAL_PATH: {self.simulation_config.get('LOCAL_PATH', 'unknown')}",
             "",
             "[VIDEO_SETTINGS]",
             f"ENABLE_VIDEO: {self.simulation_config.get('ENABLE_VIDEO', 'unknown')}",
@@ -327,6 +307,18 @@ class DataLogger:
             f"SIMULATION_DIR: {self.simulation_dir}",
             f"CHECKPOINT_DIR: {self.simulation_config.get('CHECKPOINT_DIR', 'unknown')}",
             f"MAP_FILE: {self.simulation_config.get('MAP_FILE', 'unknown')}",
+            "",
+            "[INITIALIZATION_DETAILS]",
+            f"# Agent initialization period: {init_period} seconds ({init_frames} frames)",
+            f"# During initialization, agents are positioned but perform no actions",
+            f"# This prevents teleportation artifacts and ensures system stabilization",
+            f"# Actual gameplay begins after initialization period completes",
+            "",
+            "[TIMING_BREAKDOWN]",
+            f"# Total simulation: {total_time} seconds ({total_frames} frames)",
+            f"# - Initialization: {init_period} seconds ({init_frames} frames)",
+            f"# - Active gameplay: {duration} seconds ({gameplay_frames} frames)",
+            f"# Frame timing: {1.0/tick_rate:.4f} seconds per frame",
             ""
         ]
         
@@ -350,10 +342,15 @@ class DataLogger:
             writer = csv.writer(f)
             for agent_id, obj in game.gameObjects.items():
                 if agent_id.startswith('ai_rl_'):
-                    # Use consistent tile coordinate calculation with action tracker
+                    # Use consistent tile coordinate calculation
                     agent_x = getattr(obj, 'x', 0)
                     agent_y = getattr(obj, 'y', 0)
-                    tile_x, tile_y = ActionTracker._position_to_tile(agent_x, agent_y)
+                    # Use consistent tile calculation: floor division by tile size + 1
+                    if agent_x is None or agent_y is None:
+                        tile_x, tile_y = 0, 0
+                    else:
+                        tile_x = int(agent_x // 16 + 1)
+                        tile_y = int(agent_y // 16 + 1)
                     
                     writer.writerow([
                         agent_id, 
@@ -368,41 +365,20 @@ class DataLogger:
                     ])
 
 
-class ActionTracker:
-    """Tracks agent actions with detailed logging and timing."""
+class RawActionLogger:
+    """Logs raw integer actions directly from controllers with the same format as ActionTracker."""
     
     def __init__(self, csv_path: Path):
         self.csv_path = csv_path
         self.lock = threading.Lock()
         
-        # Track active actions (no longer need completion times for minimum duration)
-        self.active_actions = {}
-        self.action_completion_times = {}  # Keep for compatibility but not used for duration enforcement
-        
-        # Action counters per agent (for action_number)
-        self.action_counters = {}
-        
         # Action ID counters per agent (for action_id - 0-indexed per agent)
         self.action_id_counters = {}
         
-        # Store completed actions for writing to CSV
-        self.completed_actions = []
-        
         self._initialize_csv()
     
-    @staticmethod
-    def _position_to_tile(x: float, y: float) -> tuple[int, int]:
-        """Convert pixel position to tile coordinates consistently."""
-        # Use consistent tile calculation: floor division by tile size + 1
-        # This ensures all components use the same calculation
-        if x is None or y is None:
-            return 0, 0
-        tile_x = int(x // 16 + 1)
-        tile_y = int(y // 16 + 1)
-        return tile_x, tile_y
-    
     def _initialize_csv(self):
-        """Initialize the action tracking CSV file."""
+        """Initialize the raw action logging CSV file."""
         with open(self.csv_path, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -410,283 +386,74 @@ class ActionTracker:
                 'target_tile_type', 'target_tile_x', 'target_tile_y'
             ])
     
-    def _get_tile_info(self, game: Any, target_id: str) -> Tuple[str, Optional[int], Optional[int]]:
-        """Get tile information for a given target ID."""
+    def _get_tile_info(self, game: Any, action: int, clickable_indices: list) -> tuple[str, Optional[int], Optional[int]]:
+        """Get tile information for a given action index."""
         tile_type, x_tile, y_tile = '', None, None
+        
         try:
-            grid = getattr(game, 'grid', None)
-            if grid is not None and hasattr(grid, 'tiles'):
-                for x in range(grid.width):
-                    for y in range(grid.height):
-                        t = grid.tiles[x][y]
-                        if t and getattr(t, 'id', None) == target_id:
-                            tile_type = t.__class__.__name__.lower()
-                            x_tile, y_tile = x + 1, y + 1
+            if action == len(clickable_indices):
+                # This is a "do_nothing" action
+                return '', None, None
+            
+            if 0 <= action < len(clickable_indices):
+                tile_index = clickable_indices[action]
+                grid = getattr(game, 'grid', None)
+                if grid is not None:
+                    x = tile_index % grid.width
+                    y = tile_index // grid.width
+                    if 0 <= x < grid.width and 0 <= y < grid.height:
+                        tile = grid.tiles[x][y]
+                        if tile:
+                            tile_type = tile.__class__.__name__.lower()
+                            x_tile, y_tile = x + 1, y + 1  # Convert to 1-indexed
                             return tile_type, x_tile, y_tile
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[RAW_ACTION_LOGGER] Error getting tile info: {e}")
+        
         return tile_type, x_tile, y_tile
     
-    def _extract_action_info(self, action: Any, game: Any) -> Tuple[str, str, str, Optional[int], Optional[int]]:
-        """Extract action type and target information."""
-        action_type = ''
-        target_id = ''
-        tile_type = ''
-        x_tile = None
-        y_tile = None
-        
-        try:
-            if action is None:
-                return 'do_nothing', '', '', None, None
-            
-            if isinstance(action, dict):
-                action_type = str(action.get('type', action.get('action', 'unknown')))
-                target_id = str(action.get('target', ''))
-            elif hasattr(action, 'action_type') or hasattr(action, 'type'):
-                action_type = str(getattr(action, 'action_type', getattr(action, 'type', 'unknown')))
-                target_id = str(getattr(action, 'target', ''))
-            else:
-                action_type = str(action)
-            
-            if target_id:
-                tile_type, x_tile, y_tile = self._get_tile_info(game, target_id)
-                
-        except Exception as e:
-            action_type = 'unknown'
-            print(f"DEBUG: Error extracting action info: {e}")
-            
-        return action_type, target_id, tile_type, x_tile, y_tile
-    
-    def start_action(self, agent_id: str, action_type: str, tile_or_target: Any, 
-                    timestamp: float, action_number: Optional[int] = None, **kwargs):
-        """Start tracking an action for an agent."""
+    def log_action(self, agent_id: str, raw_action: int, game: Any, clickable_indices: list):
+        """Log a raw integer action to CSV."""
         with self.lock:
-            if agent_id in self.active_actions:
-                # Log a warning if the agent is already performing an action
-                print(f"[ACTION_TRACKER] Agent {agent_id} is already performing action "
-                      f"'{self.active_actions[agent_id].get('action_type', 'unknown')}' and cannot start a new one.")
-                return
-
-            game = getattr(self, 'game', None)
-            engine = getattr(self, 'engine', None)
-            
-            if game is None:
-                print(f"[ACTION_TRACKER] No game reference for {agent_id}")
-                return
-            
-            agent_obj = game.gameObjects.get(agent_id)
-            
-            if agent_obj is None:
-                print(f"[ACTION_TRACKER] No agent object found for {agent_id}")
-                return
-            
-            # Create action dict for processing
-            if action_type == "click" and tile_or_target:
-                action = {"type": "click", "target": getattr(tile_or_target, 'id', str(tile_or_target))}
-            elif action_type == "do_nothing":
-                action = None
-            else:
-                action = {"type": action_type}
-            
-            # Extract action information
-            action_type_str, target_id, tile_type, x_tile, y_tile = self._extract_action_info(action, game)
-            
-            # Get agent current state at action start time
-            agent_x = getattr(agent_obj, 'x', None)
-            agent_y = getattr(agent_obj, 'y', None)
-            # Capture item state BEFORE the action starts
-            item_before = getattr(agent_obj, 'item', None)
-            
-            # Use provided action number or generate new one
-            if action_type == "do_nothing":
-                # do_nothing actions should always have action_number = -1
-                action_number = -1
-            elif action_number is None or action_number == -1:
-                # Generate new action number for regular actions
-                self.action_counters[agent_id] = self.action_counters.get(agent_id, 0) + 1
-                action_number = self.action_counters[agent_id]
-            
-            # Create action record
-            action_record = {
-                'action': action,
-                'action_type': action_type_str,
-                'target_id': target_id,
-                'tile_type': tile_type,
-                'target_x_tile': x_tile,
-                'target_y_tile': y_tile,
-                'decision_timestamp': timestamp,
-                'decision_x': agent_x,
-                'decision_y': agent_y,
-                'item_before': item_before,
-                'action_number': action_number
-            }
-            
-            # Store active action
-            self.active_actions[agent_id] = action_record
-            
-            # No minimum duration enforcement - actions complete when the game engine says they're complete
-            # Remove the action from completion times tracking
-            self.action_completion_times.pop(agent_id, None)
-                
-    # Removed can_complete_action method - actions complete when game engine says they're complete
-    
-    def end_action(self, agent_id: str, timestamp: Optional[float] = None, current_frame: Optional[int] = None, **kwargs) -> bool:
-        """End tracking an action for an agent."""
-        with self.lock:
-            if agent_id not in self.active_actions:
-                return False
-            
-            action_record = self.active_actions[agent_id]
-            game = getattr(self, 'game', None)
-            engine = getattr(self, 'engine', None)
-            
-            if game is None or engine is None:
-                self.active_actions.pop(agent_id, None)
-                self.action_completion_times.pop(agent_id, None)
-                return False
-            
-            # Use current timestamp if provided, otherwise get current time
-            if timestamp is None:
-                timestamp = time.time()
-            
-            # Actions complete when the game engine says they're complete - no duration checks
-            
-            # Get action_id for this agent (0-indexed per agent)
-            if agent_id not in self.action_id_counters:
-                self.action_id_counters[agent_id] = 0
-            else:
-                self.action_id_counters[agent_id] += 1
-            
-            action_id = self.action_id_counters[agent_id]
-            
-            # Write action immediately to CSV in simplified format
-            with open(self.csv_path, 'a', newline='') as f:
-                writer = csv.writer(f)
-                row = [
-                    action_id,
-                    agent_id,
-                    action_record['action_number'],
-                    action_record['action_type'],
-                    action_record['tile_type'] or '',
-                    action_record['target_x_tile'] or '',
-                    action_record['target_y_tile'] or ''
-                ]
-                writer.writerow(row)
-                        
-            # Remove from active tracking
-            self.active_actions.pop(agent_id, None)
-            self.action_completion_times.pop(agent_id, None)
-            return True
-    
-    def finalize_actions_with_log_data(self, log_csv_path: Path, tick_rate: int = 24):
-        """
-        Legacy method kept for compatibility - actions are now written directly during end_action.
-        """
-        print("[ACTION_TRACKER] Actions are now written directly to CSV - no finalization needed")
-        pass
-    
-
-    def cleanup(self, game: Any, engine: Any, max_cleanup_time: float = 3.0):
-        """Complete any remaining active actions at simulation end."""
-        print(f"[ACTION_TRACKER] Starting cleanup for {len(self.active_actions)} active actions")
-        
-        cleanup_start_time = time.time()
-        
-        try:
-            lock_acquired = self.lock.acquire(timeout=2.0)
-            if not lock_acquired:
-                print(f"[ACTION_TRACKER] Could not acquire lock for cleanup")
-                self.active_actions.clear()
-                self.action_completion_times.clear()
-                return
-            
             try:
-                active_agents = list(self.active_actions.keys())
-                for agent_id in active_agents:
-                    if time.time() - cleanup_start_time > max_cleanup_time:
-                        print(f"[ACTION_TRACKER] Cleanup timeout reached")
-                        self.active_actions.clear()
-                        self.action_completion_times.clear()
-                        break
+                # Get action_id for this agent (0-indexed per agent)
+                if agent_id not in self.action_id_counters:
+                    self.action_id_counters[agent_id] = 0
+                else:
+                    self.action_id_counters[agent_id] += 1
+                
+                action_id = self.action_id_counters[agent_id]
+                
+                # Determine action type and target info
+                if raw_action == len(clickable_indices):
+                    # This is a "do_nothing" action
+                    action_type = 'do_nothing'
+                    tile_type, x_tile, y_tile = '', '', ''
+                    action_number = -1
+                else:
+                    # This is a click action
+                    action_type = 'click'
+                    tile_type, x_tile, y_tile = self._get_tile_info(game, raw_action, clickable_indices)
+                    action_number = raw_action
+                
+                # Write action immediately to CSV in same format as ActionTracker
+                with open(self.csv_path, 'a', newline='') as f:
+                    writer = csv.writer(f)
+                    row = [
+                        action_id,
+                        agent_id,
+                        action_number,
+                        action_type,
+                        tile_type or '',
+                        x_tile or '',
+                        y_tile or ''
+                    ]
+                    writer.writerow(row)
                     
-                try:
-                    # At simulation end, complete any remaining actions with final timestamp
-                    final_timestamp = time.time()
-                    print(f"[ACTION_TRACKER] Completing remaining action for {agent_id} at simulation end")
-                    self._force_complete_action(agent_id, game, engine, final_timestamp)
-                except Exception as action_error:
-                    print(f"[ACTION_TRACKER] Error completing action for {agent_id}: {action_error}")
-                    # Manually remove from tracking if completion fails
-                    self.active_actions.pop(agent_id, None)
-                    self.action_completion_times.pop(agent_id, None)
-                
-            finally:
-                self.lock.release()
-                
-        except Exception as e:
-            print(f"[ACTION_TRACKER] Critical error during cleanup: {e}")
-            self.active_actions.clear()
-            self.action_completion_times.clear()
-    
-    def _force_complete_action(self, agent_id: str, game: Any, engine: Any, final_timestamp: Optional[float] = None):
-        """Force complete an action during cleanup."""
-        if agent_id not in self.active_actions:
-            return
-        
-        action_record = self.active_actions[agent_id]
-        
-        # Use provided final_timestamp or get current time
-        if final_timestamp is not None:
-            completion_timestamp = final_timestamp
-        else:
-            completion_timestamp = time.time()
-        
-        agent_obj = game.gameObjects.get(agent_id) if game else None
-        
-        # Get completion state
-        if agent_obj:
-            agent_x = getattr(agent_obj, 'x', action_record['decision_x'] or 0)
-            agent_y = getattr(agent_obj, 'y', action_record['decision_y'] or 0)
-            item_after = getattr(agent_obj, 'item', None)
-        else:
-            agent_x = action_record['decision_x'] or 0
-            agent_y = action_record['decision_y'] or 0  
-            item_after = action_record['item_before']
-        
-        # Convert positions to tile coordinates
-        decision_tile_x, decision_tile_y = self._position_to_tile(
-            action_record['decision_x'], action_record['decision_y']
-        )
-        completion_tile_x, completion_tile_y = self._position_to_tile(agent_x, agent_y)
-        
-        # Store completed action data WITHOUT frame numbers (to be added later)
-        completed_action = {
-            'agent_id': agent_id,
-            'action_number': action_record['action_number'],
-            'action_type': action_record['action_type'],
-            'target_tile_type': action_record.get('tile_type') or 'None',
-            'target_tile_x': action_record.get('target_x_tile') or 0,
-            'target_tile_y': action_record.get('target_y_tile') or 0,
-            'decision_x': action_record['decision_x'],
-            'decision_y': action_record['decision_y'],
-            'decision_tile_x': decision_tile_x,
-            'decision_tile_y': decision_tile_y,
-            'completion_x': agent_x,
-            'completion_y': agent_y,
-            'completion_tile_x': completion_tile_x,
-            'completion_tile_y': completion_tile_y,
-            'item_before': action_record['item_before'],
-            'item_after': item_after,
-            'decision_timestamp': action_record['decision_timestamp'],
-            'completion_timestamp': completion_timestamp
-        }
-        
-        # Add to completed actions list
-        self.completed_actions.append(completed_action)
-        
-        # Remove from tracking
-        self.active_actions.pop(agent_id, None)
-        self.action_completion_times.pop(agent_id, None)
+                print(f"[RAW_ACTION_LOGGER] Logged action {raw_action} for {agent_id} (action_id: {action_id})")
+                    
+            except Exception as e:
+                print(f"[RAW_ACTION_LOGGER] Error logging action for {agent_id}: {e}")
 
 
 class VideoRecorder:
@@ -974,11 +741,19 @@ class SimulationRunner:
                 'CONTROLLER_TYPE': controller_type,
                 'USE_LSTM': controller_type == 'lstm',
                 'CHECKPOINT_DIR': str(paths['checkpoint_dir']),
-                'MAP_FILE': str(paths['map_txt_path'])
+                'MAP_FILE': str(paths['map_txt_path']),
+                'AGENT_INITIALIZATION_PERIOD': self.config.agent_initialization_period,
+                'TOTAL_SIMULATION_TIME': self.config.total_simulation_time,
+                'TOTAL_FRAMES': self.config.total_frames,
+                'DEFAULT_GRID_SIZE': self.config.default_grid_size,
+                'LOCAL_PATH': self.config.local_path if self.config.local_path else 'N/A'
             }
             
             data_logger = DataLogger(paths['saving_path'], checkpoint_number, timestamp, simulation_config)
-            action_tracker = ActionTracker(data_logger.action_csv_path)
+            
+            # Create raw action logger for capturing integer actions directly from controllers
+            raw_action_csv_path = data_logger.simulation_dir / "actions.csv"
+            raw_action_logger = RawActionLogger(raw_action_csv_path)
             
             # Setup game
             game_factory = self.game_manager.create_game_factory(
@@ -988,7 +763,7 @@ class SimulationRunner:
             # Run the simulation
             output_paths = self._execute_simulation(
                 game_factory, controllers, paths, data_logger, 
-                action_tracker, timestamp
+                raw_action_logger, timestamp
             )
             
             return output_paths
@@ -998,7 +773,8 @@ class SimulationRunner:
     
     def _execute_simulation(self, game_factory: Callable, controllers: Dict,
                            paths: Dict, data_logger: DataLogger,
-                           action_tracker: ActionTracker, timestamp: str) -> Dict[str, Path]:
+                           raw_action_logger: RawActionLogger, 
+                           timestamp: str) -> Dict[str, Path]:
         """Execute the main simulation loop."""
         
         # Create engine app
@@ -1009,16 +785,15 @@ class SimulationRunner:
             path_root=paths['path_root'],
             tick_rate=self.config.engine_tick_rate,
             ai_tick_rate=self.config.ai_tick_rate,
-            is_max_speed=False
+            is_max_speed=False,
+            agent_initialization_period=self.config.agent_initialization_period
         )
         
         session = engine_app.get_session()
         game = session.engine.game
         
-        # Attach action tracker
-        game.action_tracker = action_tracker
-        action_tracker.game = game
-        action_tracker.engine = session.engine
+        # Attach raw action logger
+        game.raw_action_logger = raw_action_logger
         
         # Attach controllers to agents
         for agent_id, controller in controllers.items():
@@ -1068,7 +843,7 @@ class SimulationRunner:
         finally:
             # Cleanup
             self._cleanup_simulation(
-                action_tracker, video_recorder, engine_app, 
+                video_recorder, engine_app, 
                 game, session.engine, data_logger
             )
         
@@ -1076,7 +851,7 @@ class SimulationRunner:
             'simulation_dir': data_logger.simulation_dir,
             'config_file': data_logger.config_path,
             'state_csv': data_logger.state_csv_path,
-            'action_csv': data_logger.action_csv_path,
+            'action_csv': data_logger.simulation_dir / "actions.csv",
             'video_file': data_logger.simulation_dir / f"offline_recording_{timestamp}.mp4" if self.config.enable_video else None
         }
     
@@ -1092,7 +867,10 @@ class SimulationRunner:
         progress_step = max(1, int(total_frames * 0.05))
         next_progress = progress_step
         
-        print(f"Starting simulation with {total_frames} frames ({self.config.duration_seconds} seconds)")
+        print(f"Starting simulation with {total_frames} frames ({self.config.total_simulation_time} seconds total)")
+        print(f"  - Agent initialization: {self.config.agent_initialization_period} seconds")
+        print(f"  - Active gameplay: {self.config.duration_seconds} seconds")
+        print("Note: Agents will not act during initialization period - this is by design")
         
         prev_state = None
         
@@ -1123,38 +901,24 @@ class SimulationRunner:
             
             prev_state = curr_state
             
-            # Progress reporting
+            # Progress reporting (adjust for initialization period)
+            simulation_time = frame_idx / self.config.engine_tick_rate
             if frame_idx + 1 >= next_progress:
                 percent = int(100 * (frame_idx + 1) / total_frames)
-                print(f"Simulation progress: {percent}% ({frame_idx + 1}/{total_frames} frames)")
+                if simulation_time < self.config.agent_initialization_period:
+                    status = f"(initialization: {simulation_time:.1f}s/{self.config.agent_initialization_period}s)"
+                else:
+                    active_time = simulation_time - self.config.agent_initialization_period
+                    status = f"(active gameplay: {active_time:.1f}s/{self.config.duration_seconds}s)"
+                print(f"Simulation progress: {percent}% ({frame_idx + 1}/{total_frames} frames) {status}")
                 sys.stdout.flush()
                 next_progress += progress_step
     
     def _check_action_completions(self, game: Any):
         """Check if any agents have completed their actions and should end them."""
-        if not hasattr(game, 'action_tracker'):
-            return
-            
-        action_tracker = game.action_tracker
-        current_timestamp = time.time()
-        
-        # Check each agent to see if their action should be completed
-        for agent_id, agent_obj in game.gameObjects.items():
-            if not agent_id.startswith('ai_rl_'):
-                continue
-                
-            # Check if agent has completed their current action
-            if (hasattr(agent_obj, 'action_complete') and 
-                getattr(agent_obj, 'action_complete', False) and
-                agent_id in action_tracker.active_actions):
-                
-                # Try to end the action with current timestamp
-                action_ended = action_tracker.end_action(agent_id, current_timestamp)
-                if action_ended:
-                    # Clear the agent's action state
-                    agent_obj.current_action = None
-                    # Reset action_complete flag
-                    agent_obj.action_complete = False
+        # Note: This method is simplified since we no longer use ActionTracker
+        # Actions are now logged directly when they occur in the controller
+        pass
     
     def _serialize_ui_state(self, session: Any, game: Any) -> Dict:
         """Serialize UI state for rendering."""
@@ -1164,8 +928,7 @@ class SimulationRunner:
         payload['tick'] = session.engine.tick_count
         return payload
     
-    def _cleanup_simulation(self, action_tracker: ActionTracker, 
-                          video_recorder: Optional[VideoRecorder],
+    def _cleanup_simulation(self, video_recorder: Optional[VideoRecorder],
                           engine_app: Any, game: Any, engine: Any,
                           data_logger: DataLogger):
         """Cleanup simulation resources."""
@@ -1175,23 +938,6 @@ class SimulationRunner:
         if video_recorder:
             print("Stopping video recorder...")
             video_recorder.stop()
-        
-        # Cleanup actions
-        print("Cleaning up actions...")
-        try:
-            action_tracker.cleanup(game, engine)
-        except Exception as e:
-            print(f"Error during action cleanup: {e}")
-        
-        # Finalize actions with precise frame timing from logs
-        print("Finalizing actions with log data...")
-        try:
-            action_tracker.finalize_actions_with_log_data(
-                data_logger.state_csv_path, 
-                tick_rate=self.config.engine_tick_rate
-            )
-        except Exception as e:
-            print(f"Error during action finalization: {e}")
         
         # Stop engine
         print("Stopping engine...")

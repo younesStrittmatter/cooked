@@ -20,7 +20,8 @@ class SimulationConfig:
     engine_tick_rate: int = 24
     ai_tick_rate: int = 1
     duration_seconds: int = 180
-    agent_speed_px_per_sec: int = 30
+    agent_speed_px_per_sec: int = 32
+    agent_initialization_period: float = 15.0  # Agent initialization period in seconds
     
     # Video settings
     enable_video: bool = True
@@ -51,5 +52,11 @@ class SimulationConfig:
     
     @property
     def total_frames(self) -> int:
-        """Calculate total frames for the simulation."""
-        return self.duration_seconds * self.engine_tick_rate
+        """Calculate total frames for the simulation (including initialization period)."""
+        total_simulation_time = self.duration_seconds + self.agent_initialization_period
+        return int(total_simulation_time * self.engine_tick_rate)
+    
+    @property
+    def total_simulation_time(self) -> float:
+        """Get total simulation time including initialization period."""
+        return self.duration_seconds + self.agent_initialization_period

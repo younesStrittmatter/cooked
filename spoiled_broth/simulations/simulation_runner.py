@@ -20,8 +20,8 @@ from .controller_manager import ControllerManager
 from .ray_manager import RayManager
 from .game_manager import GameManager
 from .data_logger import DataLogger
-from .action_tracker import ActionTracker
 from .video_recorder import VideoRecorder
+from .raw_action_logger import RawActionLogger
 
 
 class SimulationRunner:
@@ -97,11 +97,17 @@ class SimulationRunner:
                 'CONTROLLER_TYPE': controller_type,
                 'USE_LSTM': controller_type == 'lstm',
                 'CHECKPOINT_DIR': str(paths['checkpoint_dir']),
-                'MAP_FILE': str(paths['map_txt_path'])
+                'MAP_FILE': str(paths['map_txt_path']),
+                'AGENT_INITIALIZATION_PERIOD': self.config.agent_initialization_period,
+                'TOTAL_SIMULATION_TIME': self.config.total_simulation_time,
+                'TOTAL_FRAMES': self.config.total_frames
             }
             
             data_logger = DataLogger(paths['saving_path'], checkpoint_number, timestamp, simulation_config)
-            action_tracker = ActionTracker(data_logger.action_csv_path)
+            
+            # Create raw action logger for capturing integer actions directly from controllers
+            raw_action_csv_path = data_logger.simulation_dir / "actions.csv"
+            raw_action_logger = RawActionLogger(raw_action_csv_path)
             
             # Setup game
             game_factory = self.game_manager.create_game_factory(
@@ -111,7 +117,7 @@ class SimulationRunner:
             # Run the simulation
             output_paths = self._execute_simulation(
                 game_factory, controllers, paths, data_logger, 
-                action_tracker, timestamp
+                raw_action_logger, timestamp
             )
             
             return output_paths
@@ -121,7 +127,8 @@ class SimulationRunner:
     
     def _execute_simulation(self, game_factory: Callable, controllers: Dict,
                            paths: Dict, data_logger: DataLogger,
-                           action_tracker: ActionTracker, timestamp: str) -> Dict[str, Path]:
+                           raw_action_logger: RawActionLogger, 
+                           timestamp: str) -> Dict[str, Path]:
         """Execute the main simulation loop."""
         
         # Create engine app
@@ -132,16 +139,15 @@ class SimulationRunner:
             path_root=paths['path_root'],
             tick_rate=self.config.engine_tick_rate,
             ai_tick_rate=self.config.ai_tick_rate,
-            is_max_speed=False
+            is_max_speed=False,
+            agent_initialization_period=self.config.agent_initialization_period
         )
         
         session = engine_app.get_session()
         game = session.engine.game
         
-        # Attach action tracker
-        game.action_tracker = action_tracker
-        action_tracker.game = game
-        action_tracker.engine = session.engine
+        # Attach raw action logger
+        game.raw_action_logger = raw_action_logger
         
         # Attach controllers to agents
         for agent_id, controller in controllers.items():
@@ -191,7 +197,7 @@ class SimulationRunner:
         finally:
             # Cleanup
             self._cleanup_simulation(
-                action_tracker, video_recorder, engine_app, 
+                video_recorder, engine_app, 
                 game, session.engine, data_logger
             )
         
@@ -199,7 +205,7 @@ class SimulationRunner:
             'simulation_dir': data_logger.simulation_dir,
             'config_file': data_logger.config_path,
             'state_csv': data_logger.state_csv_path,
-            'action_csv': data_logger.action_csv_path,
+            'action_csv': data_logger.simulation_dir / "actions.csv",
             'video_file': data_logger.simulation_dir / f"offline_recording_{timestamp}.mp4" if self.config.enable_video else None
         }
     
@@ -215,7 +221,16 @@ class SimulationRunner:
         progress_step = max(1, int(total_frames * 0.05))
         next_progress = progress_step
         
-        print(f"Starting simulation with {total_frames} frames ({self.config.duration_seconds} seconds)")
+        print(f"Starting simulation with {total_frames} frames ({self.config.total_simulation_time} seconds total)")
+        print(f"  - Agent initialization: {self.config.agent_initialization_period} seconds")
+        print(f"  - Active gameplay: {self.config.duration_seconds} seconds")
+        print("Note: Agents will not act during initialization period - this is by design")
+        
+        # Wait for agents to be properly initialized and positioned
+        self._wait_for_agent_initialization(game)
+        
+        # Remove the old initialization loop since agents handle their own initialization delay
+        print("System initialization complete, starting simulation...")
         
         prev_state = None
         
@@ -246,38 +261,23 @@ class SimulationRunner:
             
             prev_state = curr_state
             
-            # Progress reporting
+            # Progress reporting (adjust for initialization period)
+            simulation_time = frame_idx / self.config.engine_tick_rate
             if frame_idx + 1 >= next_progress:
                 percent = int(100 * (frame_idx + 1) / total_frames)
-                print(f"Simulation progress: {percent}% ({frame_idx + 1}/{total_frames} frames)")
+                if simulation_time < self.config.agent_initialization_period:
+                    status = f"(initialization: {simulation_time:.1f}s/{self.config.agent_initialization_period}s)"
+                else:
+                    active_time = simulation_time - self.config.agent_initialization_period
+                    status = f"(active gameplay: {active_time:.1f}s/{self.config.duration_seconds}s)"
+                print(f"Simulation progress: {percent}% ({frame_idx + 1}/{total_frames} frames) {status}")
                 sys.stdout.flush()
                 next_progress += progress_step
     
     def _check_action_completions(self, game: Any):
         """Check if any agents have completed their actions and should end them."""
-        if not hasattr(game, 'action_tracker'):
-            return
-            
-        action_tracker = game.action_tracker
-        current_timestamp = time.time()
-        
-        # Check each agent to see if their action should be completed
-        for agent_id, agent_obj in game.gameObjects.items():
-            if not agent_id.startswith('ai_rl_'):
-                continue
-                
-            # Check if agent has completed their current action
-            if (hasattr(agent_obj, 'action_complete') and 
-                getattr(agent_obj, 'action_complete', False) and
-                agent_id in action_tracker.active_actions):
-                
-                # Try to end the action with current timestamp
-                action_ended = action_tracker.end_action(agent_id, current_timestamp)
-                if action_ended:
-                    # Clear the agent's action state
-                    agent_obj.current_action = None
-                    # Reset action_complete flag
-                    agent_obj.action_complete = False
+        # Actions are now logged directly when they occur in the controller
+        pass
     
     def _serialize_ui_state(self, session: Any, game: Any) -> Dict:
         """Serialize UI state for rendering."""
@@ -287,8 +287,7 @@ class SimulationRunner:
         payload['tick'] = session.engine.tick_count
         return payload
     
-    def _cleanup_simulation(self, action_tracker: ActionTracker, 
-                          video_recorder: Optional[VideoRecorder],
+    def _cleanup_simulation(self, video_recorder: Optional[VideoRecorder],
                           engine_app: Any, game: Any, engine: Any,
                           data_logger: DataLogger):
         """Cleanup simulation resources."""
@@ -298,23 +297,6 @@ class SimulationRunner:
         if video_recorder:
             print("Stopping video recorder...")
             video_recorder.stop()
-        
-        # Cleanup actions
-        print("Cleaning up actions...")
-        try:
-            action_tracker.cleanup(game, engine)
-        except Exception as e:
-            print(f"Error during action cleanup: {e}")
-        
-        # Finalize actions with precise frame timing from logs
-        print("Finalizing actions with log data...")
-        try:
-            action_tracker.finalize_actions_with_log_data(
-                data_logger.state_csv_path, 
-                tick_rate=self.config.engine_tick_rate
-            )
-        except Exception as e:
-            print(f"Error during action finalization: {e}")
         
         # Stop engine
         print("Stopping engine...")
@@ -365,3 +347,48 @@ class SimulationRunner:
                     print(f"Threading error during engine stop: {e}")
             except Exception as e:
                 print(f"Unexpected error during threaded engine stop: {e}")
+    
+    def _wait_for_agent_initialization(self, game: Any, max_wait_time: float = 5.0):
+        """Wait for all agents to be properly initialized and positioned."""
+        import time
+        
+        start_wait = time.time()
+        print("Waiting for agent initialization...")
+        
+        while time.time() - start_wait < max_wait_time:
+            all_agents_ready = True
+            
+            for agent_id, obj in game.gameObjects.items():
+                if agent_id.startswith('ai_rl_'):
+                    # Check if agent has valid position
+                    if not hasattr(obj, 'x') or not hasattr(obj, 'y') or obj.x is None or obj.y is None:
+                        all_agents_ready = False
+                        break
+                    
+                    # Check if agent is at a reasonable position (not 0,0 unless that's intentional)
+                    if obj.x == 0 and obj.y == 0:
+                        all_agents_ready = False
+                        break
+                        
+                    # Check if agent has proper controller attachment
+                    if not hasattr(obj, 'action_complete'):
+                        all_agents_ready = False
+                        break
+            
+            if all_agents_ready:
+                print("All agents initialized successfully")
+                # Log final agent positions
+                for agent_id, obj in game.gameObjects.items():
+                    if agent_id.startswith('ai_rl_'):
+                        print(f"  {agent_id}: position ({obj.x}, {obj.y}), tile ({obj.slot_x}, {obj.slot_y})")
+                return
+            
+            time.sleep(0.1)  # Wait 100ms before checking again
+        
+        print(f"Warning: Agent initialization check timed out after {max_wait_time} seconds")
+        # Log current agent states for debugging
+        for agent_id, obj in game.gameObjects.items():
+            if agent_id.startswith('ai_rl_'):
+                x = getattr(obj, 'x', 'MISSING')
+                y = getattr(obj, 'y', 'MISSING')
+                print(f"  {agent_id}: position ({x}, {y})")
