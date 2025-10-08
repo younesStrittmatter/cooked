@@ -29,6 +29,16 @@ class RLlibController(Controller):
         self.policy_module = self.multi_rl_module[self.policy_id]
 
     def choose_action(self, observation):      
+        # Check if we're still in initialization period
+        if hasattr(self.agent, 'game') and hasattr(self.agent.game, 'engine'):
+            engine = self.agent.game.engine
+            sim_time = getattr(engine, "sim_time", engine.tick_count * engine.tick_interval)
+            initialization_period = getattr(engine, '_runner', None)
+            if initialization_period and hasattr(initialization_period, 'agent_initialization_period'):
+                if sim_time < initialization_period.agent_initialization_period:
+                    # During initialization, return None (no action)
+                    return None
+        
         # If a previous action is still in progress, don't choose a new one.
         # NOTE: Do NOT mutate agent state here; the Engine/Agent update loop is
         # responsible for marking actions complete. Controllers called from an

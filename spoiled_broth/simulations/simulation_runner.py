@@ -241,19 +241,13 @@ class SimulationRunner:
             if current_time < target_time:
                 time.sleep(target_time - current_time)
             
-            # Set frame count on game object for synchronization
-            game.frame_count = frame_idx
-            
-            # Get current state and render FIRST
+            # Get current state and render
             curr_state = self._serialize_ui_state(session, game)
             prev_state = prev_state or curr_state
             frame = renderer.render_to_array(prev_state, curr_state, 0.0)
             
-            # Log state BEFORE checking action completions to ensure consistent position capture
+            # Log state
             data_logger.log_state(frame_idx, game, self.config.engine_tick_rate)
-            
-            # Check for completed actions after state is logged
-            self._check_action_completions(game)
             
             # Record video
             if video_recorder:
@@ -273,11 +267,6 @@ class SimulationRunner:
                 print(f"Simulation progress: {percent}% ({frame_idx + 1}/{total_frames} frames) {status}")
                 sys.stdout.flush()
                 next_progress += progress_step
-    
-    def _check_action_completions(self, game: Any):
-        """Check if any agents have completed their actions and should end them."""
-        # Actions are now logged directly when they occur in the controller
-        pass
     
     def _serialize_ui_state(self, session: Any, game: Any) -> Dict:
         """Serialize UI state for rendering."""

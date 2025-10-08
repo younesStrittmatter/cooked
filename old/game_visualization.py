@@ -1,7 +1,7 @@
 from engine.app.ai_only_app import AIOnlySessionApp
 from spoiled_broth.game import SpoiledBroth as Game
 from spoiled_broth.rl.rllib_controller import RLlibController
-from spoiled_broth.rl.rllib_controller_lstm import RLlibControllerLSTM
+from spoiled_broth.rl.old_rllib_controller_lstm import RLlibControllerLSTM
 from engine.extensions.renderer2d.renderer_ui import Renderer2DModule
 from pathlib import Path
 from spoiled_broth.config import *

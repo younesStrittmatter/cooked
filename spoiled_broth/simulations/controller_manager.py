@@ -56,7 +56,7 @@ class ControllerManager:
         """
         # Import controllers dynamically to avoid import issues
         from spoiled_broth.rl.rllib_controller import RLlibController
-        from spoiled_broth.rl.rllib_controller_lstm import RLlibControllerLSTM
+        from spoiled_broth.rl.old_rllib_controller_lstm import RLlibControllerLSTM
         
         ControllerCls = RLlibControllerLSTM if controller_type == 'lstm' else RLlibController
         is_competition = game_version.upper() == "COMPETITION"
