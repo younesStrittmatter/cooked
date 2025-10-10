@@ -47,7 +47,7 @@ class DataLogger:
         
         # Calculate derived timing values
         duration = self.simulation_config.get('DURATION', 0)
-        init_period = self.simulation_config.get('AGENT_INITIALIZATION_PERIOD', 15.0)
+        init_period = self.simulation_config.get('AGENT_INITIALIZATION_PERIOD', 0.0)
         tick_rate = self.simulation_config.get('TICK_RATE', 24)
         total_time = duration + init_period
         total_frames = int(total_time * tick_rate)
@@ -128,6 +128,40 @@ class DataLogger:
             print(f"Configuration saved to: {self.config_path}")
         except Exception as e:
             print(f"Warning: Could not create config file: {e}")
+    
+    def update_config_with_runtime_info(self, game: Any):
+        """
+        Update the config file with runtime information detected during simulation.
+        
+        Args:
+            game: Game instance with runtime information
+        """
+        if not hasattr(game, 'agents_start_acting_frame'):
+            print("No runtime agent start frame detected - agents may not have started acting yet")
+            return
+            
+        tick_rate = self.simulation_config.get('TICK_RATE', 24)
+        agents_start_frame = game.agents_start_acting_frame
+        agents_start_time = agents_start_frame / tick_rate
+        
+        runtime_info = [
+            "",
+            "[RUNTIME_DETECTION]",
+            f"ACTUAL_AGENTS_START_ACTING_FRAME: {agents_start_frame}",
+            f"ACTUAL_AGENTS_START_ACTING_TIME: {agents_start_time:.3f}",
+            f"# This is the actual frame/time when the first agent performed an action",
+            f"# Use this frame as the cutoff for data analysis - ignore data before this frame",
+            f"# This frame should be used by positions_extraction and actions_extraction",
+        ]
+        
+        try:
+            # Append runtime info to existing config file
+            with open(self.config_path, 'a') as f:
+                f.write('\n'.join(runtime_info))
+            print(f"Runtime info added to config: Agents start acting at frame {agents_start_frame} (time: {agents_start_time:.3f}s)")
+        except Exception as e:
+            print(f"Warning: Could not update config file with runtime info: {e}")
+    
     
     def log_state(self, frame: int, game: Any, tick_rate: int):
         """

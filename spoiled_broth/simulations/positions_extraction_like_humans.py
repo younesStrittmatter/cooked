@@ -12,12 +12,13 @@ import math
 from pathlib import Path
 
 
-def generate_agent_position_files(simulation_df, output_dir, agent_initialization_period=15.0):
+def generate_agent_position_files(simulation_df, output_dir, agent_initialization_period=0.0):
     """
     Generate position CSV files for each agent from simulation data.
     
     Creates individual CSV files for each agent with columns:
-    second, x, y, distance_walked, walking_speed, cutting_speed, start_pos
+    second, x, y, tile_x, tile_y, distance_walked, walking_speed, cutting_speed, 
+    start_pos, item, score, frame
     
     The function filters out the initialization period and adjusts time so that
     the first second after initialization becomes second 0.
@@ -36,6 +37,34 @@ def generate_agent_position_files(simulation_df, output_dir, agent_initializatio
         simulation_df = pd.read_csv(simulation_df)
     
     output_dir = Path(output_dir)
+    
+    # Try to read actual agents start acting frame/time from config file if available
+    actual_start_time = None
+    config_file = output_dir / "config.txt"
+    if config_file.exists():
+        try:
+            with open(config_file, 'r') as f:
+                for line in f:
+                    if line.strip().startswith("ACTUAL_AGENTS_START_ACTING_TIME:"):
+                        actual_start_time = float(line.split(":", 1)[1].strip())
+                        
+            if actual_start_time is not None:
+                # Use the minimum between runtime-detected time and initialization period
+                filter_time = min(actual_start_time, agent_initialization_period)
+                print(f"Runtime-detected agents start time: {actual_start_time:.3f}s")
+                print(f"Agent initialization period: {agent_initialization_period:.3f}s")
+                print(f"Using minimum filter time: {filter_time:.3f}s")
+            else:
+                print(f"Runtime detection not found in config, using agent_initialization_period: {agent_initialization_period}s")
+                filter_time = agent_initialization_period
+        except Exception as e:
+            print(f"Warning: Could not read config file {config_file}: {e}")
+            print(f"Using fallback agent_initialization_period: {agent_initialization_period}s")
+            filter_time = agent_initialization_period
+    else:
+        print(f"Config file not found, using agent_initialization_period: {agent_initialization_period}s")
+        filter_time = agent_initialization_period
+    
     position_files = {}
     
     # Process each agent
@@ -46,15 +75,15 @@ def generate_agent_position_files(simulation_df, output_dir, agent_initializatio
         agent_data = simulation_df[simulation_df['agent_id'] == agent_id].copy()
         agent_data = agent_data.sort_values('frame').reset_index(drop=True)
         
-        # Filter out initialization period (keep only data after initialization period)
-        agent_data = agent_data[agent_data['second'] >= agent_initialization_period].copy()
+        # Filter out initialization period (keep only data after agents actually start acting)
+        agent_data = agent_data[agent_data['second'] >= filter_time].copy()
         
         if agent_data.empty:
-            print(f"Warning: No data for {agent_id} after initialization period of {agent_initialization_period} seconds")
+            print(f"Warning: No data for {agent_id} after filter time of {filter_time:.3f} seconds")
             continue
         
-        # Adjust time so that first second after initialization becomes second 0
-        agent_data['second'] = agent_data['second'] - agent_initialization_period
+        # Adjust time so that first second after filter becomes second 0
+        agent_data['second'] = agent_data['second'] - filter_time
         agent_data = agent_data.reset_index(drop=True)
         
         # Calculate distance walked
@@ -85,10 +114,15 @@ def generate_agent_position_files(simulation_df, output_dir, agent_initializatio
             'second': agent_data['second'],
             'x': agent_data['x'],
             'y': agent_data['y'],
+            'tile_x': agent_data['tile_x'],
+            'tile_y': agent_data['tile_y'],
             'distance_walked': agent_data['distance_walked'],
             'walking_speed': 1.0,
             'cutting_speed': 1.0,
-            'start_pos': start_pos
+            'start_pos': start_pos,
+            'item': agent_data['item'],
+            'score': agent_data['score'],
+            'frame': agent_data['frame']
         })
         
         # Save to CSV
@@ -101,6 +135,8 @@ def generate_agent_position_files(simulation_df, output_dir, agent_initializatio
         print(f"  Total frames: {len(position_data)}")
         print(f"  Total distance: {position_data['distance_walked'].iloc[-1]:.2f} pixels")
         print(f"  Start position: {start_pos}")
+        print(f"  Final score: {position_data['score'].iloc[-1]}")
+        print(f"  Items held: {position_data['item'].nunique()} unique items")
     
     return position_files
 

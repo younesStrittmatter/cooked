@@ -51,7 +51,6 @@ from .positions_extraction_like_humans import (
 
 from .actions_extraction_like_humans import (
     generate_agent_action_files,
-    extract_detailed_action_sequences,
     merge_actions_with_positions
 )
 
@@ -85,6 +84,5 @@ __all__ = [
     'generate_agent_position_files',
     'extract_agent_trajectories',
     'generate_agent_action_files',
-    'extract_detailed_action_sequences',
     'merge_actions_with_positions'
 ]

@@ -13,9 +13,9 @@ import math
 from pathlib import Path
 
 
-def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir, map_name=None, simulation_id=None, engine_tick_rate=24, agent_initialization_period=15.0):
+def generate_agent_action_files(meaningful_actions_df, positions_dir, output_dir, map_name=None, simulation_id=None, engine_tick_rate=24, agent_initialization_period=0.0):
     """
-    Generate action CSV files for each agent from meaningful_actions.csv and simulation data.
+    Generate action CSV files for each agent from meaningful_actions.csv and position data.
     
     Creates individual CSV files for each agent with comprehensive item tracking including:
     - Basic columns: second, item, item_id, action, target_type, target_position, action_long, 
@@ -23,7 +23,7 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
       overall_score, player_score_change, player_score, walking_speed, cutting_speed, start_pos
     - Item tracking: last_touched, touched_list, tomato_id, tomato_history, plate_id, plate_history, 
       tomato_cut_id, tomato_cut_history, tomato_salad_id, tomato_salad_history,
-      is_exchange_collaboration,
+      is_item_collaboration, is_exchange_collaboration,
     - Collaboration tracking: who_picked_tomato, who_picked_plate, who_cutted, who_assembled, 
       who_delivered, proportion_of_collaboration
     - Counter usage: number_of_counters_used, number_of_counters_tomato, number_of_counters_plate, 
@@ -31,12 +31,12 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
       history_of_counters_tomato, history_of_counters_plate, history_of_counters_tomato_cut, 
       history_of_counters_tomato_salad
     
-    The function filters out the initialization period and adjusts time so that
-    the first second after initialization becomes second 0.
+    This function processes all meaningful actions without filtering and uses direct frame 
+    comparison with position data to ensure accurate matching.
     
     Args:
         meaningful_actions_df: DataFrame with meaningful action data or path to meaningful_actions.csv file
-        simulation_df: DataFrame with simulation data or path to simulation CSV file
+        positions_dir: Directory containing {agent_id}_positions.csv files or single position DataFrame
         output_dir: Directory to save the action files
         map_name: Name of the map (optional, will extract from file if not provided)
         simulation_id: Simulation ID (optional, will use directory name if not provided)
@@ -50,9 +50,20 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
     # Read the CSV files if they are paths, otherwise use the dataframes directly
     if isinstance(meaningful_actions_df, (str, Path)):
         meaningful_actions_df = pd.read_csv(meaningful_actions_df)
-    if isinstance(simulation_df, (str, Path)):
-        simulation_df = pd.read_csv(simulation_df)
     
+    # Load position data from individual files or use provided data
+    if isinstance(positions_dir, (str, Path)):
+        positions_dir = Path(positions_dir)
+        position_files = {}
+        # Load individual position files
+        for agent_file in positions_dir.glob("*_positions.csv"):
+            agent_id = agent_file.stem.replace('_positions', '')
+            if agent_id.startswith('ai_rl_'):
+                position_files[agent_id] = pd.read_csv(agent_file)
+    else:
+        # positions_dir is actually a dict of DataFrames
+        position_files = positions_dir
+        
     output_dir = Path(output_dir)
     action_files = {}
     
@@ -75,276 +86,214 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
         # Try to extract map name from simulation_id (assuming format contains map name)
         map_name = "unknown_map"
         
-    # Sort dataframes
+    # Sort meaningful actions
     meaningful_actions_df = meaningful_actions_df.sort_values(['agent_id', 'frame']).reset_index(drop=True)
-    simulation_df = simulation_df.sort_values(['agent_id', 'frame']).reset_index(drop=True)
-    
-    # Filter out initialization period from meaningful actions
-    # Convert frames to seconds to filter out initialization period
-    meaningful_actions_df['temp_second'] = meaningful_actions_df['frame'] / engine_tick_rate
-    meaningful_actions_df = meaningful_actions_df[meaningful_actions_df['temp_second'] >= agent_initialization_period].copy()
-    meaningful_actions_df = meaningful_actions_df.drop(columns=['temp_second']).reset_index(drop=True)
-    
-    # Filter out initialization period from simulation data  
-    simulation_df = simulation_df[simulation_df['second'] >= agent_initialization_period].copy()
-    # Adjust time so that first second after initialization becomes second 0
-    simulation_df['second'] = simulation_df['second'] - agent_initialization_period
-    simulation_df = simulation_df.reset_index(drop=True)
-    
-    # Also need to adjust frame numbers in meaningful_actions_df to match the time adjustment
-    meaningful_actions_df['adjusted_frame'] = (meaningful_actions_df['frame'] / engine_tick_rate - agent_initialization_period) * engine_tick_rate
-    meaningful_actions_df['frame'] = meaningful_actions_df['adjusted_frame'].astype(int)
-    meaningful_actions_df = meaningful_actions_df.drop(columns=['adjusted_frame'])
     
     if meaningful_actions_df.empty:
-        print(f"Warning: No meaningful actions found after filtering initialization period of {agent_initialization_period} seconds")
+        print(f"Warning: No meaningful actions found")
         return {}
     
-    print(f"Filtered out initialization period of {agent_initialization_period} seconds")
-    print(f"Remaining meaningful actions: {len(meaningful_actions_df)}")
-    print(f"Remaining simulation data points: {len(simulation_df)}")
+    print(f"Processing all meaningful actions: {len(meaningful_actions_df)}")
     
     # Use engine tick rate from simulation config
     ENGINE_TICK_RATE = engine_tick_rate
     
-    # Item tracking data structures - track individual items by ID
-    item_registry = {}  # item_id -> {type, origin_ids, touched_list, counter_history, etc.}
+    # Three registry tables for organized item tracking
+    id_connection = {}      # item_id -> {tomato_id, plate_id, tomato_cut_id, tomato_salad_id}
+    item_history = {}       # item_id -> {touched_list, last_touched, counter_history, counter_count}
+    item_actions = {}       # item_id -> {who_picked_tomato, who_picked_plate, who_cutted, who_assembled, who_delivered}
+    
     item_index = {'tomato': 1, 'plate': 1, 'tomato_cut': 1, 'tomato_salad': 1}  # Item ID counters
-    
-    # Action role tracking
-    role_actions = {
-        'who_picked_tomato': {},    # tomato_id -> agent_id
-        'who_picked_plate': {},     # plate_id -> agent_id
-        'who_cutted': {},           # tomato_cut_id -> agent_id
-        'who_assembled': {},        # tomato_salad_id -> agent_id
-        'who_delivered': {}         # tomato_salad_id -> agent_id
-    }
-    
-    # Track cutting actions - map agent_id to tomato_id being cut
-    cutting_registry = {}  # agent_id -> tomato_id (currently being cut)
-    
+        
     def create_item_id(item_type):
         """Create unique item identifier and increment counter."""
         item_id = f"{item_type}_{item_index[item_type]}"
-        print(f"DEBUG: Creating item ID: {item_id} (counter before increment: {item_index[item_type]})")
         item_index[item_type] += 1
         return item_id
     
-    def register_new_item(item_id, item_type, agent_id, frame, origin_ids=None, engine_tick_rate=24):
-        """Register a new item in the tracking system."""
-        item_registry[item_id] = {
-            'type': item_type,
-            'created_by': agent_id,
-            'created_frame': frame,
-            'touched_list': [agent_id],  # Most recent first
+    def register_new_item(item_id, item_type, agent_id, origin_item_id=None):
+        """Register a new item in the three registry tables."""        
+        # Initialize id_connection entry
+        if item_type == 'tomato':
+            id_connection[item_id] = {
+                'tomato_id': item_id,
+                'plate_id': '',
+                'tomato_cut_id': '',
+                'tomato_salad_id': ''
+            }
+        elif item_type == 'plate':
+            id_connection[item_id] = {
+                'tomato_id': '',
+                'plate_id': item_id,
+                'tomato_cut_id': '',
+                'tomato_salad_id': ''
+            }
+        elif item_type == 'tomato_cut':
+            # Get tomato_id from origin
+            tomato_id = origin_item_id if origin_item_id else ''
+            if tomato_id and tomato_id in id_connection:
+                # Copy tomato info and add tomato_cut
+                id_connection[item_id] = id_connection[tomato_id].copy()
+                id_connection[item_id]['tomato_cut_id'] = item_id
+            else:
+                id_connection[item_id] = {
+                    'tomato_id': tomato_id,
+                    'plate_id': '',
+                    'tomato_cut_id': item_id,
+                    'tomato_salad_id': ''
+                }
+        elif item_type == 'tomato_salad':
+            # origin_item_id contains the complete origin information
+            if origin_item_id and isinstance(origin_item_id, dict):
+                id_connection[item_id] = {
+                    'tomato_id': origin_item_id.get('tomato_id', ''),
+                    'plate_id': origin_item_id.get('plate_id', ''),
+                    'tomato_cut_id': origin_item_id.get('tomato_cut_id', ''),
+                    'tomato_salad_id': item_id
+                }
+            else:
+                id_connection[item_id] = {
+                    'tomato_id': '',
+                    'plate_id': '',
+                    'tomato_cut_id': '',
+                    'tomato_salad_id': item_id
+                }
+        
+        # Initialize item_history entry
+        item_history[item_id] = {
+            'touched_list': [agent_id],
             'last_touched': agent_id,
-            'origin_ids': origin_ids or {},  # {'tomato_id': 'tomato_1', 'plate_id': 'plate_2'}
-            'counter_history': [],  # List of (agent_id, action_type, frame) for counter interactions
+            'counter_history': [],
             'counter_count': 0
         }
-        second = frame / engine_tick_rate
-        print(f"Created new item: {item_id} (type: {item_type}) by {agent_id} at {second:.2f}s (frame {frame})")
-        if origin_ids:
-            print(f"  Origin items: {origin_ids}")
-        return item_registry[item_id]
-    
-    def update_item_interaction(item_id, agent_id, frame, action_type, target_type=None, target_x=None, target_y=None):
-        """Update item interaction tracking."""
-        if item_id not in item_registry:
+        
+        # Initialize item_actions entry
+        if item_type in ['tomato', 'plate']:
+            item_actions[item_id] = {f'who_picked_{item_type}': agent_id}
+        elif item_type == 'tomato_cut':
+            item_actions[item_id] = {'who_cutted': agent_id}
+        elif item_type == 'tomato_salad':
+            item_actions[item_id] = {'who_assembled': agent_id, 'who_delivered': ''}
+        
+        return item_id
+
+    def update_item_interaction(item_id, agent_id, second, action_type, target_type=None, target_location=None):
+        """Update item interaction tracking in the item_history table."""
+        if item_id not in item_history:
             return None
             
-        item_data = item_registry[item_id]
+        history_data = item_history[item_id]
         
         # Update touched list - ensure agent is recorded when they interact with item
-        if agent_id not in item_data['touched_list'] or agent_id != item_data['last_touched']:
-            if agent_id not in item_data['touched_list']:
-                item_data['touched_list'].append(agent_id)
-                print(f"  Added {agent_id} to touched_list for {item_id}. New touched_list: {item_data['touched_list']}")
-            item_data['last_touched'] = agent_id
+        if agent_id not in history_data['touched_list'] or agent_id != history_data['last_touched']:
+            if agent_id not in history_data['touched_list']:
+                history_data['touched_list'].append(agent_id)
+            history_data['last_touched'] = agent_id
         
         # Track counter interactions (place/pickup)
         if action_type in ['drop', 'pickup'] and target_type == 'counter':
-            item_data['counter_history'].append((agent_id, action_type, frame, target_x, target_y))
+            history_data['counter_history'].append((agent_id, action_type, second, target_location))
             if action_type == 'drop':
-                item_data['counter_count'] += 1
+                history_data['counter_count'] += 1
         
-        return item_data
+        return history_data
     
     # Global tracking of items by location
     counter_items = {}  # (x, y) -> {item_id, type, second_dropped}
-    
-    def get_current_item_id(current_item_name, agent_id, frame, action_type, target_type, target_x=None, target_y=None, engine_tick_rate=24):
-        """Determine the current item ID based on action and item names. Track items by location."""
-        if not current_item_name or current_item_name == 'None':
-            return None
-            
-        # Map item names to types
-        item_name_lower = current_item_name
-        action_lower = action_type
-        target_type = target_type
 
-        if action_category_name == 'assemble salad':
-            # When assembling salad, agent drops tomato_cut or plate on counter
-            # The salad is created on the counter, not in agent's hand
-            # So we return the ID of the item being dropped
-            if item_name_lower in ['tomato_cut', 'plate']:
-                # Create the salad on the counter but don't return it as current item
-                salad_id = create_item_id('tomato_salad')
-                origin_ids = find_origin_items_for_salad(current_item_name, salad_id, target_x, target_y)
-                register_new_item(salad_id, 'tomato_salad', agent_id, frame, origin_ids, engine_tick_rate)
-                role_actions['who_assembled'][salad_id] = agent_id
-                
-                # Store the salad on the counter
-                if target_x is not None and target_y is not None:
-                    location = (target_x, target_y)
-                    counter_items[location] = {
-                        'item_id': salad_id,
-                        'type': 'tomato_salad',
-                        'second_dropped': frame / engine_tick_rate
-                    }
-                
-                # Return None because agent's hand becomes empty after assembly
-                return None
-                        
-        elif item_name_lower == 'tomato_cut':
-            # Create new tomato_cut when picking up from cutting board after cutting
-            if (action_lower == 'pickup' and target_type == 'cuttingboard'):
-                item_id = create_item_id('tomato_cut')
-                origin_tomato_id = cutting_registry.get(agent_id)
-                origin_ids = {'tomato_id': origin_tomato_id} if origin_tomato_id else {}
-                register_new_item(item_id, 'tomato_cut', agent_id, frame, origin_ids, engine_tick_rate)
-                role_actions['who_cutted'][item_id] = agent_id
-                if agent_id in cutting_registry:
-                    del cutting_registry[agent_id]
-                return item_id
-            # Handle tomato_cut pickup from counter (by different agent)
-            elif (action_lower == 'pickup' and target_type == 'counter' and target_x is not None and target_y is not None):
-                location = (target_x, target_y)
-                if location in counter_items and counter_items[location]['type'] == 'tomato_cut':
-                    item_id = counter_items[location]['item_id']
-                    # Update the item interaction to record that this agent is now handling it
-                    update_item_interaction(item_id, agent_id, frame, action_type, target_type, target_x, target_y)
-                    return item_id
-                        
-        elif item_name_lower == 'tomato_salad':
-            # Handle tomato_salad pickup from counter
-            if (action_lower == 'pickup' and target_type == 'counter' and target_x is not None and target_y is not None):
-                location = (target_x, target_y)
-                if location in counter_items and counter_items[location]['type'] == 'tomato_salad':
-                    item_id = counter_items[location]['item_id']
-                    # Update the item interaction to record that this agent is now handling it
-                    update_item_interaction(item_id, agent_id, frame, action_type, target_type, target_x, target_y)
-                    return item_id
-                        
+    def create_salad(item_involved, current_item_id, agent_id, second, target_location):
+        # When assembling salad, agent drops tomato_cut or plate on counter
+        if target_location is None:
+            print(f"Warning: Cannot create salad without target location")
+            return
+            
+        origin_ids = {}
+        if item_involved == 'tomato_cut':
+            origin_ids['tomato_cut_id'] = current_item_id
+            # Get the tomato_id associated with this tomato_cut_id from the connections table
+            tomato_cut_connection = id_connection.get(current_item_id, {})
+            origin_ids['tomato_id'] = tomato_cut_connection.get('tomato_id', '')
+            if target_location in counter_items:
+                origin_ids['plate_id'] = counter_items[target_location]['item_id']
+        elif item_involved == 'plate':
+            origin_ids['plate_id'] = current_item_id
+            if target_location in counter_items:
+                origin_ids['tomato_cut_id'] = counter_items[target_location]['item_id']
+                # Get the tomato_id associated with this tomato_cut_id from the connections table
+                tomato_cut_connection = id_connection.get(counter_items[target_location]['item_id'], {})
+                origin_ids['tomato_id'] = tomato_cut_connection.get('tomato_id', '')
+
+        # Create the salad on the counter but don't return it as current item
+        salad_id = create_item_id('tomato_salad')
+        register_new_item(salad_id, 'tomato_salad', agent_id, origin_ids)
+        counter_items[target_location] = {'item_id': salad_id, 'type': 'tomato_salad', 'second_dropped': second}
+
+    def get_pick_up_item_id(current_item_name, agent_id, second, target_type, target_location=None):
+        """Determine the current item ID based on action and item names. Track items by location."""
+        item_id = None  # Initialize item_id to ensure it's always defined
+        
+        if target_type == 'cuttingboard' and current_item_name == 'tomato_cut':
+            item_id = create_item_id('tomato_cut')
+            origin_tomato_id = cutting_registry.get(agent_id)
+            register_new_item(item_id, 'tomato_cut', agent_id, origin_tomato_id)
+            if agent_id in cutting_registry:
+                del cutting_registry[agent_id]
+            else:
+                print(f"Warning: Unable to handle {current_item_name} pickup from {target_type} at {second}s")
+
         else:
             # Create new tomato/plate when picked from dispenser
-            if (action_lower == 'pickup' and target_type == 'dispenser'):
-                item_id = create_item_id(item_name_lower)
-                register_new_item(item_id, item_name_lower, agent_id, frame, None, engine_tick_rate)
-                role_actions[f'who_picked_{item_name_lower}'][item_id] = agent_id
-                return item_id
-            elif (action_lower == 'pickup' and target_type == 'counter' and target_x is not None and target_y is not None):
-                location = (target_x, target_y)
-                if location in counter_items and counter_items[location]['type'] == item_name_lower:
-                    item_id = counter_items[location]['item_id']
-                    # Update the item interaction to record that this agent is now handling it
-                    update_item_interaction(item_id, agent_id, frame, action_type, target_type, target_x, target_y)
-                    return item_id
+            if target_type == 'dispenser' and current_item_name in ['tomato', 'plate']:
+                item_id = create_item_id(current_item_name)
+                register_new_item(item_id, current_item_name, agent_id, None)
+            elif target_type == 'counter':
+                if target_location is not None and target_location in counter_items and counter_items[target_location]['type'] == current_item_name:
+                    item_id = counter_items[target_location]['item_id']
+                elif compound_item.get(agent_id) is not None:
+                    item_id = compound_item.get(agent_id)
+                    compound_item[agent_id] = None
+                else:
+                    # Item not found in counter tracking - check if there might be any item at this location
+                    print(f"Warning: Item {current_item_name} not found at counter location {target_location} at {second}s.")
+                    print(f"  Available items at this location: {counter_items.get(target_location, 'None') if target_location is not None else 'None'}")
+                    print(f"  All counter items: {counter_items}")
+                    item_id = None
             else:
-                print(f"Warning: Unable to determine {item_name_lower} item_id for action '{action_type}' with target_type '{target_type}'")
-                        
-        return None
-    
-    def track_item_placement(item_id, target_x, target_y, frame, action_type, target_type, engine_tick_rate):
-        """Track when items are dropped on counters."""
-        if item_id and target_x is not None and target_y is not None:
-            location = (target_x, target_y)
-            if action_type == 'drop' and target_type == 'counter':
-                if item_id in item_registry:
-                    item_type = item_registry[item_id]['type']
-                    counter_items[location] = {
-                        'item_id': item_id,
-                        'type': item_type,
-                        'second_dropped': frame / engine_tick_rate
-                    }
+                print(f"Warning: Unable to determine {current_item_name} item_id for target_type '{target_type}' at {second}s")
+                item_id = None
 
-            elif action_type == 'pickup' and target_type == 'counter':
-                # Remove item from counter tracking when picked up
-                if location in counter_items and counter_items[location]['item_id'] == item_id:
-                    del counter_items[location]
+        return item_id
     
-    def find_origin_items_for_salad(current_item_name=None, salad_id=None, target_x=None, target_y=None):
-        """Find the tomato_cut and plate that were combined to make a salad."""
-        origin_ids = {}
-        
-        # New logic: determine what's being dropped and what's already on the counter
-        if current_item_name and target_x is not None and target_y is not None:
-            location = (target_x, target_y)
-            item_name_lower = current_item_name
-            
-            if item_name_lower == 'plate':
-                # If dropping a plate, we need to find the plate ID from the agent's tracking
-                # and look for tomato_cut on counter
-                for agent_id, agent_items in last_items.items():
-                    if agent_items.get('plate'):
-                        origin_ids['plate_id'] = agent_items['plate']
-                        break
-                                
-                # Look for tomato_cut on the counter at this location
-                if location in counter_items and counter_items[location]['type'] == 'tomato_cut':
-                    tomato_cut_id = counter_items[location]['item_id']
-                    origin_ids['tomato_cut_id'] = tomato_cut_id
-                    # Get the tomato origin from the tomato_cut
-                    if tomato_cut_id in item_registry:
-                        tomato_cut_data = item_registry[tomato_cut_id]
-                        if 'tomato_id' in tomato_cut_data.get('origin_ids', {}):
-                            origin_ids['tomato_id'] = tomato_cut_data['origin_ids']['tomato_id']
-                            
-            elif item_name_lower == 'tomato_cut':
-                # If dropping a tomato_cut, find its ID from agent's tracking
-                # and look for plate on counter
-                for agent_id, agent_items in last_items.items():
-                    if agent_items.get('tomato_cut'):
-                        tomato_cut_id = agent_items['tomato_cut']
-                        origin_ids['tomato_cut_id'] = tomato_cut_id
-                        if tomato_cut_id in item_registry and 'tomato_id' in item_registry[tomato_cut_id].get('origin_ids', {}):
-                            origin_ids['tomato_id'] = item_registry[tomato_cut_id]['origin_ids']['tomato_id']
-                        break
-
-                # Look for plate on the counter at this location
-                if location in counter_items and counter_items[location]['type'] == 'plate':
-                    origin_ids['plate_id'] = counter_items[location]['item_id']
-        
-        # Ensure we have complete origin information by searching all available items if needed
-        if not origin_ids.get('tomato_id') and origin_ids.get('tomato_cut_id'):
-            tomato_cut_id = origin_ids['tomato_cut_id']
-            if tomato_cut_id in item_registry:
-                tomato_cut_data = item_registry[tomato_cut_id]
-                if 'tomato_id' in tomato_cut_data.get('origin_ids', {}):
-                    origin_ids['tomato_id'] = tomato_cut_data['origin_ids']['tomato_id']
-        
-        return origin_ids
-    
-    def get_item_collaboration_data(item_id):
-        """Get collaboration data for a specific item."""
-        if item_id not in item_registry:
+    def get_item_collaboration_data(item_id, item_involved, available_agents=None):
+        """Get collaboration data for a specific item using the new registry tables."""
+        if item_id not in item_history:
             return {}, False, False
+        
+        # Default to standard agents if not provided
+        if available_agents is None:
+            available_agents = ['ai_rl_1', 'ai_rl_2']
+        else:
+            # Filter to only RL agents
+            available_agents = [agent for agent in available_agents if agent.startswith('ai_rl_')]
             
-        item_data = item_registry[item_id]
+        history_data = item_history[item_id]
+        connection_data = id_connection.get(item_id, {})
         
         # Check if multiple agents touched this specific item
-        is_item_collaboration = len(set(item_data['touched_list'])) > 1
+        is_item_collaboration = len(set(history_data.get('touched_list', []))) > 1
         
         # Check if multiple agents were involved in the full history
-        all_involved_agents = set(item_data['touched_list'])
+        all_involved_agents = set(history_data.get('touched_list', []))
         
-        # Add agents from origin items
-        for origin_id in item_data.get('origin_ids', {}).values():
-            if origin_id in item_registry:
-                all_involved_agents.update(item_registry[origin_id]['touched_list'])
+        # Add agents from origin items using id_connection
+        for origin_type in ['tomato_id', 'plate_id', 'tomato_cut_id']:
+            origin_id = connection_data.get(origin_type, '')
+            if origin_id and origin_id in item_history:
+                all_involved_agents.update(item_history[origin_id].get('touched_list', []))
         
+        # Check if multiple agents were involved across the entire item lineage (exchange collaboration)
         is_exchange_collaboration = len(all_involved_agents) > 1
-        
+                
         # Calculate collaboration percentages
         collaboration_data = {
             'who_picked_tomato': '',
@@ -355,174 +304,114 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
             'proportion_of_collaboration': [0.0, 0.0]
         }
         
-        # Get role assignments based on item history
-        if item_data['type'] == 'tomato_salad':
+        # Get role assignments based on item history using the new registry tables
+        if item_involved == 'tomato_salad':
+            # For tomato_salad: get all role information
             salad_id = item_id
-            tomato_cut_id = item_data.get('origin_ids', {}).get('tomato_cut_id')
-            tomato_id = item_data.get('origin_ids', {}).get('tomato_id')
-            plate_id = item_data.get('origin_ids', {}).get('plate_id')
+            tomato_cut_id = connection_data.get('tomato_cut_id', '')
+            tomato_id = connection_data.get('tomato_id', '')
+            plate_id = connection_data.get('plate_id', '')
             
-            collaboration_data['who_assembled'] = role_actions['who_assembled'].get(salad_id, '')
-            collaboration_data['who_cutted'] = role_actions['who_cutted'].get(tomato_cut_id, '')
-            collaboration_data['who_picked_tomato'] = role_actions['who_picked_tomato'].get(tomato_id, '')
-            collaboration_data['who_picked_plate'] = role_actions['who_picked_plate'].get(plate_id, '')
-            collaboration_data['who_delivered'] = role_actions['who_delivered'].get(salad_id, '')
-            
-            # Calculate percentages (each role = 0.2, total = 1.0)
-            agent_contributions = {}
-            role_weight = 0.2
-            for role, agent in collaboration_data.items():
-                if agent and role != 'proportion_of_collaboration':
-                    agent_contributions[agent] = agent_contributions.get(agent, 0) + role_weight
-            
-            # Convert to list format [agent1_contribution, agent2_contribution]
-            agents = sorted(list(all_involved_agents))  # Sort for consistency
-            if len(agents) >= 2:
-                collaboration_data['proportion_of_collaboration'] = [
-                    agent_contributions.get(agents[0], 0.0),
-                    agent_contributions.get(agents[1], 0.0)
-                ]
-            elif len(agents) == 1:
-                collaboration_data['proportion_of_collaboration'] = [
-                    agent_contributions.get(agents[0], 0.0),
-                    0.0
-                ]
+            # Get action data for each item
+            collaboration_data['who_assembled'] = item_actions.get(salad_id, {}).get('who_assembled', '')
+            collaboration_data['who_delivered'] = item_actions.get(salad_id, {}).get('who_delivered', '')
+            collaboration_data['who_cutted'] = item_actions.get(tomato_cut_id, {}).get('who_cutted', '')
+            collaboration_data['who_picked_tomato'] = item_actions.get(tomato_id, {}).get('who_picked_tomato', '')
+            collaboration_data['who_picked_plate'] = item_actions.get(plate_id, {}).get('who_picked_plate', '')
+
+            num_roles = 5
         
-        elif item_data['type'] == 'tomato_cut':
+        elif item_involved == 'tomato_cut':
+            # For tomato_cut: get cut and tomato pick information
             tomato_cut_id = item_id
-            tomato_id = item_data.get('origin_ids', {}).get('tomato_id')
-            collaboration_data['who_cutted'] = role_actions['who_cutted'].get(tomato_cut_id, '')
-            collaboration_data['who_picked_tomato'] = role_actions['who_picked_tomato'].get(tomato_id, '')
+            tomato_id = connection_data.get('tomato_id', '')
             
-            # Calculate percentages for tomato_cut (2 roles = 0.5 each)
-            agent_contributions = {}
-            role_weight = 0.5
-            for role in ['who_picked_tomato', 'who_cutted']:
-                agent = collaboration_data[role]
-                if agent:
+            collaboration_data['who_cutted'] = item_actions.get(tomato_cut_id, {}).get('who_cutted', '')
+            collaboration_data['who_picked_tomato'] = item_actions.get(tomato_id, {}).get('who_picked_tomato', '')
+            
+            num_roles = 2            
+
+        else:
+            # For basic items (tomato, plate)
+            if item_id.startswith('tomato_'):
+                collaboration_data['who_picked_tomato'] = item_actions.get(item_id, {}).get('who_picked_tomato', '')
+            elif item_id.startswith('plate_'):
+                collaboration_data['who_picked_plate'] = item_actions.get(item_id, {}).get('who_picked_plate', '')
+
+            num_roles = 1
+
+        agent_contributions = {}
+        role_weight = 1.0 / num_roles
+        for role, agent in collaboration_data.items():
+            if agent and role != 'proportion_of_collaboration':
                     agent_contributions[agent] = agent_contributions.get(agent, 0) + role_weight
-            
-            agents = sorted(list(all_involved_agents))
-            if len(agents) >= 2:
-                collaboration_data['proportion_of_collaboration'] = [
-                    agent_contributions.get(agents[0], 0.0),
-                    agent_contributions.get(agents[1], 0.0)
-                ]
-            elif len(agents) == 1:
-                collaboration_data['proportion_of_collaboration'] = [
-                    agent_contributions.get(agents[0], 0.0),
-                    0.0
-                ]
-
-        else:         
-            collaboration_data[f'who_picked_{item_data["type"]}'] = role_actions[f'who_picked_{item_data["type"]}'].get(item_id, '')
-            # For basic items (tomato, plate), no collaboration calculation needed
-            agents = sorted(list(all_involved_agents))
-            if len(agents) >= 1:
-                collaboration_data['proportion_of_collaboration'] = [1.0, 0.0] if len(agents) == 1 else [0.5, 0.5]
-
+        
+        # Use available agents instead of hardcoded list, ensure we have at least 2 entries for consistency
+        agents_in_order = available_agents[:2] if len(available_agents) >= 2 else available_agents + [''] * (2 - len(available_agents))
+        collaboration_data['proportion_of_collaboration'] = [
+            agent_contributions.get(agents_in_order[0], 0.0),
+            agent_contributions.get(agents_in_order[1], 0.0)
+        ]
         return collaboration_data, is_item_collaboration, is_exchange_collaboration
 
     # Get histories for each item type
     def get_item_history(item_id):
-        if item_id and item_id in item_registry:
-            return ';'.join(item_registry[item_id].get('touched_list', []))
+        if item_id and item_id in item_history:
+            return ';'.join(item_history[item_id].get('touched_list', []))
         return ''
         
     # Get counter usage data for the current item
-    def get_item_counter_data(item_id, engine_tick_rate):
-        if item_id and item_id in item_registry:
-            counter_history = item_registry[item_id].get('counter_history', [])
-            counter_count = item_registry[item_id].get('counter_count', 0)
+    def get_item_counter_data(item_id):
+        if item_id and item_id in item_history:
+            counter_history = item_history[item_id].get('counter_history', [])
+            counter_count = item_history[item_id].get('counter_count', 0)
             # Convert frames to seconds and create history string
-            history_str = ';'.join([f"{agent}:{action}@{frame/engine_tick_rate:.2f}s" for agent, action, frame, target_x, target_y in counter_history])
+            history_str = ';'.join([f"{agent}:{action}@{second:.2f}s" for agent, action, second, target_location in counter_history])
             return counter_count, history_str
         return 0, ''
     
     # Get all counter history entries sorted by time
-    def get_all_counter_history_sorted(item_ids, engine_tick_rate):
+    def get_all_counter_history_sorted(item_ids):
         all_entries = []
         for item_id in item_ids:
-            if item_id and item_id in item_registry:
-                counter_history = item_registry[item_id].get('counter_history', [])
-                for agent, action, frame, target_x, target_y in counter_history:
+            if item_id and item_id in item_history:
+                counter_history = item_history[item_id].get('counter_history', [])
+                for agent, action, second, target_location in counter_history:
                     all_entries.append({
-                        'frame': frame,
-                        'second': frame / engine_tick_rate,
+                        'second': second,
                         'agent': agent,
                         'action': action,
                         'item_id': item_id
                     })
         
-        # Sort by frame number
-        all_entries.sort(key=lambda x: x['frame'])
+        # Sort by second (time)
+        all_entries.sort(key=lambda x: x['second'])
         
         # Create formatted history string
         history_str = ';'.join([f"{entry['agent']}:{entry['action']}@{entry['second']:.2f}s" for entry in all_entries])
         return history_str
-    
-    # Load position data for distance calculations
-    position_files = {}
-    for agent_id in simulation_df['agent_id'].unique():
-        if agent_id.startswith('ai_rl_'):
-            position_file = output_dir / f"{agent_id}_positions.csv"
-            if position_file.exists():
-                position_files[agent_id] = pd.read_csv(position_file)
-            else:
-                # Generate position data on the fly if file doesn't exist
-                agent_sim_data = simulation_df[simulation_df['agent_id'] == agent_id].copy()
-                agent_sim_data = agent_sim_data.sort_values('frame').reset_index(drop=True)
-                
-                # Calculate distance walked
-                agent_sim_data['distance_walked'] = 0.0
-                if len(agent_sim_data) > 1:
-                    for i in range(1, len(agent_sim_data)):
-                        prev_x = agent_sim_data.loc[i-1, 'x']
-                        prev_y = agent_sim_data.loc[i-1, 'y']
-                        curr_x = agent_sim_data.loc[i, 'x']
-                        curr_y = agent_sim_data.loc[i, 'y']
-                        distance_step = math.sqrt((curr_x - prev_x)**2 + (curr_y - prev_y)**2)
-                        agent_sim_data.loc[i, 'distance_walked'] = agent_sim_data.loc[i-1, 'distance_walked'] + distance_step
-                
-                position_files[agent_id] = agent_sim_data[['second', 'x', 'y', 'distance_walked']].copy()
-    
+        
     # Initialize agent-specific data structures for CSV writing
     agent_data = {}  # agent_id -> list of action records
     agent_tracking = {}  # agent_id -> tracking variables (last distance, score, etc.)
+    cutting_registry = {}  # agent_id -> tomato_id (currently being cut)
     
     # Initialize tracking for each agent
     for agent_id in meaningful_actions_df['agent_id'].unique():
         if not agent_id.startswith('ai_rl_'):
             continue
             
-        agent_sim_data = simulation_df[simulation_df['agent_id'] == agent_id].copy()
-        if agent_sim_data.empty:
+        # Get position data for this agent
+        agent_position_data = position_files.get(agent_id, pd.DataFrame())
+        if agent_position_data.empty:
+            print(f"Warning: No position data found for {agent_id}")
             continue
-            
-        # Get start position from simulation data at frame 0
-        start_frame_data = agent_sim_data[agent_sim_data['frame'] == 0]
-        if not start_frame_data.empty:
-            start_tile_x = start_frame_data.iloc[0]['tile_x']
-            start_tile_y = start_frame_data.iloc[0]['tile_y']
-            start_pos = f"({start_tile_x}, {start_tile_y})"
-        else:
-            start_tile_x = agent_sim_data.iloc[0]['tile_x']
-            start_tile_y = agent_sim_data.iloc[0]['tile_y']
-            start_pos = f"({start_tile_x}, {start_tile_y})"
+        
+        # Get start position from position data 
+        start_pos = agent_position_data.iloc[0]['start_pos'] if not agent_position_data.empty else "(0, 0)"
         
         # Calculate max distance for this agent
-        max_distance = 0.0
-        position_data = position_files.get(agent_id, pd.DataFrame())
-        if not position_data.empty:
-            max_distance = position_data['distance_walked'].max()
-        elif not agent_sim_data.empty:
-            # Calculate from simulation data
-            for i in range(1, len(agent_sim_data)):
-                prev_x = agent_sim_data.iloc[i-1]['x']
-                prev_y = agent_sim_data.iloc[i-1]['y']
-                curr_x = agent_sim_data.iloc[i]['x']
-                curr_y = agent_sim_data.iloc[i]['y']
-                max_distance += math.sqrt((curr_x - prev_x)**2 + (curr_y - prev_y)**2)
+        max_distance = agent_position_data['distance_walked'].max() if not agent_position_data.empty else 0.0
         
         agent_data[agent_id] = []
         agent_tracking[agent_id] = {
@@ -532,118 +421,103 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
             'touched_items': [],
             'start_pos': start_pos,
             'max_distance': max_distance,
-            'position_data': position_data,
-            'sim_data': agent_sim_data
+            'position_data': agent_position_data
         }
     
     # Sort all meaningful actions across all agents by frame to process chronologically
     all_actions = meaningful_actions_df.sort_values(['frame', 'agent_id']).reset_index(drop=True)
-    last_items = {}  # agent_id -> {item_type: item_id} to track different item types separately
+    last_item = {}  # agent_id -> {item_id}
+    compound_item = {}  # agent_id -> {item_id}
+
+    # Get available agents for collaboration data
+    available_agents = [agent_id for agent_id in meaningful_actions_df['agent_id'].unique() if agent_id.startswith('ai_rl_')]
 
     # Process all actions chronologically
     for _, action in all_actions.iterrows():
         agent_id = action.get('agent_id')
         frame = action.get('frame', 0)
         action_category_name = action.get('action_category_name', '')
-        current_item = action.get('current_item', None)
-        previous_item = action.get('previous_item', None)
+        current_item = action.get('current_item', None) if pd.notna(action.get('current_item', None)) else None
+        previous_item = action.get('previous_item', None) if pd.notna(action.get('previous_item', None)) else None
         action_type = action.get('item_change_type', '')
         target_type = action.get('target_tile_type', '')
         target_x = action.get('target_tile_x', None)
         target_y = action.get('target_tile_y', None)
+        compound_action_part = action.get('compound_action_part', '')
+        
+        # Handle None values for target coordinates
+        if target_x is not None and target_y is not None:
+            target_location = (int(target_x), int(target_y))  # Use tuple format for counter_items keys
+            target_location_str = f'({int(target_x)}, {int(target_y)})'  # String format for CSV output
+        else:
+            target_location = None
+            target_location_str = 'None'
         
         # Skip non-RL agents
         if not agent_id.startswith('ai_rl_') or agent_id not in agent_tracking:
-            print(f"DEBUG: Skipping action from agent {agent_id} (frame {frame}): {action_category_name}")
+            print(f"Warning: Skipping action from agent {agent_id} (frame {frame}): {action_category_name}")
             continue
         
         # Calculate timing from frame and ENGINE_TICK_RATE
         second = frame / ENGINE_TICK_RATE
         
-        # Get or create item ID based on action type
-        item_involved = current_item if current_item and current_item != 'None' else previous_item
-
         # Initialize agent's item tracking if not exists
-        if agent_id not in last_items:
-            last_items[agent_id] = {}
+        if agent_id not in last_item:
+            last_item[agent_id] = None
+        if agent_id not in compound_item:
+            compound_item[agent_id] = None
+        if agent_id not in cutting_registry:
+            cutting_registry[agent_id] = None
 
-        # Special handling for cutting actions - when we start cutting, we're working with a tomato
-        if action_type == 'cutting':
+        # Get or create item ID based on action type
+        item_involved = current_item if current_item else previous_item
+        existing_item_id = last_item[agent_id]
+        current_item_id = None  # Initialize to ensure it's always defined
+        
+        # Determine current item ID based on action type
+        if action_type == 'pickup':
+            current_item_id = get_pick_up_item_id(item_involved, agent_id, second, target_type, target_location)
+            last_item[agent_id] = current_item_id
+            
+            # Only remove item from counter if it's not a compound action
+            # For compound actions, the item being picked up is different from what was just placed
+            if target_location is not None and target_location in counter_items and compound_action_part != 2:
+                del counter_items[target_location]
+
+        elif action_type == 'cutting':
             # Find the tomato that was just placed on the cutting board and register it
             item_involved = 'tomato'
-            tomato_id = last_items[agent_id].get('tomato')
-            cutting_registry[agent_id] = tomato_id
-            if tomato_id:
-                update_item_interaction(tomato_id, agent_id, frame, action_type)
+            current_item_id = cutting_registry.get(agent_id)
 
-        # Determine current item ID based on item type and existing tracking
-        current_item_id = None
-        if item_involved and item_involved != 'None':
-            # Check if we need to create a new item or use existing one
-            existing_item_id = last_items[agent_id].get(item_involved)
-            
-            # Create new item if:
-            # 1. No existing item of this type for this agent
-            # 2. Action involves picking up from dispenser (new item)
-            # 3. Action is assembling salad (creates new tomato_salad but agent hand becomes empty)
-            # 4. Action is picking up tomato_cut from cutting board (new tomato_cut)
-            # 5. Action is picking up from counter (existing item)
-            if (existing_item_id is None or 
-                (action_type == 'pickup' and target_type == 'dispenser') or
-                action_category_name == 'assemble salad' or
-                (action_type == 'pickup' and target_type == 'cuttingboard' and item_involved == 'tomato_cut') or
-                (action_type == 'pickup' and target_type == 'counter')):
-                
-                current_item_id = get_current_item_id(item_involved, agent_id, frame, action_type, target_type, target_x, target_y, ENGINE_TICK_RATE)
-                if current_item_id:
-                    last_items[agent_id][item_involved] = current_item_id
-                elif action_category_name == 'assemble salad':
-                    # For salad assembly, clear the item being dropped since hand becomes empty
-                    if item_involved in last_items[agent_id]:
-                        last_items[agent_id][item_involved] = None
-            else:
-                current_item_id = existing_item_id
+        elif action_type == 'drop':
+            current_item_id = existing_item_id
+            if target_type == 'cuttingboard' and item_involved == 'tomato':
+                # Save the tomato ID for the upcoming cutting action
+                cutting_registry[agent_id] = current_item_id
+            elif target_type == 'delivery' and item_involved == 'tomato_salad':
+                # Track delivery actions for salads
+                item_actions[current_item_id]['who_delivered'] = agent_id
+            elif target_type == 'counter':
+                if action_category_name == 'assemble salad':
+                    create_salad(item_involved, current_item_id, agent_id, second, target_location)
+                else:
+                    if compound_action_part == 1:
+                        # Check if there's an item at the target location for compound actions
+                        if target_location in counter_items:
+                            compound_item[agent_id] = counter_items[target_location]['item_id']
+                        else:
+                            print(f"Warning: No item found at counter location {target_location} for compound action at {second}s")
+                            compound_item[agent_id] = None
+                    counter_items[target_location] = {'item_id': current_item_id, 'type': item_involved, 'second_dropped': second}
+            last_item[agent_id] = None  # Agent's hand becomes empty after dropping
 
-        # For salad assembly actions, we need to track the item being dropped, not the salad
-        if action_category_name == 'assemble salad':
-            # The item_involved is what the agent was holding (tomato_cut or plate)
-            # Get the current item ID before it gets cleared
-            if agent_id in last_items and item_involved in last_items[agent_id]:
-                current_item_id = last_items[agent_id][item_involved]
+        else: 
+            print(f'Warning: Unhandled action type {action_type} for item {item_involved} by agent {agent_id} at frame {frame}')
+            current_item_id = existing_item_id  # Fallback to existing item
 
         # Update item tracking if we have a valid item ID
-        if current_item_id:
-            print(f"Frame {frame}: Agent {agent_id} performing {action_type} on {current_item_id} (target: {target_type})")
-            update_item_interaction(current_item_id, agent_id, frame, action_type, target_type, target_x, target_y)
-            track_item_placement(current_item_id, target_x, target_y, frame, action_type, target_type, ENGINE_TICK_RATE)
+        update_item_interaction(current_item_id, agent_id, second, action_type, target_type, target_location)
 
-            # Update agent's item tracking based on action type
-            item_type = current_item_id.split('_')[0]
-            if 'cut' in current_item_id:
-                item_type = 'tomato_cut'
-            elif 'salad' in current_item_id:
-                item_type = 'tomato_salad'
-            
-            if action_type == 'pickup':
-                # Agent now has this item
-                last_items[agent_id][item_type] = current_item_id
-            elif action_type == 'drop':
-                # Check where the item is being dropped
-                if target_type in ['counter', 'cuttingboard']:
-                    # Item is placed, agent no longer holds it
-                    last_items[agent_id][item_type] = None
-                elif target_type == 'delivery':
-                    # Track delivery actions for salads
-                    if current_item_id.startswith('tomato_salad_'):
-                        role_actions['who_delivered'][current_item_id] = agent_id
-                    # Delivered items are no longer held
-                    last_items[agent_id][item_type] = None
-        
-        # Special handling for salad assembly - clear the item being assembled from agent's tracking
-        if action_category_name == 'assemble salad' and item_involved in ['tomato_cut', 'plate']:
-            if agent_id in last_items and item_involved in last_items[agent_id]:
-                last_items[agent_id][item_involved] = None
-        
         # Get agent tracking data
         tracking = agent_tracking[agent_id]
         if current_item_id != tracking['last_touched_item']:
@@ -651,46 +525,33 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
             if current_item_id not in tracking['touched_items']:
                 tracking['touched_items'].append(current_item_id)
 
-        # Find corresponding simulation data to get score and distance
-        sim_frame_data = tracking['sim_data'][tracking['sim_data']['frame'] == frame]
-        if not sim_frame_data.empty:
-            sim_row = sim_frame_data.iloc[0]
-            current_player_score = sim_row.get('score', 0)
+        # Find corresponding position data to get score and distance
+        position_data = tracking['position_data']
+        position_frame_data = position_data[position_data['frame'] == frame] if 'frame' in position_data.columns else position_data[position_data['second'] <= second]
+        
+        if not position_frame_data.empty:
+            pos_row = position_frame_data.iloc[-1]  # Get closest/latest data point
+            current_player_score = pos_row.get('score', 0)
+            distance_walked = pos_row.get('distance_walked', 0.0)
             
-            # Calculate overall score as sum of all players' scores at this frame
-            frame_data_all_agents = simulation_df[simulation_df['frame'] == frame]
-            overall_score = frame_data_all_agents['score'].sum() if not frame_data_all_agents.empty else current_player_score
+            # Calculate overall score as sum of all agents' scores at this time
+            overall_score = 0
+            for other_agent_id, other_tracking in agent_tracking.items():
+                other_pos_data = other_tracking['position_data']
+                other_frame_data = other_pos_data[other_pos_data['frame'] == frame] if 'frame' in other_pos_data.columns else other_pos_data[other_pos_data['second'] <= second]
+                if not other_frame_data.empty:
+                    overall_score += other_frame_data.iloc[-1].get('score', 0)
             
-            # Calculate distance walked at this frame
-            if not tracking['position_data'].empty:
-                # Find position data for this frame
-                pos_data_for_frame = tracking['position_data'][tracking['position_data']['second'] <= second]
-                if not pos_data_for_frame.empty:
-                    distance_walked = pos_data_for_frame.iloc[-1]['distance_walked']
-                else:
-                    distance_walked = 0.0
-            else:
-                # Approximate based on frame progression
-                total_frames = tracking['sim_data']['frame'].max() if not tracking['sim_data'].empty else 1
-                distance_walked = (frame / total_frames) * tracking['max_distance']
+            if overall_score == 0:  # Fallback to current player score
+                overall_score = current_player_score
         else:
-            print(f"Warning: No simulation data found for agent {agent_id} at frame {frame}")
-            # Use nearest simulation data
-            if not tracking['sim_data'].empty:
-                closest_sim = tracking['sim_data'].iloc[(tracking['sim_data']['frame'] - frame).abs().argsort()[:1]]
-                if not closest_sim.empty:
-                    current_player_score = closest_sim.iloc[0].get('score', 0)
-                    # Try to calculate overall score for the closest frame
-                    closest_frame = closest_sim.iloc[0]['frame']
-                    frame_data_all_agents = simulation_df[simulation_df['frame'] == closest_frame]
-                    overall_score = frame_data_all_agents['score'].sum() if not frame_data_all_agents.empty else current_player_score
-                else:
-                    current_player_score = 0
-                    overall_score = 0
-            else:
-                current_player_score = 0
-                overall_score = 0
-            distance_walked = 0.0
+            print(f"Warning: No position data found for agent {agent_id} at frame {frame}")
+            # Initialize missing variables with default values
+            current_player_score = 0
+            overall_score = 0
+            # Use approximation for distance
+            total_frames = len(tracking['position_data']) if not tracking['position_data'].empty else 1
+            distance_walked = (frame / (total_frames * engine_tick_rate)) * tracking['max_distance']
         
         # Calculate distance walked since last action
         distance_walked_since_last_action = distance_walked - tracking['previous_distance']
@@ -700,22 +561,17 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
         player_score_change = current_player_score - tracking['previous_player_score']
         tracking['previous_player_score'] = current_player_score
         
-        # Create target_position in the format (x_tile, y_tile)
-        target_position = f"({target_x}, {target_y})"
-        
         # Get item-specific data if we have a current item ID
-        item_data = {}
         collaboration_data = {}
         is_item_collaboration = False
         is_exchange_collaboration = False
         
-        if current_item_id and current_item_id in item_registry:
-            item_data = item_registry[current_item_id]
-            collaboration_data, is_item_collaboration, is_exchange_collaboration = get_item_collaboration_data(current_item_id)
+        if current_item_id and current_item_id in item_history:
+            collaboration_data, is_item_collaboration, is_exchange_collaboration = get_item_collaboration_data(current_item_id, item_involved, available_agents)
         
         # Extract item IDs and histories based on current item
-        last_touched = item_data.get('last_touched', '')
-        touched_list_str = ';'.join(item_data.get('touched_list', [])) if item_data.get('touched_list') else ''
+        last_touched = item_history.get(current_item_id, {}).get('last_touched', '') if current_item_id else ''
+        touched_list_str = ';'.join(item_history.get(current_item_id, {}).get('touched_list', [])) if current_item_id else ''
         
         # Initialize item IDs and histories based on current action context
         tomato_id = ''
@@ -728,114 +584,52 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
         tomato_salad_history = ''
         
         # Determine item IDs and histories based on the current item involved in this action
-        if current_item_id and current_item_id in item_registry:
-            item_data = item_registry[current_item_id]
-            
-            if current_item_id.startswith('tomato_salad_'):
-                # For tomato_salad: populate all related items
-                tomato_salad_id = current_item_id
-                tomato_salad_history = get_item_history(current_item_id)
-                
-                origin_ids = item_data.get('origin_ids', {})
-                # Get tomato info from origin
-                if origin_ids.get('tomato_id'):
-                    tomato_id = origin_ids.get('tomato_id', '')
-                    tomato_history = get_item_history(tomato_id)
-                # Get plate info from origin
-                if origin_ids.get('plate_id'):
-                    plate_id = origin_ids.get('plate_id', '')
-                    plate_history = get_item_history(plate_id)
-                # Get tomato_cut info from origin
-                if origin_ids.get('tomato_cut_id'):
-                    tomato_cut_id = origin_ids.get('tomato_cut_id', '')
-                    tomato_cut_history = get_item_history(tomato_cut_id)
-                    
-            elif current_item_id.startswith('tomato_cut_'):
-                # For tomato_cut: populate tomato_cut and its origin tomato
-                tomato_cut_id = current_item_id
-                tomato_cut_history = get_item_history(current_item_id)
-                
-                origin_ids = item_data.get('origin_ids', {})
-                if origin_ids.get('tomato_id'):
-                    tomato_id = origin_ids.get('tomato_id', '')
-                    tomato_history = get_item_history(tomato_id)
-                    
-            elif current_item_id.startswith('tomato_'):
-                # For tomato: only populate tomato info
-                tomato_id = current_item_id
-                tomato_history = get_item_history(current_item_id)
-                
-            elif current_item_id.startswith('plate_'):
-                # For plate: only populate plate info
-                plate_id = current_item_id
-                plate_history = get_item_history(current_item_id)
+        connection_data = id_connection.get(current_item_id, {}) if current_item_id else {}
         
-        # Additional check: if we're missing information and this is a pickup action from counter,
-        # we might be picking up an item with full history that we should preserve
-        elif not current_item_id and action_type == 'pickup' and target_type == 'counter' and target_x is not None and target_y is not None:
-            # Check if there's an item on the counter at this location
-            location = (target_x, target_y)
-            if location in counter_items:
-                counter_item = counter_items[location]
-                potential_item_id = counter_item['item_id']
+        if item_involved == 'tomato_salad':
+            # For tomato_salad: populate all related items
+            tomato_salad_id = current_item_id
+            tomato_salad_history = get_item_history(current_item_id)
+            
+            # Get related items from connection data
+            tomato_id = connection_data.get('tomato_id', '')
+            tomato_history = get_item_history(tomato_id)
+            plate_id = connection_data.get('plate_id', '')
+            plate_history = get_item_history(plate_id)
+            tomato_cut_id = connection_data.get('tomato_cut_id', '')
+            tomato_cut_history = get_item_history(tomato_cut_id)
+
+        elif item_involved == 'tomato_cut':
+            # For tomato_cut: populate tomato_cut and its origin tomato
+            tomato_cut_id = current_item_id
+            tomato_cut_history = get_item_history(current_item_id)
+            
+            # Get related tomato from connection data
+            tomato_id = connection_data.get('tomato_id', '')
+            tomato_history = get_item_history(tomato_id)
                 
-                if potential_item_id in item_registry:
-                    current_item_id = potential_item_id
-                    item_data = item_registry[current_item_id]
-                    
-                    # Update the agent's item tracking
-                    item_type = item_data['type']
-                    if agent_id not in last_items:
-                        last_items[agent_id] = {}
-                    last_items[agent_id][item_type] = current_item_id
-                    
-                    # Update interaction tracking
-                    update_item_interaction(current_item_id, agent_id, frame, action_type, target_type, target_x, target_y)
-                    
-                    # Populate all related information based on item type
-                    if current_item_id.startswith('tomato_salad_'):
-                        tomato_salad_id = current_item_id
-                        tomato_salad_history = get_item_history(current_item_id)
-                        
-                        origin_ids = item_data.get('origin_ids', {})
-                        if origin_ids.get('tomato_id'):
-                            tomato_id = origin_ids.get('tomato_id', '')
-                            tomato_history = get_item_history(tomato_id)
-                        if origin_ids.get('plate_id'):
-                            plate_id = origin_ids.get('plate_id', '')
-                            plate_history = get_item_history(plate_id)
-                        if origin_ids.get('tomato_cut_id'):
-                            tomato_cut_id = origin_ids.get('tomato_cut_id', '')
-                            tomato_cut_history = get_item_history(tomato_cut_id)
-                            
-                    elif current_item_id.startswith('tomato_cut_'):
-                        tomato_cut_id = current_item_id
-                        tomato_cut_history = get_item_history(current_item_id)
-                        
-                        origin_ids = item_data.get('origin_ids', {})
-                        if origin_ids.get('tomato_id'):
-                            tomato_id = origin_ids.get('tomato_id', '')
-                            tomato_history = get_item_history(tomato_id)
-                    
-                    elif current_item_id.startswith('tomato_'):
-                        tomato_id = current_item_id
-                        tomato_history = get_item_history(current_item_id)
-                        
-                    elif current_item_id.startswith('plate_'):
-                        plate_id = current_item_id
-                        plate_history = get_item_history(current_item_id)
+        elif item_involved == 'tomato':
+            # For tomato: only populate tomato info
+            tomato_id = current_item_id
+            tomato_history = get_item_history(current_item_id)
+            
+        elif item_involved == 'plate':
+            # For plate: only populate plate info
+            plate_id = current_item_id
+            plate_history = get_item_history(current_item_id)
+        
         
         # Get counter data for all relevant items
-        tomato_counter_count, tomato_counter_history = get_item_counter_data(tomato_id, ENGINE_TICK_RATE)
-        plate_counter_count, plate_counter_history = get_item_counter_data(plate_id, ENGINE_TICK_RATE)
-        tomato_cut_counter_count, tomato_cut_counter_history = get_item_counter_data(tomato_cut_id, ENGINE_TICK_RATE)
-        tomato_salad_counter_count, tomato_salad_counter_history = get_item_counter_data(tomato_salad_id, ENGINE_TICK_RATE)
+        tomato_counter_count, tomato_counter_history = get_item_counter_data(tomato_id)
+        plate_counter_count, plate_counter_history = get_item_counter_data(plate_id)
+        tomato_cut_counter_count, tomato_cut_counter_history = get_item_counter_data(tomato_cut_id)
+        tomato_salad_counter_count, tomato_salad_counter_history = get_item_counter_data(tomato_salad_id)
         
         total_counters_used = tomato_counter_count + plate_counter_count + tomato_cut_counter_count + tomato_salad_counter_count
         
         # Get all counter history sorted by frame/time for all relevant items
         relevant_item_ids = [tomato_id, plate_id, tomato_cut_id, tomato_salad_id]
-        all_counter_history = get_all_counter_history_sorted(relevant_item_ids, ENGINE_TICK_RATE)
+        all_counter_history = get_all_counter_history_sorted(relevant_item_ids)
         
         action_data = {
             # Basic action data
@@ -844,7 +638,7 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
             'item_id': current_item_id,
             'action': action_type,
             'target_type': target_type,
-            'target_position': target_position,
+            'target_position': target_location_str,
             'action_long': action_category_name,
             'player_id': agent_id,
             'map_name': map_name,
@@ -897,7 +691,6 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
         
         # Add this action record to the agent's data
         agent_data[agent_id].append(action_data)
-        print(f"DEBUG: Added action record for {agent_id} at frame {frame}: item_id={current_item_id}, action={action_type}")
     
     # Now save each agent's data to CSV files
     for agent_id, action_data_list in agent_data.items():
@@ -917,12 +710,12 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
             print(f"  Start position: {agent_tracking[agent_id]['start_pos']}")
             print(f"  Items touched: {len(set(action_df['touched_list'].iloc[-1].split(';')) if action_df['touched_list'].iloc[-1] else [])}")
             print(f"  Total counters used: {action_df['number_of_counters_used'].iloc[-1] if not action_df.empty else 0}")
-            print(f"  Collaboration actions: {sum(action_df['is_exchange_collaboration'])}")
+            print(f"  Collaboration actions: {sum(action_df['is_item_collaboration'])}")
     
     # Print global collaboration summary
-    total_salads = len([item_id for item_id in item_registry if item_id.startswith('tomato_salad_')])
-    total_items = len(item_registry)
-    collaborative_items = sum(1 for item_data in item_registry.values() if len(set(item_data.get('touched_list', []))) > 1)
+    total_salads = len([item_id for item_id in id_connection if item_id.startswith('tomato_salad_')])
+    total_items = len(id_connection)
+    collaborative_items = sum(1 for item_id in item_history if len(set(item_history[item_id].get('touched_list', []))) > 1)
     
     print(f"\nGlobal Analysis Summary:")
     print(f"  Total items tracked: {total_items}")
@@ -933,112 +726,19 @@ def generate_agent_action_files(meaningful_actions_df, simulation_df, output_dir
         # Count items if item_id == f'{item_type}_{Number}' with whatever number (e.g., tomato_1, tomato_2, ...)
         items_of_type = [
             item_id
-            for item_id in item_registry
+            for item_id in id_connection
             if re.match(rf'^{re.escape(item_type)}_\d+$', item_id)
         ]        
         count = len(items_of_type)
         print(f"    {item_type}: {count} items: {items_of_type}")
     
-    print(f"\nAll registered items:")
-    for item_id, item_data in item_registry.items():
-        print(f"  {item_id}: type={item_data['type']}, created_by={item_data['created_by']}, touched_list={item_data['touched_list']}")
+    print(f"\nAll registered items (id_connection):")
+    for item_id, connection_data in id_connection.items():
+        history_data = item_history.get(item_id, {})
+        action_data = item_actions.get(item_id, {})
+        print(f"  {item_id}: connections={connection_data}, touched_list={history_data.get('touched_list', [])}, actions={action_data}")
     
     return action_files
-
-
-def extract_detailed_action_sequences(meaningful_actions_df, simulation_df, output_dir=None, save_individual=True):
-    """
-    Extract detailed action sequences with timing, positioning, and state information.
-    
-    Args:
-        meaningful_actions_df: DataFrame with meaningful action data or path to meaningful_actions.csv file
-        simulation_df: DataFrame with simulation data or path to simulation CSV file
-        output_dir: Directory to save files (optional)
-        save_individual: Whether to save individual agent files
-        
-    Returns:
-        Dictionary containing action sequences per agent
-    """
-    
-    # Read the CSV files if they are paths
-    if isinstance(meaningful_actions_df, (str, Path)):
-        meaningful_actions_df = pd.read_csv(meaningful_actions_df)
-    if isinstance(simulation_df, (str, Path)):
-        simulation_df = pd.read_csv(simulation_df)
-    
-    action_sequences = {}
-    
-    # Process each agent
-    for agent_id in meaningful_actions_df['agent_id'].unique():
-        if not agent_id.startswith('ai_rl_'):
-            continue
-            
-        try:
-            agent_actions = meaningful_actions_df[meaningful_actions_df['agent_id'] == agent_id].copy()
-            agent_sim_data = simulation_df[simulation_df['agent_id'] == agent_id].copy()
-            
-            # Sort by frame to get chronological order
-            agent_actions = agent_actions.sort_values('frame').reset_index(drop=True)
-            agent_sim_data = agent_sim_data.sort_values('frame').reset_index(drop=True)
-            
-            # Merge action data with simulation states
-            detailed_actions = []
-        
-            for _, action in agent_actions.iterrows():
-                # Use the frame from meaningful_actions directly
-                frame = action.get('frame', 0)
-                
-                # Find simulation row for this frame
-                sim_frame_data = agent_sim_data[agent_sim_data['frame'] == frame]
-                if not sim_frame_data.empty:
-                    sim_row = sim_frame_data.iloc[0]
-                else:
-                    sim_row = agent_sim_data.iloc[-1] if not agent_sim_data.empty else None
-                
-                if sim_row is not None:
-                    detailed_action = {
-                        'agent_id': agent_id,
-                        'frame': action.get('frame'),
-                        'action_id': action.get('action_id'),
-                        'action_number': action.get('action_number'),
-                        'action_type': action.get('action_type'),
-                        'action_category_name': action.get('action_category_name'),
-                        'target_tile_type': action.get('target_tile_type'),
-                        'target_tile_x': action.get('target_tile_x'),
-                        'target_tile_y': action.get('target_tile_y'),
-                        'agent_tile_x': action.get('agent_tile_x'),
-                        'agent_tile_y': action.get('agent_tile_y'),
-                        'simulation_frame': sim_row['frame'],
-                        'simulation_second': sim_row['second'],
-                        'agent_x': sim_row['x'],
-                        'agent_y': sim_row['y'],
-                        'agent_tile_x_sim': sim_row['tile_x'],
-                        'agent_tile_y_sim': sim_row['tile_y'],
-                        'agent_item': sim_row.get('item', 'None'),
-                        'agent_score': sim_row.get('score', 0),
-                        'previous_item': action.get('previous_item'),
-                        'current_item': action.get('current_item'),
-                        'item_change_type': action.get('item_change_type'),
-                        'compound_action_part': action.get('compound_action_part', 0)
-                    }
-                    detailed_actions.append(detailed_action)
-        
-            action_sequences[agent_id] = pd.DataFrame(detailed_actions)
-        
-            # Save individual file if requested
-            if save_individual and output_dir:
-                output_dir = Path(output_dir)
-                filename = f"{agent_id}_detailed_actions.csv"
-                filepath = output_dir / filename
-                action_sequences[agent_id].to_csv(filepath, index=False)
-                print(f"Saved detailed action sequence for {agent_id}: {filepath}")
-        
-        except Exception as e:
-            print(f"Error processing detailed actions for agent {agent_id}: {e}")
-            continue
-    
-    return action_sequences
-
 
 def merge_actions_with_positions(meaningful_actions_df, positions_dir, output_dir=None, engine_tick_rate=24):
     """

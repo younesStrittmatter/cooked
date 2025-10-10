@@ -79,7 +79,7 @@ class DataProcessor:
             'cooperative_dir': f"{raw_dir}/cooperative",
             'output_path': f"{raw_dir}/training_results.csv",
             'figures_dir': f"{raw_dir}/training_figures/",
-            'smoothed_figures_dir': f"{raw_dir}/figures/smoothed_{self.config.smoothing_factor}/"
+            'smoothed_figures_dir': f"{raw_dir}/training_figures/smoothed_{self.config.smoothing_factor}/"
         }
         
         # Create directories

@@ -25,6 +25,10 @@ class SpoiledBroth(BaseGame):
         self.clickable_indices = []  # Initialize clickable indices storage
         # Track action completion status for each agent
         self.agent_action_status = {}
+        
+        # Add frame counter for timing
+        self.frame_count = 0
+        
         self.grid = Grid("grid", width, height, 16)
         map_path_img = Path(__file__).parent / "maps" / f"{map_nr}.png"
         map_path_txt = Path(__file__).parent / "maps" / f"{map_nr}.txt"
@@ -98,6 +102,9 @@ class SpoiledBroth(BaseGame):
 
 
     def step(self, actions: dict, delta_time: float):
+        # Increment frame counter
+        self.frame_count += 1
+
         # Filter out None actions and ensure proper structure
         filtered_actions = {}
         for agent_id, action in actions.items():

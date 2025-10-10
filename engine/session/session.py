@@ -11,7 +11,7 @@ class Session:
                  tick_rate,
                  ai_tick_rate,
                  is_max_speed,
-                 agent_initialization_period=15.0):
+                 agent_initialization_period=0.0):
         self.id = secrets.token_hex(8)
         self.engine = Engine(game_factory(),
                              tick_rate=tick_rate,

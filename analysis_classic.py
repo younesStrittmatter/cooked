@@ -14,6 +14,9 @@ nohup python analysis_classic.py v3.1 baseline_division_of_labor > analysis_clas
 
 import sys
 import os
+import matplotlib.pyplot as plt
+import numpy as np
+from spoiled_broth.analysis.utils import MetricDefinitions
 
 # Add the project root to the path to import utilities
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -97,9 +100,7 @@ def generate_classic_plots(analysis_results):
 def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2, 
                           movement_metrics_1, movement_metrics_2):
     """Generate combined plots showing both agents together."""
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from spoiled_broth.analysis.utils import MetricDefinitions
+
     
     N = 15  # smoothing factor
     unique_attitudes = df["attitude_key"].unique()

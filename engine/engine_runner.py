@@ -10,7 +10,7 @@ class EngineRunner:
                  tick_rate=5,
                  ai_tick_rate=5,
                  is_max_speed=False,
-                 agent_initialization_period=15.0):
+                 agent_initialization_period=0.0):
         self.game = game
         self.engine = engine
         self.agent_map = agent_map or {}

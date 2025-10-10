@@ -7,11 +7,13 @@ from spoiled_broth.game import game_to_obs_matrix, game_to_obs_matrix_competitio
 from engine.extensions.topDownGridWorld.ai_controller._base_controller import Controller
 
 class RLlibController(Controller):
-    def __init__(self, agent_id, checkpoint_path, policy_id, competition=False):
+    def __init__(self, agent_id, checkpoint_path, policy_id, competition=False, agent_initialization_frames=0):
         super().__init__(agent_id)
         self.agent_id = agent_id
         self.policy_id = policy_id
         self.competition = competition
+        self.agent_initialization_frames = agent_initialization_frames
+        
         # RLModule inside the checkpoint
         rl_module_path = os.path.join(
             checkpoint_path,
@@ -29,20 +31,28 @@ class RLlibController(Controller):
         self.policy_module = self.multi_rl_module[self.policy_id]
 
     def choose_action(self, observation):      
-        # Check if we're still in initialization period
-        if hasattr(self.agent, 'game') and hasattr(self.agent.game, 'engine'):
-            engine = self.agent.game.engine
-            sim_time = getattr(engine, "sim_time", engine.tick_count * engine.tick_interval)
-            initialization_period = getattr(engine, '_runner', None)
-            if initialization_period and hasattr(initialization_period, 'agent_initialization_period'):
-                if sim_time < initialization_period.agent_initialization_period:
-                    # During initialization, return None (no action)
-                    return None
+        # Check if we're still in initialization period using frame count
+        if self.agent_initialization_frames > 0:
+            if hasattr(self, 'agent') and hasattr(self.agent, 'game'):
+                game = self.agent.game
+                
+                # Get frame count from game for timing
+                if hasattr(game, 'frame_count'):
+                    frame_count = getattr(game, 'frame_count')
+                    
+                    if frame_count <= self.agent_initialization_frames:
+                        # During initialization, return None (no action)
+                        return None
+                    
+                    # Track when the first agent starts acting (globally)
+                    if not hasattr(game, 'agents_start_acting_frame'):
+                        game.agents_start_acting_frame = frame_count
+
+                else:
+                    # No frame_count available, this might be the issue!
+                    print(f"{self.agent_id}: No frame_count available on game object")
         
         # If a previous action is still in progress, don't choose a new one.
-        # NOTE: Do NOT mutate agent state here; the Engine/Agent update loop is
-        # responsible for marking actions complete. Controllers called from an
-        # external watcher must be read-only to avoid racing the engine.
         if hasattr(self.agent, 'current_action') and not getattr(self.agent, 'action_complete', True):
             return None
             
@@ -143,7 +153,7 @@ class RLlibController(Controller):
                 return self.agent.current_action
         
         # If we reach here, no valid action was taken
-        return None
+        return None        
 
     # Compatibility wrapper used by external watchers that try multiple method names/signatures
     def request_action(self, *args, **kwargs):

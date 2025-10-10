@@ -1,4 +1,4 @@
-# USE: nohup python spoiled_broth/simulations/meaningful_actions.py --actions_csv spoiled_broth/simulations/actions.csv --simulation_csv spoiled_broth/simulations/simulation_log.csv --map 1 --output_dir spoiled_broth/simulations/ > log_meaningful_actions.out 2>&1 &
+# USE: nohup python spoiled_broth/simulations/meaningful_actions.py --actions_csv spoiled_broth/simulations/actions.csv --simulation_csv spoiled_broth/simulations/simulation.csv --map 1 --output_dir spoiled_broth/simulations/ > log_meaningful_actions.out 2>&1 &
 
 """
 Meaningful actions analysis for simulation runs.
@@ -22,7 +22,6 @@ def load_map_info(map_nr):
     dispenser_info = {}
     
     if map_file.exists():
-        print(f"Reading map file: {map_file}")
         with open(map_file, 'r') as f:
             lines = f.readlines()
         
@@ -37,16 +36,12 @@ def load_map_info(map_nr):
                 
                 if char == 'X':  # Plate dispenser
                     dispenser_info[(coord_x, coord_y)] = 'plate'
-                    print(f"  Plate dispenser at ({coord_x}, {coord_y})")
                 elif char == 'T':  # Tomato dispenser  
                     dispenser_info[(coord_x, coord_y)] = 'tomato'
-                    print(f"  Tomato dispenser at ({coord_x}, {coord_y})")
                 elif char == 'P':  # Pumpkin dispenser (if any)
                     dispenser_info[(coord_x, coord_y)] = 'pumpkin'
-                    print(f"  Pumpkin dispenser at ({coord_x}, {coord_y})")
                 elif char == 'C':  # Cabbage dispenser (if any)
                     dispenser_info[(coord_x, coord_y)] = 'cabbage'
-                    print(f"  Cabbage dispenser at ({coord_x}, {coord_y})")
     else:
         print(f"Map file not found: {map_file}")
         # Fallback: From actual map layout WBBWTTXW
@@ -175,8 +170,6 @@ def get_action_category(item_change_type, previous_item, current_item, target_ti
                 return 0, actionMap[0]  # 'put down plate on counter'
             elif target_tile_type == 'dispenser':
                 return 15, actionMap[15]  # 'put down plate on dispenser' (destructive)
-            elif target_tile_type == 'cuttingboard':
-                return 16, actionMap[16]  # 'put down plate on cuttingboard'
         
         elif prev_item == 'tomato':
             if target_tile_type == 'counter':
@@ -199,8 +192,6 @@ def get_action_category(item_change_type, previous_item, current_item, target_ti
                 return 9, actionMap[9]  # 'deliver tomato_salad'
             elif target_tile_type == 'dispenser':
                 return 18, actionMap[18]  # 'put down tomato_salad on dispenser' (destructive)
-            elif target_tile_type == 'cuttingboard':
-                return 20, actionMap[20]  # 'put down tomato_salad on cuttingboard' (destructive)
             
     # If no match found, return unknown
     return -1, f"UNKNOWN: {item_change_type} {prev_item} -> {curr_item} at {target_tile_type}"
@@ -265,8 +256,6 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
     
     # DEBUG: Check for NaN values in the data
     print("\n=== DEBUGGING NaN VALUES ===")
-    print("Simulation DataFrame columns:", simulation_df.columns.tolist())
-    print("Actions DataFrame columns:", actions_df.columns.tolist())
     
     # Check for NaN values in key columns
     if 'tile_x' in simulation_df.columns:
@@ -282,10 +271,6 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
         if nan_tile_y > 0:
             print("Sample rows with NaN tile_y:")
             print(simulation_df[simulation_df['tile_y'].isna()][['frame', 'agent_id', 'tile_x', 'tile_y', 'x', 'y', 'item']].head())
-    
-    # Check data types
-    print("\nSimulation DataFrame dtypes:")
-    print(simulation_df.dtypes)
     
     # Check for any completely empty rows or weird data
     print(f"\nTotal simulation rows: {len(simulation_df)}")
@@ -1013,8 +998,19 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                                 action_matches = action['target_tile_type'] in ['dispenser', 'counter']
                                 
                             elif change_type == "drop":
-                                # Agent dropped item, should be near delivery, counter, or cuttingboard
-                                action_matches = action['target_tile_type'] in ['delivery', 'counter', 'cuttingboard']
+                                # Agent dropped item - check which tile types are valid for this item
+                                if previous_item == 'tomato':
+                                    # Tomato can NOT be dropped on delivery
+                                    action_matches = action['target_tile_type'] in ['counter', 'cuttingboard', 'dispenser']
+                                elif previous_item in ['tomato_cut', 'plate']:
+                                    # tomato_cut and plate can NOT be dropped on cuttingboard nor delivery
+                                    action_matches = action['target_tile_type'] in ['counter', 'dispenser']
+                                elif previous_item == 'tomato_salad':
+                                    # tomato_salad can NOT be dropped on cuttingboard
+                                    action_matches = action['target_tile_type'] in ['delivery', 'counter', 'dispenser']
+                                else:
+                                    # For any other item, allow counter, delivery, dispenser
+                                    action_matches = action['target_tile_type'] in ['delivery', 'counter', 'dispenser', 'cuttingboard']
                                 
                             elif change_type == "change":
                                 # Item transformation, should be near counter
@@ -1087,6 +1083,12 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
     meaningful_df = pd.DataFrame(meaningful_actions)
     
     if not meaningful_df.empty:
+        # Sort by frame to ensure chronological order
+        meaningful_df = meaningful_df.sort_values(['frame', 'agent_id']).reset_index(drop=True)
+        
+        # Convert target tile coordinates to integers
+        meaningful_df['target_tile_x'] = meaningful_df['target_tile_x'].astype(int)
+        meaningful_df['target_tile_y'] = meaningful_df['target_tile_y'].astype(int)
         print(f"\nFound {len(meaningful_df)} meaningful actions:")
         print(meaningful_df[['frame', 'agent_id', 'action_number', 'target_tile_type', 'item_change_type', 'previous_item', 'current_item', 'action_category_name', 'compound_action_part']])
         

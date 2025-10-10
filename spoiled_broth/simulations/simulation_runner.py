@@ -52,9 +52,7 @@ class SimulationRunner:
             
         Returns:
             Dictionary containing output file paths
-        """
-        print(f"Starting simulation: {map_nr}, {num_agents} agents, {intent_version}")
-        
+        """        
         # Initialize Ray
         self.ray_manager.initialize_ray()
         
@@ -71,7 +69,8 @@ class SimulationRunner:
             # Initialize controllers
             controller_type = self.controller_manager.determine_controller_type(paths['config_path'])
             controllers = self.controller_manager.initialize_controllers(
-                num_agents, paths['checkpoint_dir'], controller_type, game_version
+                num_agents, paths['checkpoint_dir'], controller_type, game_version, 
+                tick_rate=self.config.engine_tick_rate
             )
             
             if not controllers:
@@ -154,7 +153,6 @@ class SimulationRunner:
             agent_obj = game.gameObjects.get(agent_id)
             if agent_obj is not None:
                 controller.agent = agent_obj
-                print(f"Attached controller to agent {agent_id}")
         
         # Ensure agents have the configured speed (exactly like old code)
         for agent_id, obj in list(game.gameObjects.items()):
@@ -221,15 +219,8 @@ class SimulationRunner:
         progress_step = max(1, int(total_frames * 0.05))
         next_progress = progress_step
         
-        print(f"Starting simulation with {total_frames} frames ({self.config.total_simulation_time} seconds total)")
-        print(f"  - Agent initialization: {self.config.agent_initialization_period} seconds")
-        print(f"  - Active gameplay: {self.config.duration_seconds} seconds")
-        print("Note: Agents will not act during initialization period - this is by design")
-        
         # Wait for agents to be properly initialized and positioned
         self._wait_for_agent_initialization(game)
-        
-        # Remove the old initialization loop since agents handle their own initialization delay
         print("System initialization complete, starting simulation...")
         
         prev_state = None
@@ -240,6 +231,9 @@ class SimulationRunner:
             current_time = time.time()
             if current_time < target_time:
                 time.sleep(target_time - current_time)
+            
+            # Set frame count on game object for controller synchronization
+            game.frame_count = frame_idx
             
             # Get current state and render
             curr_state = self._serialize_ui_state(session, game)
@@ -281,6 +275,10 @@ class SimulationRunner:
                           data_logger: DataLogger):
         """Cleanup simulation resources."""
         print("Cleaning up simulation...")
+        
+        # Update config file with runtime information before cleanup
+        print("Updating config file with runtime detection data...")
+        data_logger.update_config_with_runtime_info(game)
         
         # Stop video recording
         if video_recorder:

@@ -90,6 +90,13 @@ def setup_simulation_argument_parser() -> argparse.ArgumentParser:
         default=180,
         help='Simulation duration in seconds'
     )
+
+    parser.add_argument(
+        '--agent_initialization_period',
+        type=float,
+        default=15.0,
+        help='Agent initialization period in seconds (no actions taken during this time)'
+    )
     
     parser.add_argument(
         '--tick-rate',
@@ -112,7 +119,8 @@ def main_simulation_pipeline(map_nr: str, num_agents: int, intent_version: str,
                            cooperative: bool, game_version: str, training_id: str,
                            checkpoint_number: str, enable_video: bool = True,
                            cluster: str = 'cuenca', duration: int = 180,
-                           tick_rate: int = 24, video_fps: int = 24) -> Dict[str, Path]:
+                           tick_rate: int = 24, video_fps: int = 24,
+                           agent_initialization_period: float = 15.0) -> Dict[str, Path]:
     """
     Main simulation pipeline that can be used by different simulation scripts.
     
@@ -139,7 +147,8 @@ def main_simulation_pipeline(map_nr: str, num_agents: int, intent_version: str,
         engine_tick_rate=tick_rate,
         duration_seconds=duration,
         enable_video=enable_video,
-        video_fps=video_fps
+        video_fps=video_fps,
+        agent_initialization_period=agent_initialization_period
     )
     
     # Create timestamp
@@ -158,13 +167,5 @@ def main_simulation_pipeline(map_nr: str, num_agents: int, intent_version: str,
         checkpoint_number=checkpoint_number,
         timestamp=timestamp
     )
-    
-    print(f"Simulation completed successfully!")
-    print(f"Simulation directory: {output_paths['simulation_dir']}")
-    print(f"Configuration file: {output_paths['config_file']}")
-    print(f"State CSV: {output_paths['state_csv']}")
-    print(f"Action CSV: {output_paths['action_csv']}")
-    if output_paths['video_file']:
-        print(f"Video file: {output_paths['video_file']}")
     
     return output_paths

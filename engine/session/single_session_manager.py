@@ -7,7 +7,7 @@ class SingleSessionManager:
     Manages a single session that starts immediately without waiting for human players.
     """
     
-    def __init__(self, game_factory, ui_modules, agent_map, tick_rate, ai_tick_rate, is_max_speed, agent_initialization_period=15.0):
+    def __init__(self, game_factory, ui_modules, agent_map, tick_rate, ai_tick_rate, is_max_speed, agent_initialization_period=0.0):
         """
         Initialize the Single Session Manager for AI-only operation.
         
@@ -57,13 +57,6 @@ class SingleSessionManager:
             # Ensure agents are properly positioned before starting the engine
             import time
             time.sleep(0.1)  # Small delay to ensure all agents are properly initialized
-            
-            # Verify agent positions are set
-            game = self.session.engine.game
-            for agent_id in self.agent_map.keys():
-                agent = game.gameObjects.get(agent_id)
-                if agent and hasattr(agent, 'x') and hasattr(agent, 'y'):
-                    print(f"Agent {agent_id} initialized at position ({agent.x}, {agent.y})")
             
             # Start the session
             self.session.start()

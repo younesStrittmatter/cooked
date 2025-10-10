@@ -20,7 +20,7 @@ class AIOnlySessionApp:
                  tick_rate=24,
                  ai_tick_rate=5,
                  is_max_speed=False,
-                 agent_initialization_period=15.0):
+                 agent_initialization_period=0.0):
         """
         Initialize the AI-Only Session App (Flask app)
 

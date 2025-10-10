@@ -35,12 +35,13 @@ class PathManager:
         Returns:
             Dictionary containing all relevant paths
         """
+        # Updated path structure: /data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
         base_path = Path(f"{self.config.local_path}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}")
         
-        training_type = "cooperative" if cooperative else "competitive"
-        training_path = base_path / f"{training_type}/Training_{training_id}"
+        # New structure: all simulations go under /simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
+        simulations_base = base_path / "simulations"
+        training_simulations_path = simulations_base / f"Training_{training_id}"
         
-        # Resolve checkpoint number (handle "final" case)
         # Validate checkpoint_number
         if checkpoint_number.lower() != "final":
             try:
@@ -49,12 +50,19 @@ class PathManager:
                 raise ValueError(f"Invalid checkpoint number: '{checkpoint_number}'. Must be an integer or 'final'")
         
         # Construct paths based on checkpoint type
+        checkpoint_simulations_dir = training_simulations_path / f"checkpoint_{checkpoint_number}"
+        
+        # Training path for model checkpoints (original structure for backward compatibility)
+        training_type = "cooperative" if cooperative else "competitive"
+        training_path = base_path / f"{training_type}/Training_{training_id}"
+        
         if checkpoint_number.lower() == "final":
             checkpoint_dir = training_path / "checkpoint_final"
-            saving_path = training_path / "simulations_final"
         else:
             checkpoint_dir = training_path / f"checkpoint_{checkpoint_number}"
-            saving_path = training_path / f"simulations_{checkpoint_number}"
+        
+        # The saving path is now the checkpoint simulations directory where individual simulation folders will be created
+        saving_path = checkpoint_simulations_dir
         
         # Find project root by looking for spoiled_broth directory
         project_root = Path(__file__).parent.parent.parent  # path_manager.py is in spoiled_broth/simulations/
@@ -64,6 +72,9 @@ class PathManager:
             'training_path': training_path,
             'checkpoint_dir': checkpoint_dir,
             'saving_path': saving_path,
+            'simulations_base': simulations_base,
+            'training_simulations_path': training_simulations_path,
+            'checkpoint_simulations_dir': checkpoint_simulations_dir,
             'path_root': project_root / "spoiled_broth",
             'map_txt_path': project_root / "spoiled_broth" / "maps" / f"{map_nr}.txt",
             'config_path': training_path / "config.txt",
