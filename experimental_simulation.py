@@ -21,7 +21,7 @@ For background execution:
 nohup python experimental_simulation.py <map_nr> <num_agents> <intent_version> <cooperative> <game_version> <training_id> <checkpoint_number> [options] > experimental_simulation.log 2>&1 &
 
 Example:
-nohup python experimental_simulation.py simple_kitchen_circular 2 v3.1 1 competition training_001 50 --enable_video true --cluster cuenca --duration 600 --tick_rate 24 --video-fps 24 > experimental_simulation.log 2>&1 &
+nohup python experimental_simulation.py baseline_division_of_labor 2 v3.1 1 classic 2025-09-13_13-27-52 final --enable_video true > experimental_simulation.log 2>&1 &
 """
 
 import sys
@@ -151,7 +151,8 @@ def main():
                     actions_df, 
                     simulation_df, 
                     args.map_nr, 
-                    output_paths['simulation_dir']
+                    output_paths['simulation_dir'],
+                    engine_tick_rate=args.tick_rate
                 )
                 
                 if not meaningful_df.empty:

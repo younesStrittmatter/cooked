@@ -31,6 +31,11 @@ class RLlibController(Controller):
         self.policy_module = self.multi_rl_module[self.policy_id]
 
     def choose_action(self, observation):      
+        # Set simulation flag on the agent if not already set
+        if hasattr(self, 'agent') and self.agent is not None:
+            if not hasattr(self.agent, 'is_simulation') or not self.agent.is_simulation:
+                self.agent.is_simulation = True
+        
         # Check if we're still in initialization period using frame count
         if self.agent_initialization_frames > 0:
             if hasattr(self, 'agent') and hasattr(self.agent, 'game'):
@@ -60,9 +65,26 @@ class RLlibController(Controller):
         if not getattr(self.agent, 'action_complete', True):
             return None
         
-        # Don't choose a new action if agent is busy (e.g., cutting)
-        if getattr(self.agent, 'is_busy', False):
-            return None
+        # Check if agent is in cutting state and still needs to wait
+        if getattr(self.agent, 'is_cutting', False):
+            cutting_start = getattr(self.agent, 'cutting_start_time', None)
+            cutting_duration = getattr(self.agent, 'cutting_duration', 3.0)
+            
+            if cutting_start is not None:
+                elapsed = time.time() - cutting_start
+                if elapsed < cutting_duration:
+                    # Still waiting for cutting to complete
+                    return None
+                else:
+                    # Cutting time is done, release the agent
+                    self.agent.is_cutting = False
+                    self.agent.cutting_start_time = None
+                    self.agent.action_complete = True
+                    # Transfer the provisional item to actual item
+                    if hasattr(self.agent, 'provisional_item') and self.agent.provisional_item is not None:
+                        self.agent.item = self.agent.provisional_item
+                        self.agent.provisional_item = None
+                    # Continue to normal action selection below
         
         # Select correct obs function
         self.agent_food_type = {
@@ -109,9 +131,6 @@ class RLlibController(Controller):
                     "type": "do_nothing", 
                     "start_time": time.time()
                 }
-                # Ensure agent is not marked as busy for do_nothing actions
-                if hasattr(self.agent, 'is_busy'):
-                    self.agent.is_busy = False
                 return self.agent.current_action
     
             if 0 <= action < len(clickable_indices):
@@ -156,48 +175,62 @@ class RLlibController(Controller):
         return None        
 
     # Compatibility wrapper used by external watchers that try multiple method names/signatures
-    def request_action(self, *args, **kwargs):
-        """Flexible wrapper so the decision watcher can call this controller with
-        different signatures (game, agent_id) or (agent_id, game). We only need
-        the game to build observations and the agent_id to identify which agent.
-        """
-        # Try to extract (game, agent_id) from args
-        game = None
-        agent_id = None
-        # Args may be (game, agent_id) or (agent_id, game) or (game,) or (agent_id,)
-        if len(args) >= 2:
-            # Heuristic: if first arg has attribute 'grid' it's a game
-            if hasattr(args[0], 'grid'):
-                game = args[0]
-                agent_id = args[1]
-            elif hasattr(args[1], 'grid'):
-                game = args[1]
-                agent_id = args[0]
-        elif len(args) == 1:
-            # Single argument could be the game or agent_id; prefer game
-            if hasattr(args[0], 'grid'):
-                game = args[0]
-            else:
-                agent_id = args[0]
-
-        # Fallback to attributes on the controller
-        if game is None:
-            game = getattr(self, 'agent', None)
-            if game is not None and hasattr(game, 'game'):
-                game = game.game
-        if agent_id is None:
-            agent_id = getattr(self, 'agent_id', None)
-
-        # If we have a game and agent_id, build the observation and delegate
-        if game is not None and agent_id is not None:
-            # Temporarily set self.agent to the actual agent object for compatibility
-            prev_agent = getattr(self, 'agent', None)
-            try:
-                self.agent = game.gameObjects.get(agent_id)
-                return self.choose_action(None)
-            finally:
-                # restore previous agent
-                self.agent = prev_agent
-
-        # Last resort: call choose_action with None
-        return self.choose_action(None)
+    #def request_action(self, *args, **kwargs):
+    #    """Flexible wrapper so the decision watcher can call this controller with
+    #    different signatures (game, agent_id) or (agent_id, game). We only need
+    #    the game to build observations and the agent_id to identify which agent.
+    #    """
+    #    # Try to extract (game, agent_id) from args
+    #    game = None
+    #    agent_id = None
+    #    # Args may be (game, agent_id) or (agent_id, game) or (game,) or (agent_id,)
+    #    if len(args) >= 2:
+    #        # Heuristic: if first arg has attribute 'grid' it's a game
+    #        if hasattr(args[0], 'grid'):
+    #            game = args[0]
+    #            agent_id = args[1]
+    #        elif hasattr(args[1], 'grid'):
+    #            game = args[1]
+    #            agent_id = args[0]
+    #    elif len(args) == 1:
+    #        # Single argument could be the game or agent_id; prefer game
+    #        if hasattr(args[0], 'grid'):
+    #            game = args[0]
+    #        else:
+    #            agent_id = args[0]
+#
+    #    # Fallback to attributes on the controller
+    #    if game is None:
+    #        game = getattr(self, 'agent', None)
+    #        if game is not None and hasattr(game, 'game'):
+    #            game = game.game
+    #    if agent_id is None:
+    #        agent_id = getattr(self, 'agent_id', None)
+#
+    #    # If we have a game and agent_id, build the observation and delegate
+    #    if game is not None and agent_id is not None:
+    #        # Temporarily set self.agent to the actual agent object for compatibility
+    #        prev_agent = getattr(self, 'agent', None)
+    #        try:
+    #            self.agent = game.gameObjects.get(agent_id)
+    #            
+    #            # Additional safety check: don't act if agent is cutting
+    #            if self.agent and getattr(self.agent, 'is_busy', False):
+    #                return None
+    #                
+    #            # Check for active cutting intent
+    #            if self.agent and hasattr(self.agent, 'intents') and self.agent.intents:
+    #                for intent in self.agent.intents:
+    #                    if hasattr(intent, '__class__') and 'CuttingBoardIntent' in str(intent.__class__):
+    #                        if hasattr(intent, 'is_cutting') and intent.is_cutting:
+    #                            return None
+    #                        elif not getattr(intent, 'has_ended', True):
+    #                            return None
+    #            
+    #            return self.choose_action(None)
+    #        finally:
+    #            # restore previous agent
+    #            self.agent = prev_agent
+#
+    #    # Last resort: call choose_action with None
+    #    return self.choose_action(None)

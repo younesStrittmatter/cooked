@@ -196,19 +196,83 @@ def get_action_category(item_change_type, previous_item, current_item, target_ti
     # If no match found, return unknown
     return -1, f"UNKNOWN: {item_change_type} {prev_item} -> {curr_item} at {target_tile_type}"
 
-def verify_cuttingboard_usage(simulation_df, agent_id, current_frame, agent_tile_x, agent_tile_y):
-    """Look ahead 72 frames (3 seconds) to verify if agent actually used cuttingboard
+def verify_cuttingboard_usage(simulation_df, agent_id, current_frame, agent_tile_x, agent_tile_y, agent_states, engine_tick_rate=24):
+    """Look for None -> tomato_cut transition between current frame and target frame to verify cuttingboard usage
     
     Returns:
-        tuple: (is_cuttingboard, future_frame, future_item) where:
-            - is_cuttingboard: True if agent is still on same tile with tomato_cut after 72 frames
-            - future_frame: The frame where tomato_cut was detected (or None)
+        tuple: (is_cuttingboard, pickup_frame, future_item) where:
+            - is_cuttingboard: True if agent gets None -> tomato_cut transition on same tile OR if not enough frames to verify
+            - pickup_frame: The frame where None -> tomato_cut transition was detected (or None)
             - future_item: The item the agent has at that frame
     """
-    target_frame = current_frame + 72  # 3 seconds later
+    target_frame = current_frame + 3 * engine_tick_rate  # 3 seconds later
     
-    # Look for the agent in future frames (72 frames ahead, but also check a small window around it)
-    search_frames = range(target_frame - 5, target_frame + 6)  # Small window to account for timing variations
+    # Check if we have enough frames in the data to verify
+    max_frame_in_data = simulation_df['frame'].max()
+    if target_frame > max_frame_in_data:
+        print(f"      Not enough frames to verify cuttingboard usage (need frame {target_frame}, max available {max_frame_in_data})")
+        
+        # Before assuming, check if there are any actions that could match this position
+        # Look for cuttingboard actions at this position first
+        agent_actions = agent_states[agent_id]['actions']
+        current_action_idx = agent_states[agent_id]['current_action_idx']
+        
+        has_cuttingboard_action = False
+        for check_idx in range(current_action_idx, len(agent_actions)):
+            action = agent_actions.iloc[check_idx]
+            
+            # Skip actions with NaN coordinates
+            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                continue
+                
+            is_near = is_near_target(agent_tile_x, agent_tile_y, 
+                                   action['target_tile_x'], action['target_tile_y'])
+            
+            if is_near and action['target_tile_type'] == 'cuttingboard':
+                has_cuttingboard_action = True
+                print(f"      Found matching cuttingboard action at position ({action['target_tile_x']}, {action['target_tile_y']})")
+                break
+        
+        if has_cuttingboard_action:
+            print(f"      Assuming cuttingboard usage due to insufficient data but matching cuttingboard action found")
+            return True, None, 'tomato_cut'  # Assume cutting when we can't verify but have matching cuttingboard action
+        else:
+            # No cuttingboard actions found - check if there are nearby counter tiles with matching actions
+            # This means the agent was actually interacting with a counter, not a cutting board
+            print(f"      No cuttingboard actions found - checking for nearby actual counters")
+            
+            # Find nearby counter tiles (not the current position, but adjacent positions)
+            nearby_counters = find_nearby_tiles(agent_tile_x, agent_tile_y, 
+                                               agent_actions, ['counter'])
+            
+            if nearby_counters:
+                print(f"      Found {len(nearby_counters)} nearby counter tiles - checking for matching actions")
+                for counter in nearby_counters:
+                    counter_x, counter_y = counter['x'], counter['y']
+                    
+                    # Check if there are actions targeting this counter position
+                    for check_idx in range(current_action_idx, len(agent_actions)):
+                        action = agent_actions.iloc[check_idx]
+                        
+                        # Skip actions with NaN coordinates
+                        if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                            continue
+                        
+                        if (action['target_tile_x'] == counter_x and 
+                            action['target_tile_y'] == counter_y and 
+                            action['target_tile_type'] == 'counter'):
+                            
+                            print(f"      Found counter action at ({counter_x}, {counter_y}) - this was NOT a cuttingboard interaction")
+                            return False, None, None  # This was a counter interaction, not cutting
+                
+                print(f"      No matching counter actions found despite nearby counters")
+                return False, None, None  # No matching actions found
+            else:
+                print(f"      No nearby counters found either - assuming NOT cuttingboard usage")
+                return False, None, None  # No cuttingboard actions and no nearby counters
+    
+    # Look for the None -> tomato_cut transition in frames between current and target
+    search_frames = range(current_frame + 1, target_frame + 2 * engine_tick_rate)  # Look ahead up to target + small buffer
     
     for check_frame in search_frames:
         future_data = simulation_df[
@@ -228,21 +292,55 @@ def verify_cuttingboard_usage(simulation_df, agent_id, current_frame, agent_tile
             future_tile_y = int(future_row['tile_y'])
             future_item = future_row['item'] if pd.notna(future_row['item']) else None
             
-            # Check if agent is still on the same tile
+            # Check if agent is still on the same tile and gets tomato_cut
             if future_tile_x == agent_tile_x and future_tile_y == agent_tile_y:
-                # Check if agent now has tomato_cut
                 if future_item == 'tomato_cut':
-                    print(f"      Verified cuttingboard usage: Agent {agent_id} at frame {check_frame} still on tile ({agent_tile_x}, {agent_tile_y}) with tomato_cut")
+                    print(f"      Verified cuttingboard usage: Agent {agent_id} at frame {check_frame} on tile ({agent_tile_x}, {agent_tile_y}) with tomato_cut")
+                    
+                    # Mark this frame to be skipped in main processing (to avoid double-counting the pickup)
+                    agent_states[agent_id]['skip_frames'].add(check_frame)
+                    print(f"      Marked frame {check_frame} to be skipped (pickup already handled in cutting sequence)")
+                    
                     return True, check_frame, future_item
-                else:
-                    print(f"      Agent {agent_id} at frame {check_frame} still on tile ({agent_tile_x}, {agent_tile_y}) but has item: {future_item} (not tomato_cut)")
-            else:
-                print(f"      Agent {agent_id} at frame {check_frame} moved to tile ({future_tile_x}, {future_tile_y}) - not cutting")
     
-    print(f"      No cuttingboard verification found for agent {agent_id} around frame {target_frame}")
-    return False, None, None
+    print(f"      No None -> tomato_cut transition found for agent {agent_id} between frames {current_frame} and {target_frame}")
+    
+    # No cuttingboard actions found - check if there are nearby actual counters with matching actions
+    # This means the agent was actually interacting with a counter, not a cutting board
+    agent_actions = agent_states[agent_id]['actions']
+    current_action_idx = agent_states[agent_id]['current_action_idx']
+    print(f"      No cuttingboard actions found - checking for nearby actual counters")
+    
+    nearby_counters = find_nearby_tiles(agent_tile_x, agent_tile_y, 
+                                       agent_actions, ['counter'])
+    
+    if nearby_counters:
+        print(f"      Found {len(nearby_counters)} nearby counter tiles - checking for matching actions")
+        for counter in nearby_counters:
+            counter_x, counter_y = counter['x'], counter['y']
+            
+            # Check if there are actions targeting this counter position
+            for check_idx in range(current_action_idx, len(agent_actions)):
+                action = agent_actions.iloc[check_idx]
+                
+                # Skip actions with NaN coordinates
+                if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                    continue
+                
+                if (action['target_tile_x'] == counter_x and 
+                    action['target_tile_y'] == counter_y and 
+                    action['target_tile_type'] == 'counter'):
+                    
+                    print(f"      Found counter action at ({counter_x}, {counter_y}) - this was NOT a cuttingboard interaction")
+                    return False, None, None  # This was a counter interaction, not cutting
+        
+        print(f"      No matching counter actions found despite nearby counters")
+        return False, None, None  # No matching actions found
+    else:
+        print(f"      No nearby counters found either - assuming NOT cuttingboard usage")
+        return False, None, None  # No cuttingboard actions and no nearby counters
 
-def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=None):
+def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=None, engine_tick_rate=24):
     """Detect meaningful actions by finding item state changes and matching to actions.csv"""
     
     # Read the CSV files if they are paths, otherwise use the dataframes directly
@@ -327,14 +425,22 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
             normalized_counter_states[normalized_pos] = item
         counter_states = normalized_counter_states
         
-        print(f"\n=== Processing Frame {frame} ===")
+        print(f"\n=== Processing Frame {frame}, Second {frame / engine_tick_rate} ===")
         print(f"    Current counter states: {counter_states}")
         
         # Process each agent in this frame
         for _, sim_row in frame_data.iterrows():
             agent_id = sim_row['agent_id']
+            
             current_item = sim_row['item'] if pd.notna(sim_row['item']) else None
             previous_item = agent_states[agent_id]['previous_item']
+            
+            # Skip frames that are already handled (e.g., pickup part of cuttingboard sequence)
+            if frame in agent_states[agent_id]['skip_frames']:
+                print(f"  Agent {agent_id}: Skipping frame {frame} (already processed as part of previous action)")
+                # Still update the previous_item even when skipping to maintain state consistency
+                agent_states[agent_id]['previous_item'] = current_item
+                continue
             
             # DEBUG: Check this specific row for NaN values
             if pd.isna(sim_row['tile_x']) or pd.isna(sim_row['tile_y']):
@@ -680,7 +786,7 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                         
                         # Verify this is actually cuttingboard usage by looking ahead 72 frames
                         is_actual_cuttingboard, future_frame, future_item = verify_cuttingboard_usage(
-                            simulation_df, agent_id, sim_row['frame'], agent_tile_x, agent_tile_y
+                            simulation_df, agent_id, sim_row['frame'], agent_tile_x, agent_tile_y, agent_states, engine_tick_rate
                         )
                         
                         if is_actual_cuttingboard:
@@ -700,6 +806,7 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                                 if is_near and action['target_tile_type'] == 'cuttingboard':
                                     matched_action = action.copy()
                                     matched_action['matched_action_idx'] = check_idx
+                                    print(f"      Matched to counter action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
                                     break
                             
                             if matched_action is not None:
@@ -799,6 +906,65 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                             print(f"      Not actual cuttingboard usage - treating as regular counter drop")
                             # This is just a regular drop on what appears to be a cuttingboard
                             # but is actually being used as a counter - process as regular drop
+                            
+                            # Find the counter action that matches this drop
+                            matched_action = None
+                            for check_idx in range(current_action_idx, len(agent_actions)):
+                                action = agent_actions.iloc[check_idx]
+                                
+                                # Skip actions with NaN coordinates (e.g., do_nothing actions)
+                                if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                    continue
+                                    
+                                is_near = is_near_target(agent_tile_x, agent_tile_y, 
+                                                       action['target_tile_x'], action['target_tile_y'])
+                                
+                                # Look for counter actions (the cuttingboard is being used as a counter)
+                                if is_near and action['target_tile_type'] == 'counter':
+                                    matched_action = action.copy()
+                                    matched_action['matched_action_idx'] = check_idx
+                                    print(f"      Matched to counter action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
+                                    break
+                            
+                            if matched_action is not None:
+                                # Get the action category for counter drop
+                                action_category_id, action_category_name = get_action_category(
+                                    "drop", previous_item, None, 'counter'
+                                )
+                                
+                                # Save this meaningful action
+                                meaningful_action = {
+                                    'frame': sim_row['frame'],
+                                    'agent_id': agent_id,
+                                    'action_id': matched_action['action_id'],
+                                    'action_number': matched_action['action_number'],
+                                    'action_type': matched_action['action_type'],
+                                    'target_tile_type': 'counter',  # Force counter type since it's not actual cuttingboard usage
+                                    'target_tile_x': matched_action['target_tile_x'],
+                                    'target_tile_y': matched_action['target_tile_y'],
+                                    'agent_tile_x': agent_tile_x,
+                                    'agent_tile_y': agent_tile_y,
+                                    'item_change_type': "drop",
+                                    'previous_item': previous_item,
+                                    'current_item': current_item,
+                                    'agent_x': sim_row['x'],
+                                    'agent_y': sim_row['y'],
+                                    'action_category_id': action_category_id,
+                                    'action_category_name': action_category_name,
+                                    'compound_action_part': 0  # Single action (not compound)
+                                }
+                                meaningful_actions.append(meaningful_action)
+                                print(f"      Category: {action_category_name}")
+                                
+                                # Update counter states - the tomato is now on this counter
+                                counter_pos = (int(matched_action['target_tile_x']), int(matched_action['target_tile_y']))
+                                counter_states[counter_pos] = previous_item
+                                print(f"      Updated counter {counter_pos} with {previous_item}")
+                                
+                                # Increment action index after processing
+                                agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
+                            else:
+                                print(f"      Could not match failed cuttingboard drop to any counter action")
                     
                     # Process as regular drop (either no cuttingboard nearby, or failed cuttingboard verification)
                     if not (nearby_cuttingboards and len(meaningful_actions) > 0 and 
@@ -1118,6 +1284,7 @@ if __name__ == "__main__":
     parser.add_argument('--simulation_csv', required=True, help='Path to simulation.csv file')
     parser.add_argument('--map', required=True, help='Map number or name')
     parser.add_argument('--output_dir', required=True, help='Output directory for results')
+    parser.add_argument('--engine_tick_rate', type=int, default=24, help='Engine tick rate (FPS)')
     
     args = parser.parse_args()
     
@@ -1126,6 +1293,7 @@ if __name__ == "__main__":
     simulation_csv = Path(args.simulation_csv)
     map_nr = args.map
     output_dir = Path(args.output_dir)
-    
-    result = analyze_meaningful_actions(actions_csv, simulation_csv, map_nr, output_dir)
+    engine_tick_rate = args.engine_tick_rate
+
+    result = analyze_meaningful_actions(actions_csv, simulation_csv, map_nr, output_dir, engine_tick_rate=engine_tick_rate)
     print("\nAnalysis complete!")

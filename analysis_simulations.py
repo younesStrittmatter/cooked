@@ -6,13 +6,25 @@ This script orchestrates the complete analysis by calling:
 1. analysis_simulations.py - for detailed individual simulation analysis
 2. analysis_checkpoint_comparison.py - for checkpoint comparison across training_ids
 
-Both analyses save their outputs to the same organized directory: map_{map_nr}/simulation_figures/
+Both analyses save their outputs to the organized directory: map_{map_nr}/simulation_figures/
 
-Usage:
+Folder structure:
+- Simulations: /data/samuel_lozano/cooked/classic/v3.1/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/simulation_{simulation_id}
+- Figures: /data/samuel_lozano/cooked/classic/v3.1/map_{map_nr}/simulation_figures/
+
+Usage examples:
+# Run analysis for all trainings and all checkpoints:
 nohup python3 analysis_simulations.py --cluster cuenca --map_nr baseline_division_of_labor --game_version classic --intent_version v3.1 --cooperative 1 > log_analysis_simulations.out 2>&1 &
 
+# Run analysis for specific training, all checkpoints:
+nohup python3 analysis_simulations.py --cluster cuenca --map_nr baseline_division_of_labor --training_id 12345 --game_version classic --intent_version v3.1 --cooperative 1 > log_analysis_simulations.out 2>&1 &
+
+# Run analysis for specific training and checkpoint:
+nohup python3 analysis_simulations.py --cluster cuenca --map_nr baseline_division_of_labor --training_id 12345 --checkpoint_number 50 --game_version classic --intent_version v3.1 --cooperative 1 > log_analysis_simulations.out 2>&1 &
+
 Optional arguments:
---training_id and --checkpoint_number: If provided, run detailed simulation analysis for that specific combination
+--training_id: If provided, run analysis only for that training (all checkpoints unless checkpoint_number also specified)
+--checkpoint_number: If provided along with training_id, run analysis for that specific combination only
 --output_dir: Custom output directory (default: map_{map_nr}/simulation_figures/)
 
 Author: Samuel Lozano
@@ -56,6 +68,7 @@ class ComprehensiveAnalysisOrchestrator:
         
         # Determine the output directory
         if output_dir is None:
+            # Output figures should be one level up from the simulations directory
             map_base_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}/")
             self.output_dir = map_base_dir / "simulation_figures"
         else:
@@ -71,8 +84,7 @@ class ComprehensiveAnalysisOrchestrator:
     
     def find_all_training_directories(self):
         """Find all training directories for the specified map."""
-        cooperative_dir = 'cooperative' if self.cooperative == 1 else 'competitive'
-        base_map_dir = Path(f"{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/{self.intent_version}/map_{self.map_nr}/{cooperative_dir}")
+        base_map_dir = Path(f"{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/{self.intent_version}/map_{self.map_nr}/simulations")
         
         training_dirs = []
         
@@ -91,6 +103,34 @@ class ComprehensiveAnalysisOrchestrator:
         
         print(f"Found {len(training_dirs)} training directories")
         return training_dirs
+    
+    def find_all_checkpoints_for_training(self, training_id):
+        """Find all checkpoint directories for a specific training."""
+        training_dir = Path(f"{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/{self.intent_version}/map_{self.map_nr}/simulations/Training_{training_id}")
+        
+        checkpoints = []
+        
+        if not training_dir.exists():
+            print(f"Error: Training directory does not exist: {training_dir}")
+            return checkpoints
+        
+        print(f"  Searching for checkpoints in: {training_dir}")
+        
+        # Search for checkpoint_* directories
+        for checkpoint_dir in training_dir.glob("checkpoint_*"):
+            if checkpoint_dir.is_dir():
+                checkpoint_number = checkpoint_dir.name.replace("checkpoint_", "")
+                checkpoints.append(checkpoint_number)
+                print(f"    Found checkpoint: {checkpoint_number}")
+        
+        # Sort checkpoints numerically if they are numbers, otherwise alphabetically
+        try:
+            checkpoints.sort(key=lambda x: int(x) if x.isdigit() else float('inf'))
+        except:
+            checkpoints.sort()
+        
+        print(f"  Found {len(checkpoints)} checkpoints for Training {training_id}: {checkpoints}")
+        return checkpoints
     
     def run_single_simulation_analysis(self, training_id, checkpoint_number="final"):
         """Run simulation analysis for a single training_id and checkpoint."""
@@ -145,32 +185,70 @@ class ComprehensiveAnalysisOrchestrator:
         print("-" * 40)
         
         if self.training_id:
-            # Specific training_id provided - run only for that one
-            checkpoint = self.checkpoint_number if self.checkpoint_number else "final"
-            print(f"Running simulation analysis for specific Training {self.training_id}, Checkpoint {checkpoint}")
-            return self.run_single_simulation_analysis(self.training_id, checkpoint)
+            # Specific training_id provided
+            if self.checkpoint_number:
+                # Both training_id and checkpoint_number provided - run only for that specific combination
+                print(f"Running simulation analysis for specific Training {self.training_id}, Checkpoint {self.checkpoint_number}")
+                return self.run_single_simulation_analysis(self.training_id, self.checkpoint_number)
+            else:
+                # Only training_id provided - run for all checkpoints of that training
+                print(f"Running simulation analysis for Training {self.training_id}, all checkpoints")
+                checkpoints = self.find_all_checkpoints_for_training(self.training_id)
+                
+                if not checkpoints:
+                    print(f"❌ No checkpoints found for Training {self.training_id}!")
+                    return False
+                
+                print(f"Found {len(checkpoints)} checkpoints for Training {self.training_id}: {checkpoints}")
+                
+                success_count = 0
+                for checkpoint in checkpoints:
+                    print(f"\n--- Processing Training {self.training_id}, Checkpoint {checkpoint} ---")
+                    if self.run_single_simulation_analysis(self.training_id, checkpoint):
+                        success_count += 1
+                    else:
+                        print(f"⚠️  Training {self.training_id}, Checkpoint {checkpoint} failed, continuing with next...")
+                
+                print(f"\n📊 Training {self.training_id} Analysis Summary: {success_count}/{len(checkpoints)} checkpoints completed successfully")
+                return success_count >= len(checkpoints) // 2
         else:
-            # No specific training_id - run for all training_ids found
+            # No specific training_id - run for all training_ids and all their checkpoints
             training_ids = self.find_all_training_directories()
             
             if not training_ids:
                 print("❌ No training directories found!")
                 return False
             
-            print(f"Running simulation analysis for all {len(training_ids)} training directories with checkpoint 'final'")
+            print(f"Running simulation analysis for all {len(training_ids)} training directories and all their checkpoints")
             
+            total_combinations = 0
             success_count = 0
-            for training_id in training_ids:
-                print(f"\n--- Processing Training {training_id} ---")
-                if self.run_single_simulation_analysis(training_id, "final"):
-                    success_count += 1
-                else:
-                    print(f"⚠️  Training {training_id} failed, continuing with next...")
             
-            print(f"\n📊 Simulation Analysis Summary: {success_count}/{len(training_ids)} training directories completed successfully")
+            for training_id in training_ids:
+                print(f"\n=== Processing Training {training_id} ===")
+                
+                # Get all checkpoints for this training
+                checkpoints = self.find_all_checkpoints_for_training(training_id)
+                
+                if not checkpoints:
+                    print(f"⚠️  No checkpoints found for Training {training_id}, skipping...")
+                    continue
+                
+                print(f"Found {len(checkpoints)} checkpoints for Training {training_id}: {checkpoints}")
+                total_combinations += len(checkpoints)
+                
+                # Process each checkpoint
+                for checkpoint in checkpoints:
+                    print(f"\n--- Processing Training {training_id}, Checkpoint {checkpoint} ---")
+                    if self.run_single_simulation_analysis(training_id, checkpoint):
+                        success_count += 1
+                    else:
+                        print(f"⚠️  Training {training_id}, Checkpoint {checkpoint} failed, continuing with next...")
+            
+            print(f"\n📊 Overall Analysis Summary: {success_count}/{total_combinations} training-checkpoint combinations completed successfully")
             
             # Consider it successful if at least half completed successfully
-            return success_count >= len(training_ids) // 2
+            return success_count >= total_combinations // 2 if total_combinations > 0 else False
     
     def run_checkpoint_analysis(self):
         """Run the checkpoint comparison analysis."""
@@ -236,10 +314,11 @@ class ComprehensiveAnalysisOrchestrator:
         summary.append(f"- **Game version**: {self.game_version}")
         summary.append(f"- **Intent version**: {self.intent_version}")
         summary.append(f"- **Mode**: {'cooperative' if self.cooperative == 1 else 'competitive'}")
-        summary.append(f"- **Base directory**: {self.base_cluster_dir}")
+        summary.append(f"- **Base cluster directory**: {self.base_cluster_dir}")
+        summary.append(f"- **Simulations directory**: {self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/{self.intent_version}/map_{self.map_nr}/simulations/")
+        summary.append(f"- **Figures output directory**: {self.output_dir}")
         if self.training_id and self.checkpoint_number:
             summary.append(f"- **Detailed analysis**: Training {self.training_id}, Checkpoint {self.checkpoint_number}")
-        summary.append(f"- **Output directory**: {self.output_dir}")
         summary.append("")
         
         # Analysis phases completed
@@ -248,11 +327,13 @@ class ComprehensiveAnalysisOrchestrator:
         if simulations_success:
             summary.append("### ✅ Phase 1: Detailed Simulation Analysis")
             if self.training_id:
-                checkpoint = self.checkpoint_number if self.checkpoint_number else "final"
-                summary.append(f"- Analyzed individual simulations for Training {self.training_id}, Checkpoint {checkpoint}")
+                if self.checkpoint_number:
+                    summary.append(f"- Analyzed individual simulations for Training {self.training_id}, Checkpoint {self.checkpoint_number}")
+                else:
+                    summary.append(f"- Analyzed individual simulations for Training {self.training_id}, all checkpoints")
             else:
-                summary.append("- Analyzed individual simulations for all training directories")
-                summary.append("- Processed all available training_ids with checkpoint 'final'")
+                summary.append("- Analyzed individual simulations for all training directories and all checkpoints")
+                summary.append("- Processed all available training_ids with all their checkpoint directories")
             summary.append("- Generated detailed behavioral plots (deliveries, actions, distances)")
             summary.append("- Created individual and aggregated visualizations")
             summary.append("- Results saved in subdirectories of simulation_figures/")
@@ -274,7 +355,8 @@ class ComprehensiveAnalysisOrchestrator:
         
         # Generated files overview
         summary.append("## Generated Files Structure")
-        summary.append(f"All outputs are organized in: `{self.output_dir}`")
+        summary.append(f"All analysis outputs (figures and reports) are organized in: `{self.output_dir}`")
+        summary.append(f"This is separate from the simulation data located in: `{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/{self.intent_version}/map_{self.map_nr}/simulations/`")
         summary.append("")
         
         if checkpoint_success:
@@ -285,7 +367,12 @@ class ComprehensiveAnalysisOrchestrator:
         
         if simulations_success:
             summary.append("\n### Detailed Simulation Analysis")
-            summary.append(f"- `detailed_simulations_{self.checkpoint_number}/` - Subdirectory containing:")
+            if self.training_id and self.checkpoint_number:
+                summary.append(f"- `detailed_simulations_Training_{self.training_id}_checkpoint_{self.checkpoint_number}/` - Subdirectory containing:")
+            elif self.training_id:
+                summary.append(f"- `detailed_simulations_Training_{self.training_id}_all_checkpoints/` - Subdirectories containing:")
+            else:
+                summary.append("- `detailed_simulations_all_trainings_all_checkpoints/` - Subdirectories containing:")
             summary.append("  - Individual simulation plots (deliveries, actions, distances)")
             summary.append("  - Aggregated simulation visualizations")
             summary.append("  - `detailed_simulation_analysis_summary.md` - Detailed simulation report")
@@ -336,9 +423,11 @@ class ComprehensiveAnalysisOrchestrator:
         print(f"Game version: {self.game_version}")
         print(f"Intent version: {self.intent_version}")
         print(f"Mode: {'cooperative' if self.cooperative == 1 else 'competitive'}")
+        simulations_base_dir = f"{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/{self.intent_version}/map_{self.map_nr}/simulations/"
+        print(f"Simulations directory: {simulations_base_dir}")
+        print(f"Figures output directory: {self.output_dir}")
         if self.training_id and self.checkpoint_number:
             print(f"Detailed analysis for: Training {self.training_id}, Checkpoint {self.checkpoint_number}")
-        print(f"Output directory: {self.output_dir}")
         print("="*60)
         print()
         
@@ -347,12 +436,15 @@ class ComprehensiveAnalysisOrchestrator:
         
         if self.training_id:
             # Specific training_id provided - only run simulation analysis
-            print("🎯 Specific training_id provided - running detailed simulation analysis only")
+            if self.checkpoint_number:
+                print(f"🎯 Specific training_id and checkpoint provided - running detailed simulation analysis for Training {self.training_id}, Checkpoint {self.checkpoint_number}")
+            else:
+                print(f"🎯 Specific training_id provided - running detailed simulation analysis for Training {self.training_id}, all checkpoints")
             simulations_success = self.run_simulations_analysis()
             checkpoint_success = False  # Skip checkpoint analysis
         else:
-            # No specific training_id - run simulations for all, then checkpoint comparison
-            print("🔄 No specific training_id provided - running simulation analysis for all training_ids, then checkpoint comparison")
+            # No specific training_id - run simulations for all trainings and checkpoints, then checkpoint comparison
+            print("🔄 No specific training_id provided - running simulation analysis for all training_ids and all checkpoints, then checkpoint comparison")
             
             # Phase 1: Detailed Simulation Analysis for all training_ids
             simulations_success = self.run_simulations_analysis()
@@ -371,7 +463,8 @@ class ComprehensiveAnalysisOrchestrator:
         print("COMPREHENSIVE ANALYSIS COMPLETED!")
         print("="*60)
         print(f"Total execution time: {execution_time:.1f} seconds ({execution_time/60:.1f} minutes)")
-        print(f"All results saved to: {self.output_dir}")
+        print(f"All analysis results (figures and reports) saved to: {self.output_dir}")
+        print(f"Simulation data remains in: {self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/{self.intent_version}/map_{self.map_nr}/simulations/")
         print(f"Open {self.output_dir}/comprehensive_analysis_summary.md for complete results overview.")
         print()
         
@@ -379,9 +472,15 @@ class ComprehensiveAnalysisOrchestrator:
         if self.training_id:
             # Specific training_id mode
             if simulations_success:
-                print(f"✅ Detailed simulation analysis for Training {self.training_id} completed successfully!")
+                if self.checkpoint_number:
+                    print(f"✅ Detailed simulation analysis for Training {self.training_id}, Checkpoint {self.checkpoint_number} completed successfully!")
+                else:
+                    print(f"✅ Detailed simulation analysis for Training {self.training_id}, all checkpoints completed successfully!")
             else:
-                print(f"❌ Detailed simulation analysis for Training {self.training_id} failed. Check error messages above.")
+                if self.checkpoint_number:
+                    print(f"❌ Detailed simulation analysis for Training {self.training_id}, Checkpoint {self.checkpoint_number} failed. Check error messages above.")
+                else:
+                    print(f"❌ Detailed simulation analysis for Training {self.training_id}, all checkpoints failed. Check error messages above.")
         else:
             # All training_ids mode
             if simulations_success and checkpoint_success:
@@ -417,7 +516,7 @@ def main():
     parser.add_argument('--cooperative', type=int, default=1, choices=[0, 1],
                        help='1 for cooperative, 0 for competitive (default: 1)')
     parser.add_argument('--output_dir', type=str, default=None,
-                       help='Output directory for results (default: map_{map_nr}/{cooperative}/simulation_figures/)')
+                       help='Output directory for results (default: map_{map_nr}/simulation_figures/)')
     
     # Optional arguments for detailed simulation analysis
     parser.add_argument('--training_id', type=str, default=None,

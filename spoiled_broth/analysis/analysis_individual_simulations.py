@@ -983,11 +983,10 @@ def main():
     elif args.cluster.lower() == 'local':
         base_cluster_dir = "C:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado"
 
-    cooperative_dir = 'cooperative' if args.cooperative == 1 else 'competitive'
-
+    # Updated for new folder structure: /data/.../map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
     base_dir = f"{base_cluster_dir}/data/samuel_lozano/cooked/{args.game_version}/{args.intent_version}/map_{args.map_nr}"
-    training_dir = f"{base_dir}/{cooperative_dir}/Training_{args.training_id}/"
-    simulation_dir = f"{training_dir}/simulations_{args.checkpoint_number}/"
+    training_dir = f"{base_dir}/simulations/Training_{args.training_id}/"
+    simulation_dir = f"{training_dir}/checkpoint_{args.checkpoint_number}/"
 
     # Create a temporary analyzer to resolve checkpoint number if needed
     temp_analyzer = SimulationAnalyzer(

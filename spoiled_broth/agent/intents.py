@@ -1,3 +1,4 @@
+import time
 from engine.extensions.topDownGridWorld.intent import _base_intent
 
 class PickUpIntent(_base_intent.Intent):
@@ -55,64 +56,40 @@ class CuttingBoardIntent(_base_intent.Intent):
         self.tile = tile
         self.version = version
         self.has_ended = False
-        self.is_cutting = False  # Indicates agent is busy cutting
-        self._elapsed = 0.0
-        self._required_cut_time = 3.0
 
     def update(self, agent, delta_time: float):
-        if not self.is_cutting:
-            # Single click behavior: start cutting immediately if agent has a valid item
+        if not self.has_ended:
+            # Single click behavior: instantly cut if agent has a valid item
             if agent.item in ['tomato', 'pumpkin', 'cabbage']:
-                # Put item on board and start cutting process
-                self.tile.item = agent.item
-                agent.item = None
-                self.is_cutting = True
-                self.tile.cut_by = agent.id
-                self.tile.cut_time_accumulated = 0
-                # Mark agent as busy (this prevents new actions)
-                agent.is_busy = True
-            else:
-                # No valid item to cut, end intent
-                self.has_ended = True
-        else:
-            # Agent is cutting - accumulate time
-            try:
-                speed = float(getattr(agent, 'cut_speed', 1.0))
-            except Exception:
-                speed = 1.0
-
-            self._elapsed += delta_time * speed
-
-            # Keep tile accumulator in sync for compatibility
-            try:
-                self.tile.cut_time_accumulated += delta_time * speed
-            except Exception:
-                pass
-
-            # When cutting time is complete, give cut item to agent
-            if self._elapsed >= self._required_cut_time:
-                if self.tile.item is not None:
-                    orig = self.tile.item
-                    agent.item = f"{orig}_cut"
-                    self.tile.cut_item = agent.item
-                    self.tile.item = None  # Clear the cutting board
-                    
-                # Reset tile state
-                try:
-                    self.tile.cut_time_accumulated = 0
-                except Exception:
-                    pass
+                # Store original item and immediately create cut version
+                original_item = agent.item
+                cut_item = f"{original_item}_cut"
                 
-                # Release agent from busy state
-                agent.is_busy = False
+                # Give cut item directly to agent (instant cutting)
+                if agent.is_simulation:
+                    agent.provisional_item = cut_item
+                    agent.item = None
+                    agent.action_complete = False
+                    # Set agent cutting state with start time for controller to manage waiting
+                    agent.is_cutting = True
+                    agent.cutting_start_time = time.time()
+                    agent.cutting_duration = 3.0  # 3 seconds that controller will wait
+                else:
+                    agent.item = cut_item
+                
+                # Set tile metadata for tracking
+                self.tile.cut_by = agent.id
+                self.tile.cut_item = cut_item
+                self.tile.item = None  # Clear the cutting board
+                
+                # Intent completes immediately - cutting delay is handled by controller
+                self.has_ended = True
+            else:
+                # No valid item to cut, end intent immediately
                 self.has_ended = True
 
     def finished(self, agent):
         return self.has_ended
-    
-    def is_agent_busy(self):
-        """Returns True if the agent should not accept new actions"""
-        return self.is_cutting
 
 
 # --------------- LEGACY INTENTS (to be removed) -----------------

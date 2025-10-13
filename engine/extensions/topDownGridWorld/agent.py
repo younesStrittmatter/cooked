@@ -49,6 +49,10 @@ class Agent(GameObject):
         self.drawables.append(drawable)
 
     def set_move_target(self, tile):
+        # Check if agent is busy (e.g., cutting) - if so, don't set new movement targets
+        if getattr(self, 'is_busy', False):
+            return
+            
         start = self.node
         goal = Node(tile.slot_x, tile.slot_y)
         path = find_path(self.grid, start, goal)
@@ -78,6 +82,9 @@ class Agent(GameObject):
         return None
 
     def move(self, delta_time):
+        # Check if agent is busy (e.g., cutting) - if so, don't allow movement
+        if getattr(self, 'is_busy', False):
+            return
 
         # if self.path_index >= len(self.path):
         #     return  # No path or finished

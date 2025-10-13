@@ -17,12 +17,13 @@ class Agent(agent.Agent):
         self.move_target = None
 
         self.item = None
+        self.provisional_item = None  # Item that is being processed (e.g., being cut)
         self.cut_speed = 1
         self.action = None
         self.score = 0
         self.current_action = None
         self.action_complete = True  # Initially no action is in progress
-        self.is_busy = False  # Initially not busy with any time-consuming operation
+        self.is_simulation = False  # Flag to indicate if this agent is in a simulation environment
         # Maximum time (seconds) to consider an action valid before forcing completion
         self.ACTION_TIMEOUT = 5.0
         hair_n = random.randint(0, 8)
@@ -65,8 +66,8 @@ class Agent(agent.Agent):
 
         # Check if there are actions for this agent
         if self.id in actions:
-            # If we're getting a new action but the current one isn't complete or agent is busy, ignore it
-            if not self.action_complete or getattr(self, 'is_busy', False):
+            # If we're getting a new action but the current one isn't complete or agent is cutting, ignore it
+            if not self.action_complete or getattr(self, 'is_cutting', False):
                 # Remove the new action from the actions dict to prevent it from being processed
                 actions.pop(self.id)
             else:

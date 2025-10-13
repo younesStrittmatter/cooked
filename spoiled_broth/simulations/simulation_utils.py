@@ -69,7 +69,7 @@ def setup_simulation_argument_parser() -> argparse.ArgumentParser:
     )
     
     parser.add_argument(
-        '--enable-video',
+        '--enable_video',
         type=str,
         choices=['true', 'false'],
         default='true',

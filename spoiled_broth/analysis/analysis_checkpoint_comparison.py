@@ -6,7 +6,7 @@ This script analyzes simulation data across all training_ids and checkpoints for
 to generate a figure comparing averaged deliveries in the last frame over checkpoint numbers.
 
 The script expects the following directory structure:
-/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}/{cooperative_dir}/Training_{training_id}/simulations_{checkpoint}/
+/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint}/
 
 Usage:
 nohup python3 analysis_checkpoint_comparison.py --cluster cuenca --map_nr baseline_division_of_labor --game_version classic --intent_version v3.1 --cooperative 1 > log_analysis_checkpoint_comparison.out 2>&1 &
@@ -51,8 +51,8 @@ class CheckpointDeliveryAnalyzer:
         self.intent_version = intent_version
         self.cooperative = "cooperative" if cooperative == 1 else "competitive"
         
-        # Construct the base map directory path
-        self.base_map_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}/{self.cooperative}")
+        # Construct the base map directory path - updated for new structure
+        self.base_map_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}/simulations")
         
         self.checkpoint_data = {}  # {training_id: {checkpoint: delivery_data}}
         
@@ -79,10 +79,10 @@ class CheckpointDeliveryAnalyzer:
         """Find all checkpoint directories for a specific training."""
         checkpoints = []
         
-        # Search for simulations_* directories
-        for checkpoint_dir in training_dir.glob("simulations_*"):
+        # Search for checkpoint_* directories (updated for new structure)
+        for checkpoint_dir in training_dir.glob("checkpoint_*"):
             if checkpoint_dir.is_dir():
-                checkpoint_name = checkpoint_dir.name.replace("simulations_", "")
+                checkpoint_name = checkpoint_dir.name.replace("checkpoint_", "")
                 checkpoints.append((checkpoint_dir, checkpoint_name))
         
         return checkpoints
