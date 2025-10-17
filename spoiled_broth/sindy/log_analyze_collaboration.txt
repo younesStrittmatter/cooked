@@ -1,2 +1,0 @@
-nohup: ignoring input
-Saved collaboration measures to /data/samuel_lozano/cooked/classic/v3.1/experiment/map_baseline_division_of_labor/sindy_analysis/threshold_0.0001-poly_3-fourier_2/collaboration_2025-10-09_17-56-09.json
