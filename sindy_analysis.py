@@ -64,7 +64,7 @@ def main():
     print("Step 2: Analyzing collaboration...")
     analyze_collaboration(map_identifier=args.map_identifier, coeff_dir=coeff_dir)
 
-    # Step 3: Plot and summarize
+    ## Step 3: Plot and summarize
     print("Step 3: Plotting and summarizing...")
     plot_and_summarize(
         coeff_dir=coeff_dir,
