@@ -2,13 +2,12 @@ import time
 from engine.extensions.topDownGridWorld.intent import _base_intent
 
 class PickUpIntent(_base_intent.Intent):
-    def __init__(self, tile, version):
+    def __init__(self, tile):
         super().__init__()
-        self.version = version
         self.tile = tile
         self.has_ended = False
 
-    def update(self, agent, delta_time: float):
+    def update(self, agent):
         if not self.has_ended:
             self.has_ended = True
             agent.item = self.tile.item
@@ -18,13 +17,12 @@ class PickUpIntent(_base_intent.Intent):
 
 
 class ItemExchangeIntent(_base_intent.Intent):
-    def __init__(self, tile, version):
+    def __init__(self, tile):
         super().__init__()
-        self.version = version
         self.tile = tile
         self.has_ended = False
 
-    def update(self, agent, delta_time: float):
+    def update(self, agent):
         if not self.has_ended:
             self.has_ended = True
             # Case 1: agent has a cutted ingredient and tile has a plate
@@ -51,13 +49,12 @@ class ItemExchangeIntent(_base_intent.Intent):
         return self.has_ended
 
 class CuttingBoardIntent(_base_intent.Intent):
-    def __init__(self, tile, version):
+    def __init__(self, tile):
         super().__init__()
         self.tile = tile
-        self.version = version
         self.has_ended = False
 
-    def update(self, agent, delta_time: float):
+    def update(self, agent):
         if not self.has_ended:
             # Single click behavior: instantly cut if agent has a valid item
             if agent.item in ['tomato', 'pumpkin', 'cabbage']:
@@ -94,10 +91,9 @@ class CuttingBoardIntent(_base_intent.Intent):
 
 # --------------- LEGACY INTENTS (to be removed) -----------------
 class old_CuttingBoardIntent(_base_intent.Intent):
-    def __init__(self, tile, version):
+    def __init__(self, tile):
         super().__init__()
         self.tile = tile
-        self.version = version
         self.has_ended = False
         self.has_started = False
         # elapsed cutting time while agent is at the board
@@ -125,26 +121,13 @@ class old_CuttingBoardIntent(_base_intent.Intent):
                     self.has_ended = True
             else:
                 if agent.item in ['tomato', 'pumpkin', 'cabbage']:
-                    if self.version == "v2.1" or self.version == "v3.1":
-                        # v2.1: cut instantly
-                        agent.item = f'{agent.item}_cut'
-                        self.tile.cut_by = agent.id
-                        self.tile.cut_item = agent.item
-                        self.tile.item = None
-                        self.tile.cut_time_accumulated = 0
-                        self.has_ended = True
-                    elif self.version == "v2.2" or self.version == "v3.2":
-                        # v2.2: put the item on the board and cut one time
-                        self.tile.cut_time_accumulated = 1
-                        self.tile.item = agent.item
-                        agent.item = None
-                        self.has_started = True
-                    else:
-                        # normal behavior: put the item on the board
-                        self.tile.cut_time_accumulated = 0
-                        self.tile.item = agent.item
-                        agent.item = None
-                        self.has_started = True
+                    # cut instantly
+                    agent.item = f'{agent.item}_cut'
+                    self.tile.cut_by = agent.id
+                    self.tile.cut_item = agent.item
+                    self.tile.item = None
+                    self.tile.cut_time_accumulated = 0
+                    self.has_ended = True
                 else:
                     self.has_ended = True
         else:
@@ -173,11 +156,8 @@ class old_CuttingBoardIntent(_base_intent.Intent):
                     agent.item = f"{orig}_cut"
                     self.tile.cut_by = agent.id
                     self.tile.cut_item = agent.item
-                    # Reset tile state: if agent took a basic ingredient back, place it
-                    # otherwise clear the tile
                     # For this implementation, after cutting we clear the tile
                     self.tile.item = None
-                    # Reset tile accumulator
                     try:
                         self.tile.cut_time_accumulated = 0
                     except Exception:
@@ -189,22 +169,15 @@ class old_CuttingBoardIntent(_base_intent.Intent):
 
 
 class DeliveryIntent(_base_intent.Intent):
-    def __init__(self, tile, version):
+    def __init__(self, tile):
         super().__init__()
         self.tile = tile
-        self.version = version
         self.has_ended = False
 
     def update(self, agent, delta_time: float):
         if not self.has_ended:
             self.has_ended = True
-
-            if self.version == "v1":
-                valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato']
-            elif self.version == "v2.1" or self.version == "v2.2":
-                valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato_cut']
-            else:
-                valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
+            valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
 
             if agent.item in valid_items:
                 self.tile.delivered_by = agent.id

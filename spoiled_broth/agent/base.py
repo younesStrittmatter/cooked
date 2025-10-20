@@ -182,10 +182,3 @@ class Agent(agent.Agent):
             self.drawables[5].height = 0
             self.drawables[6].width = 0
             self.drawables[6].height = 0
-
-    #def to_vector(self):
-    #    _pos = [self.slot_x / self.grid.width, self.slot_y / self.grid.height]
-    #    _item = [0] * len(ITEM_LIST)
-    #    if self.item in ITEM_LIST:
-    #        _item[ITEM_LIST.index(self.item)] = 1
-    #    return np.array(_pos + _item, dtype=np.float32)

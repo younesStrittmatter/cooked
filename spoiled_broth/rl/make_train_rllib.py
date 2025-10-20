@@ -1,25 +1,18 @@
 import os
+import pickle
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
-from ray.rllib.algorithms.ppo import PPO
 from ray.tune.registry import register_env
 from spoiled_broth.rl.game_env import GameEnv
-from spoiled_broth.rl.game_env_competition import GameEnvCompetition
-from collections import defaultdict
-from pathlib import Path
-import csv
 import warnings
 from datetime import datetime
+from ray.tune.logger import CSVLogger
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def env_creator(config):
     # Your existing GameEnv class goes here
     return GameEnv(**config)
-
-def env_creator_competition(config):
-    # Your existing GameEnv class goes here
-    return GameEnvCompetition(**config)
 
 # Define separate policies for each agent
 def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
@@ -36,14 +29,19 @@ def make_train_rllib(config):
         for key, val in config.items():
             f.write(f"{key}: {val}\n")
 
-    if config["GAME_VERSION"] == "classic":
-        # Register the environment with RLLib
-        register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator(cfg)))
-    elif config["GAME_VERSION"] == "competition":
-        # Register the environment with RLLib
-        register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator_competition(cfg)))
+    # --- Load distance_map cache based on map_nr ---
+    map_nr = config["MAP_NR"]
+    cache_dir = os.path.join(os.path.dirname(__file__), "../maps/distance_cache")
+    # Prefer the precomputed .npz cache file in the repo cache
+    cache_filename = f"distance_map_{str(map_nr)}.npz"
+    cache_path = os.path.join(cache_dir, cache_filename)
+    distance_map_path = None
+    if os.path.exists(cache_path):
+        distance_map_path = cache_path
     else:
-        print("Incorrect GAME_VERSION!")
+        print(f"[WARNING] .npz Distance map cache not found for map_nr '{map_nr}'. Expected path: {cache_path}")
+
+    register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator(cfg)))
 
     # --- Dynamic policy setup ---
     num_agents = config.get("NUM_AGENTS", 2)
@@ -51,20 +49,18 @@ def make_train_rllib(config):
     policies = {}
     policies_to_train = []
     for agent_id in agent_ids:
-        if config["GAME_VERSION"] == "classic":
-            policies[f"policy_{agent_id}"] = (
-                None,  # Use default PPO policy
-                env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space(agent_id),
-                env_creator({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space(agent_id),
-                {}
-            )
-        elif config["GAME_VERSION"] == "competition":
-            policies[f"policy_{agent_id}"] = (
-                None,  # Use default PPO policy
-                env_creator_competition({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).observation_space(agent_id),
-                env_creator_competition({"map_nr": config["MAP_NR"], "grid_size": config.get("GRID_SIZE", (8, 8))}).action_space(agent_id),
-                {}
-            )
+        env_cfg = {
+            "map_nr": config["MAP_NR"],
+            "grid_size": config.get("GRID_SIZE", (8, 8)),
+            # pass path (prefer .npz) to distance map; can be None
+            "distance_map": distance_map_path
+        }
+        policies[f"policy_{agent_id}"] = (
+            None,  # Use default PPO policy
+            env_creator(env_cfg).observation_space(agent_id),
+            env_creator(env_cfg).action_space(agent_id),
+            {}
+        )
         policies_to_train.append(f"policy_{agent_id}")
 
     start_epoch = 0
@@ -100,22 +96,12 @@ def make_train_rllib(config):
     def dynamic_policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
         return f"policy_{agent_id}"
 
-    # --- Model config for MLP or LSTM ---
+    # --- Model config for MLP ---
     model_config = {
         "fcnet_hiddens": config.get("FCNET_HIDDENS", [256, 256]),
         "fcnet_activation": config.get("FCNET_ACTIVATION", "tanh"),
-        "use_lstm": config.get("USE_LSTM", False),
-        "max_seq_len": config.get("MAX_SEQ_LEN", 20),
     }
     
-    # --- Model config for CNN ---
-    #model_config={
-    #            "conv_filters": config["CONV_FILTERS"],
-    #            "conv_activation": "tanh",
-    #            "use_lstm": False,
-    #            "use_attention": False,
-    #        }
-
     # Configuration for multi-agent training
     ppo_config = (
         PPOConfig()
@@ -131,15 +117,16 @@ def make_train_rllib(config):
             env_config={
                 "reward_weights": config["REWARD_WEIGHTS"],
                 "map_nr": config["MAP_NR"],
-                "cooperative": config["COOPERATIVE"],
+                "game_mode": config["GAME_VERSION"],
                 "step_per_episode": config["NUM_INNER_STEPS"],
                 "path": config["PATH"],
                 "grid_size": config.get("GRID_SIZE", (8, 8)),
-                "intent_version": config.get("INTENT_VERSION", None),
                 "payoff_matrix": config.get("PAYOFF_MATRIX", [1,1,-2]),
                 "initial_seed": config.get("INITIAL_SEED", 0),
                 "wait_for_completion": config.get("WAIT_FOR_COMPLETION", True),
-                "start_epoch": start_epoch
+                "start_epoch": start_epoch,
+                # pass the path to the distance_map pickle (or None)
+                "distance_map": distance_map_path
             },
             clip_actions=True,
         )

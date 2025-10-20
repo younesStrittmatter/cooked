@@ -6,7 +6,7 @@ from ray.rllib.algorithms.ppo import PPO
 from spoiled_broth.game import SpoiledBroth
 from pathlib import Path
 from spoiled_broth.rl.game_env_competition import get_action_type, ACTION_TYPE_OWN_USEFUL_CUTTING_BOARD, ACTION_TYPE_OTHER_USEFUL_CUTTING_BOARD, ACTION_TYPE_OWN_USEFUL_DELIVERY, ACTION_TYPE_OTHER_USEFUL_DELIVERY
-from spoiled_broth.game import game_to_obs_matrix_competition
+from spoiled_broth.game import game_to_obs_vector_competition
 from spoiled_broth.game import SpoiledBroth
 from spoiled_broth.rl.game_env_competition import init_game
 
@@ -61,7 +61,7 @@ def generate_key_observations(agent_id="ai_rl_1"):
             agent_copy.x = pos[0] * game_copy.grid.tile_size + game_copy.grid.tile_size // 2
             agent_copy.y = pos[1] * game_copy.grid.tile_size + game_copy.grid.tile_size // 2
             agent_copy.item = scenario["item"]
-            obs, _ = game_to_obs_matrix_competition(game_copy, agent_id, agent_food_types)
+            obs = game_to_obs_vector_competition(game_copy, agent_id, agent_food_types)
             observations.append({
                 "obs": obs,
                 "item": scenario["label"],

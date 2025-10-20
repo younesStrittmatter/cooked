@@ -1,11 +1,8 @@
-from abc import abstractmethod
-
 from engine.extensions.topDownGridWorld.grid import Tile
 from engine.extensions.renderer2d.basic_2d import Basic2D
 from engine.extensions.topDownGridWorld.intent.intents import MoveToIntent
 from spoiled_broth.agent.intents import PickUpIntent, ItemExchangeIntent, CuttingBoardIntent, DeliveryIntent
 import random
-import numpy as np
 
 TYPE_TILES = 6
 
@@ -39,34 +36,6 @@ class SoiledBrothTile(Tile):
 
     def _progress_vec(self):
         return [0] * 3
-    
-    #def _get_normalized_progress(self):
-    #    """Improved progress vector with proper normalization"""
-    #    if hasattr(self, 'progress'):
-    #        if hasattr(self, 'max_progress'):
-    #            # Normalize current progress
-    #            normalized = min(1.0, self.progress / self.max_progress)
-    #            return [normalized]
-    #        elif hasattr(self, 'progress_steps'):
-    #            # One-hot for discrete progress steps
-    #            vec = [0] * len(self.progress_steps)
-    #            current_step = min(len(self.progress_steps)-1, 
-    #                              bisect.bisect_left(self.progress_steps, self.progress))
-    #            vec[current_step] = 1
-    #            return vec
-    #    # Default no progress
-    #    return [0] * 3  # Maintains same length as original
-
-    ## LEGACY FROM game_to_vector in game.py
-    #def to_vector(self):
-    #    # Only encode type (as int), item (one-hot for 4), and progress (if relevant)
-    #    # All tiles are clickable, so skip clickable_vec
-    #    # Omit walkable_vec and position_vec for simplicity
-    #    type_val = getattr(self, '_type', 0)
-    #    item_vec = self._item_vec()
-    #    # For cutting board, include progress; else, 0
-    #    progress = self._progress_vec() if hasattr(self, '_progress_vec') else [0]
-    #    return np.array([type_val] + item_vec + progress, dtype=np.float32)
 
     def to_language(self, agent):
         raise NotImplementedError()
@@ -137,8 +106,6 @@ class Counter(SoiledBrothTile):
             self.drawables[1].width = 0
             self.drawables[1].height = 0
         
-        # The salad_by field is now set in ItemExchangeIntent when salad is created
-
     def get_intent(self, agent):
         self.intent_version = agent.intent_version
         return [MoveToIntent(self), ItemExchangeIntent(self, version=agent.intent_version)]
@@ -188,24 +155,8 @@ class CuttingBoard(SoiledBrothTile):
 
     @property
     def cut_stage(self):
-        if self.intent_version == "v2.1" or self.intent_version == "v3.1":
-        # v2.1: cutting is instant, so always consider it done
-            return 3
-        elif self.intent_version == "v2.2" or self.intent_version == "v3.2":
-            # In v3: cutting one time is enough
-            if self.cut_time_accumulated >= 1:
-                return 3 
-            else:
-                return 0
-        else:
-            if 0 <= self.cut_time_accumulated < 1:
-                return 0
-            if 1 <= self.cut_time_accumulated < 2:
-                return 1
-            elif 2 <= self.cut_time_accumulated < 3:
-                return 2
-            else:
-                return 3
+        # Cutting is instant, so always consider it done
+        return 3
 
     def update(self, agent, delta_time):
         super().update(agent, delta_time)
@@ -225,24 +176,8 @@ class CuttingBoard(SoiledBrothTile):
             self.drawables[2].width = 0
             self.drawables[2].height = 0
 
-        # The cut_by field is now set in CuttingBoardIntent when item is cut
-
     def get_intent(self, agent):
-        self.intent_version = agent.intent_version
-        return [MoveToIntent(self), CuttingBoardIntent(self, version=self.intent_version)]
-
-    def _progress_vec(self):
-        if self.item is None:
-            return [0, 0, 0]
-        stage = self.cut_stage  # 0–3
-        vec = [0, 0, 0]
-        if 1 <= stage < 2:
-            vec[0] = 1  # early chop
-        elif 2 <= stage < 3:
-            vec[1] = 1  # mid chop
-        elif stage >= 3:
-            vec[2] = 1  # done
-        return vec
+        return [MoveToIntent(self), CuttingBoardIntent(self)]
 
 
 class Delivery(SoiledBrothTile):
@@ -254,15 +189,12 @@ class Delivery(SoiledBrothTile):
         self.add_drawable(Basic2D(src='world/delivery.png', z_index=0, normalize=False))
         self.delivered_by = None  # Register which agent delivered
         self.delivered_item = None
-        self.intent_version = None
 
     def update(self, agent, delta_time):
         super().update(agent, delta_time)
-        # The delivered_by field is now set in DeliveryIntent when delivery occurs
 
     def get_intent(self, agent):
-        self.intent_version = agent.intent_version
-        return [MoveToIntent(self), DeliveryIntent(self, version=self.intent_version)]
+        return [MoveToIntent(self), DeliveryIntent(self)]
 
 
 COLOR_MAP = {

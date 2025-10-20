@@ -1,0 +1,1 @@
+cf_AI_TICK_RATE = 2 # 2 decisions per second

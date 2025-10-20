@@ -15,6 +15,7 @@ import os
 import glob
 import json
 import argparse
+import numpy as np
 
  # Infer term_type for each row
 def infer_term_type(row):
@@ -84,7 +85,6 @@ def analyze_coeff_file(map_identifier, coeff_path, target_names, output_path=Non
     else:
         training_id = 'unknown'
         checkpoint_number = 'unknown'
-    total_abs = float(coef_df['abs_coeff'].sum()) if not coef_df['abs_coeff'].empty else 0.0
 
     # Add inferred term_type and target_type columns
     coef_df['term_type'] = coef_df.apply(infer_term_type, axis=1)
@@ -94,9 +94,21 @@ def analyze_coeff_file(map_identifier, coeff_path, target_names, output_path=Non
     base_metrics = ['own_influence', 'others_influence', 'relative_behaviour', 'mixed_terms']
     base_scores = {}
     base_per_target = {}
+    base_stats = {}
+    # First pass: collect raw stats and scores
     for m_name in base_metrics:
         m_score = 0.0
         m_per_target = {}
+        mask_all = measure_mask(coef_df, m_name)
+        coeffs = coef_df.loc[mask_all, 'abs_coeff'].values
+        mean_coeff = float(np.mean(coeffs)) if len(coeffs) > 0 else 0.0
+        std_coeff = float(np.std(coeffs)) if len(coeffs) > 0 else 0.0
+        n_coeff = int(len(coeffs))
+        base_stats[m_name] = {
+            'mean_abs_coeff': mean_coeff,
+            'std_abs_coeff': std_coeff / np.sqrt(n_coeff) if n_coeff > 0 else 0.0,
+            'n_coeff': n_coeff
+        }
         for tname in target_names:
             mask = (coef_df['target'] == tname) & measure_mask(coef_df, m_name)
             s = float(coef_df.loc[mask, 'abs_coeff'].sum()) if not coef_df.loc[mask, 'abs_coeff'].empty else 0.0
@@ -105,8 +117,23 @@ def analyze_coeff_file(map_identifier, coeff_path, target_names, output_path=Non
         base_scores[m_name] = m_score
         base_per_target[m_name] = m_per_target
 
-    # Normalize so that the four base metrics add up to 1
+    # Calculate mean total abs_coeff (for normalization)
+    # It should be the sum of mean_abs_coeff across base metrics
+    mean_total_abs = sum(base_stats[m_name]['mean_abs_coeff'] for m_name in base_metrics)
+    
+    # Second pass: add normalized mean and std
+    for m_name in base_metrics:
+        mean_coeff = base_stats[m_name]['mean_abs_coeff']
+        std_coeff = base_stats[m_name]['std_abs_coeff']
+        norm_mean_coeff = mean_coeff / mean_total_abs if mean_total_abs > 0 else 0.0
+        norm_std_coeff = std_coeff / mean_total_abs if mean_total_abs > 0 else 0.0
+        base_stats[m_name]['norm_mean_abs_coeff'] = norm_mean_coeff
+        base_stats[m_name]['norm_std_abs_coeff'] = norm_std_coeff
+
+    # Restore total_base for normalization of base_norm and base_per_target_norm
     total_base = sum(base_scores.values())
+
+    # Normalize so that the four base metrics add up to 1
     base_norm = {k: (v / total_base if total_base > 0 else 0.0) for k, v in base_scores.items()}
     base_per_target_norm = {k: {t: (v / total_base if total_base > 0 else 0.0) for t, v in base_per_target[k].items()} for k in base_metrics}
 
@@ -125,7 +152,12 @@ def analyze_coeff_file(map_identifier, coeff_path, target_names, output_path=Non
             'raw': float(base_scores[m_name]),
             'normalized': base_norm[m_name],
             'per_target_raw': base_per_target[m_name],
-            'per_target_normalized': base_per_target_norm[m_name]
+            'per_target_normalized': base_per_target_norm[m_name],
+            'mean_abs_coeff': base_stats[m_name]['mean_abs_coeff'],
+            'std_abs_coeff': base_stats[m_name]['std_abs_coeff'],
+            'n_coeff': base_stats[m_name]['n_coeff'],
+            'norm_mean_abs_coeff': base_stats[m_name]['norm_mean_abs_coeff'],
+            'norm_std_abs_coeff': base_stats[m_name]['norm_std_abs_coeff']
         }
     # Add composite metrics
     for m_name, components in composite_metrics.items():
@@ -133,11 +165,21 @@ def analyze_coeff_file(map_identifier, coeff_path, target_names, output_path=Non
         norm_sum = sum(base_norm[c] for c in components)
         per_target_raw = {t: sum(base_per_target[c][t] for c in components) for t in target_names}
         per_target_norm = {t: sum(base_per_target_norm[c][t] for c in components) for t in target_names}
+        mean_abs_coeff = sum(base_stats[c]['mean_abs_coeff'] for c in components)
+        std_abs_coeff = sum(base_stats[c]['std_abs_coeff'] for c in components)
+        n_coeff = sum(base_stats[c]['n_coeff'] for c in components)
+        norm_mean_coeff = sum(base_stats[c]['norm_mean_abs_coeff'] for c in components)
+        norm_std_coeff = sum(base_stats[c]['norm_std_abs_coeff'] for c in components)
         collaboration_measures[m_name] = {
             'raw': float(raw_sum),
             'normalized': norm_sum,
             'per_target_raw': per_target_raw,
-            'per_target_normalized': per_target_norm
+            'per_target_normalized': per_target_norm,
+            'mean_abs_coeff': mean_abs_coeff,
+            'std_abs_coeff': std_abs_coeff,
+            'n_coeff': n_coeff,
+            'norm_mean_abs_coeff': norm_mean_coeff,
+            'norm_std_abs_coeff': norm_std_coeff
         }
 
     result = {'map': map_identifier, 'training_id': training_id, 'checkpoint_number': checkpoint_number, 'collaboration_measures': collaboration_measures}

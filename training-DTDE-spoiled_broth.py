@@ -1,4 +1,4 @@
-# USE: nohup python training-DTDE-spoiled_broth.py <input_path> <map_nr> <lr> <cooperative> <game_version> <intent_version> <seed> [<num_agents>] [<checkpoint_id>] [<pretraining>] > log_training.txt &
+# USE: nohup python training-DTDE-spoiled_broth.py <input_path> <map_nr> <lr> <game_version> [<num_agents>] [<checkpoint_id>] [<pretraining>] [<seed>] > log_training.txt &
 
 import os
 import sys
@@ -12,28 +12,25 @@ os.environ["MKL_NUM_THREADS"] = "1"
 
 ##### Cluster config ##################
 NUM_GPUS = 1
-NUM_CPUS = 24
-CLUSTER = 'brigit'  # Options: 'brigit', 'local', 'cuenca'
+NUM_CPUS = 10
+CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
 
 # Read input file
 input_path = sys.argv[1]
 MAP_NR = sys.argv[2]
 LR = float(sys.argv[3])
-COOPERATIVE = int(sys.argv[4])
-## If game_version = classic, one type of food (tomato); if game_version = competition, two types of food (tomato and potato)
-GAME_VERSION = str(sys.argv[5]).lower()
-INTENT_VERSION = sys.argv[6]
-SEED = int(sys.argv[7]) if len(sys.argv) > 7 else 0
-if len(sys.argv) > 8:
-    NUM_AGENTS = int(sys.argv[8])
+GAME_VERSION = str(sys.argv[4]).lower() ## If game_version = classic, one type of food (tomato); if game_version = competition, two types of food (tomato and pumpkin)
+if len(sys.argv) > 5:
+    NUM_AGENTS = int(sys.argv[5])
     if NUM_AGENTS not in [1, 2]:
         raise ValueError("NUM_AGENTS must be 1 or 2")
 else:
     NUM_AGENTS = 2  # Default to 2 agents for backward compatibility
 
 # Optional checkpoint paths for loading pretrained policies
-CHECKPOINT_ID = str(sys.argv[9]) if len(sys.argv) > 9 else None
-PRETRAINING = str(sys.argv[10]) if len(sys.argv) > 10 else None
+CHECKPOINT_ID = str(sys.argv[6]) if len(sys.argv) > 6 else None
+PRETRAINING = str(sys.argv[7]) if len(sys.argv) > 7 else None
+SEED = int(sys.argv[8]) if len(sys.argv) > 8 else 0
 
 with open(input_path, "r") as f:
     lines = f.readlines()
@@ -63,50 +60,25 @@ else:
 # Hyperparameters
 NUM_ENVS = 1
 NUM_INNER_STEPS = 450
-NUM_EPOCHS = 25000
+NUM_EPOCHS = 5
 NUM_MINIBATCHES = 20
-SHOW_EVERY_N_EPOCHS = 1000
+SHOW_EVERY_N_EPOCHS = 1
 SAVE_EVERY_N_EPOCHS = 500
-CONV_FILTERS = [
-    [32, [3, 3], 1],  # Output: (32, 3, 3)
-    [64, [2, 2], 1],  # Output: (64, 2, 2)
-    #[64, [2, 2], 1],  # Output: (64, 2, 2)
-]
 PAYOFF_MATRIX = [1,1,-2]
 MLP_LAYERS = [512, 512, 256]
-USE_LSTM = False
 
 if NUM_AGENTS == 1:
-    raw_dir = f'{local}/data/samuel_lozano/cooked/pretraining'
+    save_dir = f'{local}/data/samuel_lozano/cooked/pretraining/{GAME_VERSION}/map_{MAP_NR}'
 else: 
-    raw_dir = f'{local}/data/samuel_lozano/cooked'
-
-if GAME_VERSION == "classic":
-    game_dir = f'{raw_dir}/classic'
-elif GAME_VERSION == "competition":
-    game_dir = f'{raw_dir}/competition'
-else:
-    game_dir = f'{raw_dir}'
-
-if INTENT_VERSION is not None:
-    intent_dir = f'{game_dir}/{INTENT_VERSION}'
-else: 
-    intent_dir = f'{game_dir}'
-
-if COOPERATIVE:
-    save_dir = f'{intent_dir}/map_{MAP_NR}/cooperative'
-else:
-    save_dir = f'{intent_dir}/map_{MAP_NR}/competitive'
+    save_dir = f'{local}/data/samuel_lozano/cooked/{GAME_VERSION}/map_{MAP_NR}'
 
 os.makedirs(save_dir, exist_ok=True)
 
 pretrained_policies = {}
 
-print(CHECKPOINT_ID)
 if CHECKPOINT_ID is not None:
     if PRETRAINING.upper() == "YES":
-        CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/classic/{INTENT_VERSION}/map_{MAP_NR}/competitive/Training_{CHECKPOINT_ID}'
-
+        CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/{GAME_VERSION}/map_{MAP_NR}/Training_{CHECKPOINT_ID}'
     else:
         CHECKPOINT_PATH = f'{save_dir}/Training_{CHECKPOINT_ID}'
 
@@ -140,9 +112,7 @@ config = {
     "SAVE_EVERY_N_EPOCHS": SAVE_EVERY_N_EPOCHS,
     "LR": LR,
     "MAP_NR": MAP_NR,
-    "COOPERATIVE": COOPERATIVE,
     "REWARD_WEIGHTS": reward_weights,
-    "INTENT_VERSION": INTENT_VERSION,
     "GAME_VERSION": GAME_VERSION,
     "PAYOFF_MATRIX": PAYOFF_MATRIX,
     "INITIAL_SEED": SEED,
@@ -157,13 +127,9 @@ config = {
     "ENT_COEF": 0.07,  # Entropy coefficient
     "CLIP_EPS": 0.2,  # PPO clip parameter
     "VF_COEF": 0.5,  # Value function coefficient
-    #"CONV_FILTERS": CONV_FILTERS,
     "GRID_SIZE": GRID_SIZE,
-    # MLP/LSTM model config
-    "USE_LSTM": USE_LSTM,  # Set to True to use LSTM
     "FCNET_HIDDENS": MLP_LAYERS,  # Hidden layer sizes for MLP
     "FCNET_ACTIVATION": "tanh",  # Activation function for MLP ("tanh", "relu", etc.)
-    "MAX_SEQ_LEN": 20,  # Sequence length for LSTM (if used)
     "NUM_CPUS": NUM_CPUS,
     "NUM_GPUS": NUM_GPUS,
 }

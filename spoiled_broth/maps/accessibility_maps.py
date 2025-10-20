@@ -1,11 +1,21 @@
-"""Module for pre-computing and storing accessibility maps for kitchen layouts."""
+"""
+Module for pre-computing and storing accessibility maps for kitchen layouts.
+
+This module provides functionality to create and manage accessibility maps,
+which are used to determine the navigable areas within a kitchen layout.
+
+Usage:
+nohup python accessibility_maps.py > accessibility.log 2>&1 &
+"""
+
 import os
 import json
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import matplotlib.patches as mpatches
 import numpy as np
 from typing import Dict, Set, Tuple
 from spoiled_broth.game import SpoiledBroth
-
 
 def create_accessibility_map(grid) -> Dict[Tuple[int, int], Set[Tuple[int, int]]]:
     """Creates a dictionary mapping each tile to its accessible neighbors"""
@@ -112,7 +122,6 @@ def plot_accessibility_grid_and_save(grid, accessibility, filename):
 
     fig, axes = plt.subplots(height, width, figsize=(width * 1.5, height * 1.5), constrained_layout=True)
 
-    import matplotlib.colors as mcolors
     cmap = plt.get_cmap("Blues")
     norm = mcolors.Normalize(vmin=0.0, vmax=1.0)
 
@@ -151,7 +160,6 @@ def plot_accessibility_grid_and_save(grid, accessibility, filename):
     cbar.set_label("Accessibility level", rotation=270, labelpad=15)
 
     # Add legend for accessible but not walkable
-    import matplotlib.patches as mpatches
     legend_handles = [
         mpatches.Patch(color=cmap(norm(1.0)), label="Reachable (walkable)"),
         mpatches.Patch(color=cmap(norm(0.8)), label="Reachable (clickable, not walkable)"),

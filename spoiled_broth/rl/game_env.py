@@ -5,206 +5,89 @@ from gymnasium import spaces
 import numpy as np
 from spoiled_broth.config import *
 from spoiled_broth.maps.accessibility_maps import get_accessibility_map
+import pickle as _pickle
+from spoiled_broth.rl.action_space import get_rl_action_space, convert_action_to_tile
+from spoiled_broth.rl.observation_space import game_to_obs_vector
+from spoiled_broth.rl.classify_action_type import get_action_type, get_action_type_list, ACTION_TYPE_INACCESSIBLE
+from spoiled_broth.rl.agent_events import get_agent_events
+from spoiled_broth.rl.reward_analysis import get_rewards
+from spoiled_broth.game import SpoiledBroth, random_game_state
 
-from spoiled_broth.game import SpoiledBroth, random_game_state, game_to_obs_matrix
-#from spoiled_broth.world.tiles import Counter
-
-DO_NOTHING_PENALTY = 0.05  # Penalty for choosing to do nothing
 USELESS_ACTION_PENALTY = 0.1 # Penalty for performing a useless action
 INACCESSIBLE_TILE_PENALTY = 0.5  # Harsh penalty for trying to access unreachable tiles
 WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next step
 
-REWARDS_BY_VERSION = {
-    "v1": {
-        "useful_food_dispenser": 0.5,
-        "useful_cutting_board": 0.0,
-        "useful_plate_dispenser": 0.0,
-        "item_cut": 0.0,
-        "salad_created": 0.0,
-        "delivered": 10.0
-    },
-    "v2.1": {
-        "useful_food_dispenser": 0.5,
-        "useful_cutting_board": 1.0,
-        "useful_plate_dispenser": 0.0,
-        "item_cut": 3.0,
-        "salad_created": 0.0,
-        "delivered": 10.0
-    },
-    "v2.2": {
-        "useful_food_dispenser": 0.5,
-        "useful_cutting_board": 1.0,
-        "useful_plate_dispenser": 0.0,
-        "item_cut": 3.0,
-        "salad_created": 0.0,
-        "delivered": 10.0
-    },
-    "v3.1": {
-        "useful_food_dispenser": 0.5,
-        "useful_cutting_board": 1.0,
-        "useful_plate_dispenser": 2.0,
-        "item_cut": 3.0,
-        "salad_created": 5.0,
-        "delivered": 10.0
-    },
-    "v3.2": {
-        "useful_food_dispenser": 0.5,
-        "useful_cutting_board": 1.0,
-        "useful_plate_dispenser": 2.0,
-        "item_cut": 3.0,
-        "salad_created": 5.0,
-        "delivered": 10.0
-    },
-    "default": {
-        "useful_dispenser": 0.5,
-        "useful_cutting_board": 1.0,
-        "useful_plate_dispenser": 1.5,
-        "item_cut": 3.0,
-        "salad_created": 5.0,
-        "delivered": 10.0
-    }
+REWARDS = {
+    "item_cut": 2.0,
+    "salad_created": 5.0,
+    "delivered": 10.0
 }
 
-# Action type constants for tracking
-ACTION_TYPE_DO_NOTHING = "do_nothing"
-ACTION_TYPE_FLOOR = "floor"
-ACTION_TYPE_WALL = "wall"
-ACTION_TYPE_USELESS_COUNTER = "useless_counter"
-ACTION_TYPE_USEFUL_COUNTER = "useful_counter"
-ACTION_TYPE_USEFUL_FOOD_DISPENSER = "useful_food_dispenser"
-ACTION_TYPE_USELESS_FOOD_DISPENSER = "useless_food_dispenser"
-ACTION_TYPE_USELESS_CUTTING_BOARD = "useless_cutting_board"
-ACTION_TYPE_USEFUL_CUTTING_BOARD = "useful_cutting_board"
-ACTION_TYPE_USEFUL_PLATE_DISPENSER = "useful_plate_dispenser"
-ACTION_TYPE_USELESS_PLATE_DISPENSER = "useless_plate_dispenser"
-ACTION_TYPE_USELESS_DELIVERY = "useless_delivery"
-ACTION_TYPE_USEFUL_DELIVERY = "useful_delivery"
-ACTION_TYPE_INACCESSIBLE = "inaccessible_tile"
-
-def get_action_type(tile, agent, x=None, y=None, accessibility_map=None):
+class DistanceMatrixWrapper:
     """
-    Determine the type of action based on the tile clicked and agent state.
+    Lightweight wrapper that provides the same .get(from).get(to) lookup
+    semantics as the original nested dict, but backed by a numpy matrix
+    and index maps for speed.
     """
-    if tile is None or not hasattr(tile, '_type'):
-        return ACTION_TYPE_FLOOR  # Default to floor for None/invalid tiles
-        
-    # Check accessibility using pre-computed map
-    agent_pos = (agent.slot_x, agent.slot_y)
-    tile_pos = (x, y)
-    if accessibility_map is not None and tile_pos not in accessibility_map.get(agent_pos, set()):
-        return ACTION_TYPE_INACCESSIBLE
+    def __init__(self, D, pos_from, pos_to):
+        # D: numpy array shape (N_from, N_to) with np.nan for missing
+        self.D = D
+        # pos_from / pos_to are arrays of shape (N,2)
+        self.pos_from = [tuple(p) for p in pos_from.tolist()]
+        self.pos_to = [tuple(p) for p in pos_to.tolist()]
+        self.pos_from_idx = {p: i for i, p in enumerate(self.pos_from)}
+        self.pos_to_idx = {p: i for i, p in enumerate(self.pos_to)}
 
-    # Default mapping for unknown tiles
-    default_action = ACTION_TYPE_FLOOR
+    def get(self, from_xy, default=None):
+        i = self.pos_from_idx.get(from_xy)
+        if i is None:
+            return {}
+        # Return a dict-like object for compatibility: mapping to_xy -> distance
+        row = self.D[i]
+        result = {}
+        for j, val in enumerate(row):
+            if not np.isnan(val):
+                result[self.pos_to[j]] = float(val)
+        return result
 
-    # Agent holds something? (e.g., tomato, salad, etc.)
-    holding_something = getattr(agent, "item", None) is not None
-
-    # Tile type 0: floor
-    if tile._type == 0:
-        return ACTION_TYPE_FLOOR
-
-    # Tile type 1: wall
-    if tile._type == 1:
-        return ACTION_TYPE_WALL
-
-    # Tile type 2: counter
-    if tile._type == 2:
-        # Useful if agent is holding something (can drop it), or counter has something and agent can pick it
-        has_on_counter = getattr(tile, "item", None) is not None
-        if holding_something or has_on_counter:
-            return ACTION_TYPE_USEFUL_COUNTER
-        else:
-            return ACTION_TYPE_USELESS_COUNTER
-
-    # Tile type 3: dispenser
-    if tile._type == 3:
-        if getattr(tile, "item", None) == "plate":
-            return ACTION_TYPE_USEFUL_PLATE_DISPENSER if not holding_something else ACTION_TYPE_USELESS_PLATE_DISPENSER
-        else:
-            return ACTION_TYPE_USEFUL_FOOD_DISPENSER if not holding_something else ACTION_TYPE_USELESS_FOOD_DISPENSER
-            
-    # Tile type 4: cutting board
-    if tile._type == 4:
-        # Check if cutting board has an item
-        board_item = getattr(tile, "item", None)
-
-        # Agent holds an item that can be cut
-        item_in_hand = getattr(agent, "item", None)
-        holding_uncut = item_in_hand is not None and getattr(item_in_hand, "cut_stage", 0) == 0
-        
-        if holding_uncut or board_item is not None:
-            return ACTION_TYPE_USEFUL_CUTTING_BOARD
-        else:
-            return ACTION_TYPE_USELESS_CUTTING_BOARD
-
-    # Tile type 5: delivery
-    if tile._type == 5:
-        # Useful if agent holds a deliverable item (e.g., salad)
-        item = getattr(agent, "item", None)
-
-        if agent.intent_version == "v1":
-            valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato']
-        elif agent.intent_version == "v2.1" or agent.intent_version == "v2.2":
-            valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad', 'tomato_cut']
-        else:
-            valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
-
-        if item is not None and item in valid_items:
-            return ACTION_TYPE_USEFUL_DELIVERY
-        else:
-            return ACTION_TYPE_USELESS_DELIVERY
-
-    # Default fallback
-    return default_action
-
-def init_game(agents, map_nr=1, grid_size=(8, 8), intent_version=None, seed=None):
+def init_game(agents, map_nr=1, grid_size=(8, 8), seed=None, game_mode="classic"):
     num_agents = len(agents)
-    game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size, intent_version=intent_version, num_agents=num_agents, seed=seed)
-    
-    # Calculate action spaces based on clickable indices
+    game = SpoiledBroth(map_nr=map_nr, grid_size=grid_size, num_agents=num_agents, seed=seed)
     clickable_indices = game.clickable_indices
+    # New action space: fixed action space for RL agents
     action_spaces = {
-        agent: spaces.Discrete(len(clickable_indices) + 1)  # Action space from 0 to len(clickable_indices)
+        agent: spaces.Discrete(len(get_rl_action_space(game_mode)))
         for agent in agents
     }
     _clickable_mask = np.zeros(game.grid.width * game.grid.height, dtype=np.int8)
     for idx in clickable_indices:
         _clickable_mask[idx] = 1
-    
-    # Add agents after setting up clickable indices
     for agent_id in agents:
-        if intent_version is not None:
-            game.add_agent(agent_id, intent_version=intent_version)
-        else:
-            game.add_agent(agent_id)
-        # Get the agent and ensure its game reference has the clickable indices
+        game.add_agent(agent_id)
         agent = game.gameObjects[agent_id]
         if hasattr(agent, 'game'):
             agent.game.clickable_indices = clickable_indices
-    
     return game, action_spaces, _clickable_mask, clickable_indices
 
 class GameEnv(ParallelEnv):
     metadata = {"render_modes": ["human"], "name": "game_v0"}
 
     def __init__(
-            self, 
-            reward_weights=None, 
-            map_nr=1, 
-            cooperative=1, 
-            step_per_episode=1000,
-            path="training_stats.csv",
-            grid_size=(8, 8),
-            intent_version=None,
-            payoff_matrix=None,
-            initial_seed=0,
-            wait_for_completion=True,  # New parameter to control action completion waiting
-            start_epoch=0
+        self, 
+        reward_weights=None, 
+        map_nr=1, 
+        game_mode="classic",
+        step_per_episode=1000,
+        path="training_stats.csv",
+        grid_size=(8, 8),
+        payoff_matrix=[1,1,-2],
+        initial_seed=0,
+        wait_for_completion=True,  # New parameter to control action completion waiting
+        start_epoch=0,
+        distance_map=None
     ):
         super().__init__()
         self.map_nr = map_nr
-        self.cooperative = cooperative  # Store cooperative mode as instance variable
         self._step_counter = 0
         self.episode_count = start_epoch
         self._max_steps_per_episode = step_per_episode
@@ -213,9 +96,38 @@ class GameEnv(ParallelEnv):
         self.write_csv = False
         self.csv_path = os.path.join(path, "training_stats.csv")
         self.grid_size = grid_size
-        self.intent_version = intent_version
         self.seed = initial_seed
         self.clickable_indices = None  # Initialize clickable indices storage
+        # distance_map can be either a dict (already loaded) or a filepath to a pickle file.
+        self.distance_map = None
+        if isinstance(distance_map, str):
+            # Only support .npz path strings now
+            try:
+                # direct path
+                if distance_map.endswith('.npz') and os.path.exists(distance_map):
+                    data = np.load(distance_map)
+                    D = data['D']
+                    pos_from = data['pos_from']
+                    pos_to = data['pos_to']
+                    self.distance_map = DistanceMatrixWrapper(D, pos_from, pos_to)
+                else:
+                    # Try the repo cache folder
+                    possible = os.path.join(os.path.dirname(__file__), '..', 'maps', 'distance_cache', distance_map)
+                    if possible.endswith('.npz') and os.path.exists(possible):
+                        data = np.load(possible)
+                        D = data['D']
+                        pos_from = data['pos_from']
+                        pos_to = data['pos_to']
+                        self.distance_map = DistanceMatrixWrapper(D, pos_from, pos_to)
+                    else:
+                        # if not found or not .npz, set None
+                        self.distance_map = None
+            except Exception:
+                self.distance_map = None
+        else:
+            # allow direct dict or wrapper being passed (for tests); otherwise None
+            self.distance_map = distance_map
+        self.game_mode = game_mode            
 
         # Load the accessibility map for this map
         self.accessibility_map = get_accessibility_map(map_nr)
@@ -232,29 +144,29 @@ class GameEnv(ParallelEnv):
         self.wait_for_completion = wait_for_completion
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
-        self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
+
+        if self.game_mode == "competition":
+            self.total_agent_events = {agent_id: {"delivered_own": 0, "delivered_other": 0, "salad_own": 0, "salad_other": 0, "cut_own": 0, "cut_other": 0} for agent_id in self.agents}
+            self.agent_food_type = {
+                "ai_rl_1": "tomato",
+                "ai_rl_2": "pumpkin",
+                }
+        elif self.game_mode == "classic":
+            self.total_agent_events = {agent_id: {"delivered": 0, "salad": 0, "cut": 0} for agent_id in self.agents}
+        else:
+            raise ValueError(f"Unknown game mode: {self.game_mode}")
+        
+
         self.total_action_types = {
-            agent_id: {
-                ACTION_TYPE_DO_NOTHING: 0,
-                ACTION_TYPE_FLOOR: 0,
-                ACTION_TYPE_WALL: 0,
-                ACTION_TYPE_USELESS_COUNTER: 0,
-                ACTION_TYPE_USEFUL_COUNTER: 0,
-                ACTION_TYPE_USEFUL_FOOD_DISPENSER: 0,
-                ACTION_TYPE_USELESS_FOOD_DISPENSER: 0,
-                ACTION_TYPE_USELESS_CUTTING_BOARD: 0,
-                ACTION_TYPE_USEFUL_CUTTING_BOARD: 0,
-                ACTION_TYPE_USEFUL_PLATE_DISPENSER: 0,
-                ACTION_TYPE_USELESS_PLATE_DISPENSER: 0,
-                ACTION_TYPE_USELESS_DELIVERY: 0,
-                ACTION_TYPE_USEFUL_DELIVERY: 0
-            } for agent_id in self.agents
+            agent_id: {action_type: 0 for action_type in get_action_type_list(self.game_mode)}
+            for agent_id in self.agents
         }
         self.total_actions_asked = {agent_id: 0 for agent_id in self.agents}
         self.total_actions_not_performed = {agent_id: 0 for agent_id in self.agents}
         self.total_actions_inaccessible = {agent_id: 0 for agent_id in self.agents}
+        self.ACTION_TYPE_INACCESSIBLE = ACTION_TYPE_INACCESSIBLE
 
-        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version, seed=self.seed)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, seed=self.seed, game_mode=self.game_mode)
 
         self.agent_map = {
             agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents
@@ -265,11 +177,10 @@ class GameEnv(ParallelEnv):
             agent.action_complete = True
             agent.current_action = None
             agent.is_busy = False
-            agent.is_busy = False
 
-        # --- New observation space: flatten (channels, H, W) + (2, 4) inventory ---
-        obs_matrix, agent_inventory = game_to_obs_matrix(self.game, self.agents[0])
-        obs_size = obs_matrix.size + agent_inventory.size
+        # --- New observation space---
+        obs_vector = game_to_obs_vector(self.game, self.agents[0], game_mode=self.game_mode, map_nr=self.map_nr, distance_map=self.distance_map)
+        obs_size = obs_vector.size
         self.observation_spaces = {
             agent: spaces.Box(low=0.0, high=1.0, shape=(obs_size,), dtype=np.float32)
             for agent in self.agents
@@ -292,7 +203,7 @@ class GameEnv(ParallelEnv):
         self._last_score = 0
         self.agents = self.possible_agents[:]
 
-        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, intent_version=self.intent_version, seed=episode_seed)
+        self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, seed=episode_seed, game_mode=self.game_mode)
         self.game.clickable_indices = self.clickable_indices
         random_game_state(self.game)
 
@@ -305,25 +216,25 @@ class GameEnv(ParallelEnv):
         self.infos = {agent: {} for agent in self.agents}
         self._last_score = 0
 
+
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
         self.total_agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
+
+        if self.game_mode == "competition":
+            self.total_agent_events = {agent_id: {"delivered_own": 0, "delivered_other": 0, "salad_own": 0, "salad_other": 0, "cut_own": 0, "cut_other": 0} for agent_id in self.agents}
+            self.agent_food_type = {
+                "ai_rl_1": "tomato",
+                "ai_rl_2": "pumpkin",
+                }
+        elif self.game_mode == "classic":
+            self.total_agent_events = {agent_id: {"delivered": 0, "salad": 0, "cut": 0} for agent_id in self.agents}
+        else:
+            raise ValueError(f"Unknown game mode: {self.game_mode}")
+
         self.total_action_types = {
-            agent_id: {
-                ACTION_TYPE_DO_NOTHING: 0,
-                ACTION_TYPE_FLOOR: 0,
-                ACTION_TYPE_WALL: 0,
-                ACTION_TYPE_USELESS_COUNTER: 0,
-                ACTION_TYPE_USEFUL_COUNTER: 0,
-                ACTION_TYPE_USEFUL_FOOD_DISPENSER: 0,
-                ACTION_TYPE_USELESS_FOOD_DISPENSER: 0,
-                ACTION_TYPE_USELESS_CUTTING_BOARD: 0,
-                ACTION_TYPE_USEFUL_CUTTING_BOARD: 0,
-                ACTION_TYPE_USEFUL_PLATE_DISPENSER: 0,
-                ACTION_TYPE_USELESS_PLATE_DISPENSER: 0,
-                ACTION_TYPE_USELESS_DELIVERY: 0,
-                ACTION_TYPE_USEFUL_DELIVERY: 0
-            } for agent_id in self.agents
+            agent_id: {action_type: 0 for action_type in get_action_type_list(self.game_mode)}
+            for agent_id in self.agents
         }
         self.total_actions_asked = {agent_id: 0 for agent_id in self.agents}
         self.total_actions_not_performed = {agent_id: 0 for agent_id in self.agents}
@@ -337,190 +248,66 @@ class GameEnv(ParallelEnv):
             for agent in self.agents
         }, self.infos
 
-    def get_rewards_for_version(self):
-        return REWARDS_BY_VERSION.get(self.intent_version, REWARDS_BY_VERSION["default"])
-
-
     def observe(self, agent):
-        # Use the new spatial observation (channels, H, W) and agent inventory
-        obs_matrix, agent_inventory = game_to_obs_matrix(self.game, agent)
-        # Option 1: Return as tuple (recommended for custom RL code)
-        # return (obs_matrix, agent_inventory)
-        # Option 2: Flatten and concatenate for Gym compatibility
-        obs = np.concatenate([obs_matrix.flatten(), agent_inventory.flatten()]).astype(np.float32)
+        obs_vector = game_to_obs_vector(self.game, agent, game_mode=self.game_mode, map_nr=self.map_nr, distance_map=self.distance_map)
+        obs = obs_vector.flatten().astype(np.float32)
         return obs
 
     def step(self, actions):
         self._step_counter += 1
-        # Submit intents from each agent
+        agent_penalties = {agent_id: 0.0 for agent_id in self.agents}
+        validated_actions = {}
 
-        agent_penalties = {agent_id: 0.0 for agent_id in self.agents}  # Used for useless and idle penalties
-        for agent_id, action in actions.items():
+        # Convert RL actions to tile clicks
+        for agent_id, action_idx in actions.items():
             self.total_actions_asked[agent_id] += 1
             agent_obj = self.game.gameObjects[agent_id]
+            action_name = get_rl_action_space(self.game_mode)[action_idx]
 
             # Check if agent is busy (e.g., cutting)
             if getattr(agent_obj, "is_busy", False):
                 self.total_actions_not_performed[agent_id] += 1
-                continue  # Skip this agent's action processing
+                continue
 
-            # Check if agent wants to do nothing
-            if action == len(self.clickable_indices):  # Last action index = do nothing
-                self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING] = self.total_action_types[agent_id].get(ACTION_TYPE_DO_NOTHING, 0) + 1
-                agent_penalties[agent_id] += DO_NOTHING_PENALTY  
-                continue  # skip issuing an intent
+            # Convert RL action to tile index
+            tile_index = convert_action_to_tile(agent_obj, self.game, action_name, distance_map=self.distance_map)
 
-            # Skip if the agent's current action is not complete
-            if not getattr(agent_obj, "action_complete", True):
-                continue  # Skip this agent's action processing
-                
-            # Skip if the agent is moving or has unfinished intents
-            if getattr(agent_obj, "is_moving", False) or getattr(agent_obj, "intents", []):
-                continue  # Skip this agent's action processing
-
-            # Map action to actual clickable tile index
-            tile_index = self.clickable_indices[action]
-            grid_w = self.game.grid.width
-            x = tile_index % grid_w
-            y = tile_index // grid_w
-            tile = self.game.grid.tiles[x][y]
-
-            # Track action type
-            action_type = get_action_type(tile, agent_obj, x, y, accessibility_map=self.accessibility_map)
+            if tile_index is None:
+                self.total_actions_not_performed[agent_id] += 1
+                continue
             
-            # Check if the tile is inaccessible
-            if action_type == ACTION_TYPE_INACCESSIBLE:
-                self.total_actions_inaccessible[agent_id] += 1
-                agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
-                continue  # Skip this agent's action
-            
-            self.total_action_types[agent_id][action_type] += 1
-
-            # Penalty for useless action
-            if action_type.startswith("useless"):
-                agent_penalties[agent_id] += USELESS_ACTION_PENALTY
-
-            # Set the action as not complete before executing it
-            agent_obj.action_complete = False
-            
-            # Execute the action
-            tile.click(agent_id)
-
-        def decode_action(action_int):
-            if action_int == len(self.clickable_indices):
-                # do nothing action
-                return None
             else:
-                return {"type": "click", "target": int(self.clickable_indices[action_int])}
-
-        actions_dict = {agent_id: decode_action(action) for agent_id, action in actions.items()} # Some entries might now be None (when agent chose to do nothing)
-        # Validate and prepare actions before sending to game
-        validated_actions = {}
-        for agent_id, action in actions_dict.items():
-            agent = self.game.gameObjects[agent_id]
-            
-            # Skip agents that are busy (e.g., cutting)
-            if getattr(agent, 'is_busy', False):
-                continue
+                grid_w = self.game.grid.width
+                x = tile_index % grid_w
+                y = tile_index // grid_w
+                tile = self.game.grid.tiles[x][y]
+                action_type = get_action_type(tile, agent_obj, x=x, y=y, accessibility_map=self.accessibility_map)
+    
+                # Penalty for inaccessible action
+                if action_type == self.ACTION_TYPE_INACCESSIBLE:
+                    self.total_actions_inaccessible[agent_id] += 1
+                    agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
+                    continue
                 
-            # Skip agents that are still completing their previous action
-            if not getattr(agent, 'action_complete', True):
-                continue
-                
-            # Skip agents that are moving or currently interacting
-            if getattr(agent, 'is_moving', False):
-                continue
-                
-            # Only include valid actions (not None and properly structured)
-            if action is not None and isinstance(action, dict) and 'type' in action:
-                validated_actions[agent_id] = action
-                # Mark action as not complete when starting a new one
-                agent.action_complete = False
+                # Count action type
+                self.total_action_types[agent_id][action_type] += 1
+    
+                # Penalty for useless action
+                if action_type.startswith("useless"):
+                    agent_penalties[agent_id] += USELESS_ACTION_PENALTY
+                agent_obj.action_complete = False
+    
+                # Store the validated action
+                validated_actions[agent_id] = {"type": "click", "target": tile_index}
 
         # Advance the game state by one step with validated actions
         self.game.step(validated_actions, delta_time=1 / cf_AI_TICK_RATE)
-        
-        # Each agent can immediately proceed with their next action
-        # as long as their own previous action is complete
-        # We don't need to wait for other agents to complete
-        
-        # Initialize tracking for rewards
+
+        # Tracking for rewards and events
         agent_events = {agent_id: {"delivered": 0, "cut": 0, "salad": 0} for agent_id in self.agents}
-        step_action_types = {agent_id: {ACTION_TYPE_USEFUL_FOOD_DISPENSER: 0,
-                                        ACTION_TYPE_USEFUL_PLATE_DISPENSER: 0,
-                                        ACTION_TYPE_USEFUL_CUTTING_BOARD: 0
-                                        } for agent_id in self.agents }
 
-        for thing in self.game.gameObjects.values():
-            if hasattr(thing, 'tiles'):
-                for row in thing.tiles:
-                    for tile in row:
-                        if hasattr(tile, "cut_by") and tile.cut_by:
-                            if tile.cut_by in agent_events:
-                                agent_events[tile.cut_by]["cut"] += 1
-                                self.total_agent_events[tile.cut_by]["cut"] += 1
-                            tile.cut_by = None
-
-                        if hasattr(tile, "salad_by") and tile.salad_by:
-                            if tile.salad_by in agent_events:
-                                agent_events[tile.salad_by]["salad"] += 1
-                                self.total_agent_events[tile.salad_by]["salad"] += 1
-                            tile.salad_by = None
-
-        # Delivery
-        new_score = self.game.gameObjects["score"].score
-        if (new_score - self._last_score) > 0:
-            # Only reward the delivering agent(s)
-            for thing in self.game.gameObjects.values():
-                if hasattr(thing, 'tiles'):
-                    for row in thing.tiles:
-                        for tile in row:
-                            if hasattr(tile, "delivered_by") and tile.delivered_by:
-                                if tile.delivered_by in agent_events:
-                                    agent_events[tile.delivered_by]["delivered"] += 1
-                                    self.total_agent_events[tile.delivered_by]["delivered"] += 1
-                                tile.delivered_by = None
-        self._last_score = new_score
-
-        # Get reward from delivering items
-        rewards_cfg = self.get_rewards_for_version()
-        event_rewards = {agent_id: 0.0 for agent_id in self.agents}
-        deliver_rewards = {agent_id: 0.0 for agent_id in self.agents}
-        action_rewards = {agent_id: 0.0 for agent_id in self.agents}
-        for agent_id in self.agents:
-            # Event rewards: only positive events
-            event_rewards[agent_id] = (
-                agent_events[agent_id]["cut"] * rewards_cfg["item_cut"]
-                + agent_events[agent_id]["salad"] * rewards_cfg["salad_created"]
-            )
-            deliver_rewards[agent_id] = agent_events[agent_id]["delivered"] * rewards_cfg["delivered"]
-            # Action rewards: only individual actions
-            action_rewards[agent_id] = (
-                step_action_types[agent_id][ACTION_TYPE_USEFUL_FOOD_DISPENSER] * rewards_cfg["useful_food_dispenser"]
-                + step_action_types[agent_id][ACTION_TYPE_USEFUL_PLATE_DISPENSER] * rewards_cfg["useful_plate_dispenser"]
-                + step_action_types[agent_id][ACTION_TYPE_USEFUL_CUTTING_BOARD] * rewards_cfg["useful_cutting_board"]
-            )
-
-        if self.cooperative == 1:
-            shared_deliver_reward = sum(deliver_rewards.values())
-
-        for agent_id in self.agents:
-            if self.cooperative == 1:
-                reward = shared_deliver_reward + event_rewards[agent_id] + action_rewards[agent_id]
-            else:
-                reward = deliver_rewards[agent_id] + event_rewards[agent_id] + action_rewards[agent_id]
-            self.cumulated_pure_rewards[agent_id] += reward
-
-            alpha, beta = self.reward_weights.get(agent_id, (1.0, 0.0))
-            other_agents = [a for a in self.agents if a != agent_id]
-            avg_other_reward = (
-                sum(deliver_rewards[a] + event_rewards[a] + action_rewards[a] for a in other_agents) / len(other_agents)
-                if other_agents else 0.0
-            )  # in case there is only one agent
-
-            # Modified rewards: include penalties
-            self.rewards[agent_id] = alpha * (reward - agent_penalties[agent_id]) + beta * avg_other_reward
-            self.cumulated_modified_rewards[agent_id] += self.rewards[agent_id]
+        self.total_agent_events, agent_events, self._last_score = get_agent_events(self, agent_events)
+        self.cumulated_pure_rewards, self.cumulated_modified_rewards = get_rewards(self, agent_events, agent_penalties, REWARDS) 
 
         # Check if episode should end due to step limit
         should_truncate = self._step_counter >= self._max_steps_per_episode
@@ -528,7 +315,7 @@ class GameEnv(ParallelEnv):
             self.dones = {agent: True for agent in self.agents}
             self._step_counter = 0
             self.write_csv = True
-        
+
         self.infos = {
             agent: {
                 "agent_events": agent_events[agent],  # Add agent events to info
@@ -548,35 +335,22 @@ class GameEnv(ParallelEnv):
 
         # If episode is done, aggregate and log
         if self.write_csv:
-            row = {
-                    "epoch": self.episode_count
-                }
-            
+            row = {"epoch": self.episode_count}
             for agent_id in self.agents:
                 row[f"pure_reward_{agent_id}"] = float(self.cumulated_pure_rewards[agent_id])
                 row[f"modified_reward_{agent_id}"] = float(self.cumulated_modified_rewards[agent_id])
-                row[f"delivered_{agent_id}"] = self.total_agent_events[agent_id]["delivered"]
-                row[f"cut_{agent_id}"] = self.total_agent_events[agent_id]["cut"]
-                row[f"salad_{agent_id}"] = self.total_agent_events[agent_id]["salad"]
+
+                # Add result events
+                for result_event in self.total_agent_events[agent_id]:
+                    row[f"{result_event}_{agent_id}"] = self.total_agent_events[agent_id][result_event]
 
                 row[f"actions_asked_{agent_id}"] = self.total_actions_asked[agent_id]
                 row[f"actions_not_performed_{agent_id}"] = self.total_actions_not_performed[agent_id]
                 row[f"inaccessible_actions_{agent_id}"] = self.total_actions_inaccessible[agent_id]
 
-                # Add action type columns
-                row[f"do_nothing_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_DO_NOTHING]
-                row[f"floor_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_FLOOR]
-                row[f"wall_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_WALL]
-                row[f"useless_counter_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_COUNTER]
-                row[f"useful_counter_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_COUNTER]
-                row[f"useless_food_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_FOOD_DISPENSER]
-                row[f"useful_food_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_FOOD_DISPENSER]
-                row[f"useless_cutting_board_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_CUTTING_BOARD]
-                row[f"useful_cutting_board_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_CUTTING_BOARD]
-                row[f"useless_plate_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_PLATE_DISPENSER]
-                row[f"useful_plate_dispenser_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_PLATE_DISPENSER]
-                row[f"useless_delivery_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USELESS_DELIVERY]
-                row[f"useful_delivery_actions_{agent_id}"] = self.total_action_types[agent_id][ACTION_TYPE_USEFUL_DELIVERY]
+                # Add action type columns dynamically
+                for action_type in get_action_type_list(self.game_mode):
+                    row[f"{action_type}_{agent_id}"] = self.total_action_types[agent_id][action_type]
 
             with open(self.csv_path, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=row.keys())
