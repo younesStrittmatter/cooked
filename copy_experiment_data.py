@@ -5,12 +5,12 @@ Copies CSV files from /data/samuel_lozano/cooked/classic/v3.1/map_{map_identifie
 while maintaining the folder structure.
 
 Usage:
-    python3 copy_experiment_data.py <map_identifier> [--source-path /path/to/data] [--dry-run]
+    python3 copy_experiment_data.py <map_identifier> <experiment_name> [--source-path /path/to/data] [--dry-run]
     
 Examples:
-    python3 copy_experiment_data.py baseline_division_of_labor
-    python3 copy_experiment_data.py baseline_division_of_labor --dry-run
-    python3 copy_experiment_data.py 1 --source-path /custom/path/to/data
+    python3 copy_experiment_data.py baseline_division_of_labor experiment_1
+
+    python3 copy_experiment_data.py map experiment_2 --source-path /custom/path/to/data
 """
 
 import os
@@ -24,9 +24,9 @@ import glob
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def setup_experiment_folder(base_path="/data/samuel_lozano/cooked/classic/v3.1"):
+def setup_experiment_folder(base_path="/data/samuel_lozano/cooked/classic/v3.1", experiment_name="experiment"):
     """Create the experiment folder if it doesn't exist."""
-    experiment_path = Path(base_path) / "experiment"
+    experiment_path = Path(base_path) / experiment_name
     experiment_path.mkdir(exist_ok=True)
     return experiment_path
 
@@ -88,10 +88,10 @@ def copy_files(source_path, target_path, csv_files):
     
     return copied_files
 
-def scan_and_copy_data(map_nr, source_base="/data/samuel_lozano/cooked/classic/v3.1", dry_run=False):
+def scan_and_copy_data(map_nr, source_base="/data/samuel_lozano/cooked/classic/v3.1", experiment_name="experiment", dry_run=False):
     """Main function to scan local directories and copy data."""
     # Setup local experiment folder
-    experiment_path = setup_experiment_folder(source_base)
+    experiment_path = setup_experiment_folder(source_base, experiment_name=experiment_name)
     
     # Source base path
     source_base_path = Path(source_base) / f"map_{map_nr}" / "simulations"
@@ -158,6 +158,7 @@ def scan_and_copy_data(map_nr, source_base="/data/samuel_lozano/cooked/classic/v
 def main():
     parser = argparse.ArgumentParser(description='Copy experiment data from local directories')
     parser.add_argument('map_nr', type=str, help='Map identifier (can be number like "1" or string like "baseline_division_of_labor")')
+    parser.add_argument('experiment_name', type=str, help='Experiment name (e.g., "experiment_1")')
     parser.add_argument('--source-path', default='/data/samuel_lozano/cooked/classic/v3.1', 
                         help='Source base path (default: /data/samuel_lozano/cooked/classic/v3.1)')
     parser.add_argument('--dry-run', action='store_true', 
@@ -169,9 +170,9 @@ def main():
     
     if args.dry_run:
         logger.info("Running in DRY RUN mode - no files will be copied")
-    
-    success = scan_and_copy_data(args.map_nr, args.source_path, args.dry_run)
-    
+
+    success = scan_and_copy_data(args.map_nr, args.source_path, args.experiment_name, args.dry_run)
+
     if success:
         logger.info("Script completed successfully")
     else:

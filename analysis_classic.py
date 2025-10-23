@@ -90,19 +90,20 @@ def generate_classic_plots(analysis_results):
     plotter.plot_agent_metrics(df, paths['smoothed_figures_dir'], metrics['movement_metrics_1'], 1, smoothed=True)
     plotter.plot_agent_metrics(df, paths['smoothed_figures_dir'], movement_metrics_2, 2, smoothed=True)
     
-    # Generate combined plots
+    # Generate combined plots (use smoothing factor from config)
+    smoothing_factor = analysis_results.get('config').smoothing_factor if analysis_results.get('config') else 15
     generate_combined_plots(df, paths, metrics['rewarded_metrics_1'], rewarded_metrics_2, 
-                           metrics['movement_metrics_1'], movement_metrics_2)
+                           metrics['movement_metrics_1'], movement_metrics_2, smoothing_factor)
     
     print(f"Classic analysis completed. Figures saved to {paths['figures_dir']}")
 
 
 def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2, 
-                          movement_metrics_1, movement_metrics_2):
+                          movement_metrics_1, movement_metrics_2, smoothing_factor=15):
     """Generate combined plots showing both agents together."""
 
     
-    N = 15  # smoothing factor
+    N = smoothing_factor  # smoothing factor
     unique_attitudes = df["attitude_key"].unique()
     unique_game_type = df["game_type"].unique()
     unique_lr = df["lr"].unique()
@@ -222,13 +223,13 @@ def main():
     """Main execution function."""
     parser = setup_argument_parser('classic')
     args = parser.parse_args()
-    
+
     print(f"Starting classic experiment analysis...")
     print(f"Intent version: {args.intent_version}")
     print(f"Map: {args.map_name}")
     print(f"Cluster: {args.cluster}")
     print(f"Smoothing factor: {args.smoothing_factor}")
-    
+
     try:
         # Run main analysis pipeline
         analysis_results = main_analysis_pipeline(
@@ -238,12 +239,12 @@ def main():
             cluster=args.cluster,
             smoothing_factor=args.smoothing_factor
         )
-        
+
         # Generate classic-specific plots
         generate_classic_plots(analysis_results)
-        
+
         print("Analysis completed successfully!")
-        
+
     except Exception as e:
         print(f"Error during analysis: {e}")
         sys.exit(1)

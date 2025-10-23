@@ -12,7 +12,7 @@ Folder structure:
 /data/samuel_lozano/cooked/classic/v3.1/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/simulation_{simulation_id}/
 
 Usage:
-nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor [--dry_run] [--cluster cuenca] > check_corrupted_simulations.log 2>&1 &
+nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor --max-num-simulations 100 > check_corrupted_simulations.log 2>&1 &
 
 nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor > check_corrupted_simulations.log 2>&1 &
 
@@ -25,12 +25,13 @@ import sys
 from pathlib import Path
 import re
 from collections import defaultdict
+import random
 
 
 class CorruptedSimulationCleaner:
     """Main class that handles corrupted simulation detection and cleanup."""
     
-    def __init__(self, base_cluster_dir="", map_nr=None, dry_run=False):
+    def __init__(self, base_cluster_dir="", map_nr=None, dry_run=False, max_num_simulations: int = None):
         """
         Initialize the corrupted simulation cleaner.
         
@@ -42,15 +43,19 @@ class CorruptedSimulationCleaner:
         self.base_cluster_dir = base_cluster_dir
         self.map_nr = map_nr
         self.dry_run = dry_run
-        
+        # Maximum number of simulations to keep per checkpoint. If None, keep all.
+        self.max_num_simulations = max_num_simulations
+
         # Base simulation directory
         self.simulations_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/classic/v3.1/map_{map_nr}/simulations")
-        
+
         # Statistics tracking
         self.total_simulations_found = 0
         self.corrupted_simulations_found = 0
         self.corrupted_simulations_deleted = 0
         self.simulation_counts = defaultdict(lambda: defaultdict(int))  # training_id -> checkpoint -> count
+        # Track pruned deletions (deletions due to exceeding max_num_simulations)
+        self.pruned_simulations_deleted = 0
     
     def find_all_simulations(self):
         """Find all simulation directories and return them organized by training and checkpoint."""
@@ -186,6 +191,33 @@ class CorruptedSimulationCleaner:
                 
                 final_counts[training_id][checkpoint_number] = remaining_in_checkpoint
                 
+                # If a max_num_simulations cap is provided, prune randomly to meet it
+                if self.max_num_simulations is not None and remaining_in_checkpoint > self.max_num_simulations:
+                    # Find the remaining (clean) simulation ids in the checkpoint by re-listing dir
+                    checkpoint_path = self.simulations_dir / f"Training_{training_id}" / f"checkpoint_{checkpoint_number}"
+                    clean_sims = [d.name.replace('simulation_', '') for d in checkpoint_path.glob('simulation_*') if d.is_dir()]
+                    # Filter out any that may have been marked corrupted earlier (we only want the ones still present)
+                    clean_sims = [s for s in clean_sims if s in simulation_ids]
+
+                    # Number to remove
+                    num_to_remove = len(clean_sims) - self.max_num_simulations
+                    if num_to_remove > 0:
+                        print(f"    🧾 Pruning {num_to_remove} random simulations to meet cap of {self.max_num_simulations} for checkpoint {checkpoint_number}")
+                        sims_to_remove = random.sample(clean_sims, num_to_remove)
+
+                        for sim_id in sims_to_remove:
+                            if self.dry_run:
+                                print(f"    🧪 [DRY RUN] Would prune simulation: {sim_id}")
+                                self.pruned_simulations_deleted += 1
+                            else:
+                                if self.delete_simulation_directory(training_id, checkpoint_number, sim_id):
+                                    self.pruned_simulations_deleted += 1
+
+                        # Update remaining count after pruning
+                        remaining_in_checkpoint = len(clean_sims) - num_to_remove
+
+                final_counts[training_id][checkpoint_number] = remaining_in_checkpoint
+
                 print(f"    📊 Checkpoint {checkpoint_number} summary: {corrupted_in_checkpoint} corrupted, {remaining_in_checkpoint} remaining")
         
         # Update final simulation counts
@@ -206,6 +238,9 @@ class CorruptedSimulationCleaner:
             print(f"🗑️  Corrupted simulations deleted: {self.corrupted_simulations_deleted}")
             if self.corrupted_simulations_deleted != self.corrupted_simulations_found:
                 print(f"⚠️  Warning: {self.corrupted_simulations_found - self.corrupted_simulations_deleted} simulations could not be deleted")
+        
+        if self.max_num_simulations is not None:
+            print(f"🗑️  Pruned simulations deleted to meet cap: {self.pruned_simulations_deleted}")
         
         remaining_total = sum(
             sum(checkpoints.values()) 
@@ -257,6 +292,8 @@ class CorruptedSimulationCleaner:
                 f.write(f"[DRY RUN] Simulations that would be deleted: {self.corrupted_simulations_found}\n")
             else:
                 f.write(f"Corrupted simulations deleted: {self.corrupted_simulations_deleted}\n")
+            if self.max_num_simulations is not None:
+                f.write(f"Pruned simulations deleted to meet cap ({self.max_num_simulations}): {self.pruned_simulations_deleted}\n")
             
             f.write(f"Remaining clean simulations: {remaining_total}\n\n")
             
@@ -313,6 +350,8 @@ def main():
                        help='Base cluster (default: cuenca)')
     parser.add_argument('--dry_run', action='store_true',
                        help='Dry run mode: show what would be deleted without actually deleting')
+    parser.add_argument('--max-num-simulations', type=int, default=None,
+                       help='Maximum number of simulations to keep per checkpoint (randomly prune extras)')
 
     args = parser.parse_args()
 
@@ -332,6 +371,8 @@ def main():
         base_cluster_dir=base_cluster_dir,
         map_nr=args.map_nr,
         dry_run=args.dry_run
+        ,
+        max_num_simulations=args.max_num_simulations
     )
 
     final_counts = cleaner.run_cleanup()
