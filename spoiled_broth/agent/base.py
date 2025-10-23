@@ -8,21 +8,21 @@ from spoiled_broth.world.tiles import ITEM_LIST
 
 
 class Agent(agent.Agent):
-    def __init__(self, agent_id, grid, game, intent_version="v1"):
+    def __init__(self, agent_id, grid, game, walk_speed=1, cut_speed=1):
         super().__init__(agent_id, grid)
         self.game = game
-        self.intent_version = intent_version
         self.path = []
         self.path_index = 0
         self.move_target = None
 
         self.item = None
         self.provisional_item = None  # Item that is being processed (e.g., being cut)
-        self.cut_speed = 1
+        self.walk_speed = walk_speed
+        self.cut_speed = cut_speed
         self.action = None
         self.score = 0
         self.current_action = None
-        self.action_complete = True  # Initially no action is in progress
+        self.is_busy = False  # Initially no action is in progress
         self.is_simulation = False  # Flag to indicate if this agent is in a simulation environment
         # Maximum time (seconds) to consider an action valid before forcing completion
         self.ACTION_TIMEOUT = 5.0
@@ -66,70 +66,14 @@ class Agent(agent.Agent):
 
         # Check if there are actions for this agent
         if self.id in actions:
-            # If we're getting a new action but the current one isn't complete or agent is cutting, ignore it
-            if not self.action_complete or getattr(self, 'is_cutting', False):
+            # If we're getting a new action but the agent is busy, ignore it
+            if getattr(self, 'is_busy', False):
                 # Remove the new action from the actions dict to prevent it from being processed
                 actions.pop(self.id)
             else:
                 # New action is starting
                 if actions[self.id] is not None:
-                    self.action_complete = False
-                    self.current_action = actions[self.id]
-        
-        # Check if current action has completed or timed out
-        if not self.action_complete:
-            try:
-                start_ts = None
-                if isinstance(self.current_action, dict):
-                    start_ts = self.current_action.get('start_time')
-
-                # If action has exceeded timeout, force-end it
-                if start_ts is not None and (time.time() - start_ts) > self.ACTION_TIMEOUT:
-                    # Use the tracker's forced end helper when available
-                    if hasattr(self.game, 'action_tracker'):
-                        try:
-                            self.game.action_tracker._force_complete_action(self.id, self.game, getattr(self.game, 'engine', None))
-                        except Exception:
-                            # Fallback to normal end_action
-                            try:
-                                self.game.action_tracker.end_action(self.id, time.time())
-                            except Exception:
-                                pass
-                    self.action_complete = True
-                    self.current_action = None
-                # For normal completion, check if agent finished moving AND minimum duration has passed
-                elif not self.is_moving:
-                    # Check if the action tracker allows completion
-                    can_complete = True
-                    if hasattr(self.game, 'action_tracker') and hasattr(self.game, 'engine'):
-                        current_frame = getattr(self.game.engine, 'tick_count', 0)
-                        can_complete = self.game.action_tracker.can_complete_action(self.id, current_frame)
-                    
-                    if can_complete:
-                        # Try to end the action through the tracker
-                        action_ended = False
-                        if hasattr(self.game, 'action_tracker'):
-                            try:
-                                self.game.action_tracker.end_action(self.id, time.time())
-                                action_ended = True
-                            except Exception:
-                                # If tracker end fails, don't mark as complete yet
-                                pass
-                        
-                        # Only mark as complete if tracker successfully ended it, or if no tracker
-                        if action_ended or not hasattr(self.game, 'action_tracker'):
-                            self.action_complete = True
-                            self.current_action = None
-                    # else: action is not ready to complete yet, keep it active
-            except Exception:
-                # If something goes wrong reading start_time, clear the action to avoid permanent stuck state
-                self.action_complete = True
-                self.current_action = None
-                if hasattr(self.game, 'action_tracker'):
-                    try:
-                        self.game.action_tracker.end_action(self.id, time.time())
-                    except Exception:
-                        pass
+                    self.is_busy = True            
 
         # Handle animation updates
         if not self.is_moving:

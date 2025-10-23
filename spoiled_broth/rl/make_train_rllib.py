@@ -53,7 +53,9 @@ def make_train_rllib(config):
             "map_nr": config["MAP_NR"],
             "grid_size": config.get("GRID_SIZE", (8, 8)),
             # pass path (prefer .npz) to distance map; can be None
-            "distance_map": distance_map_path
+            "distance_map": distance_map_path,
+            "walking_speeds": config.get("WALKING_SPEEDS", None),
+            "cutting_speeds": config.get("CUTTING_SPEEDS", None),
         }
         policies[f"policy_{agent_id}"] = (
             None,  # Use default PPO policy
@@ -102,7 +104,8 @@ def make_train_rllib(config):
         "fcnet_activation": config.get("FCNET_ACTIVATION", "tanh"),
     }
     
-    # Configuration for multi-agent training
+    # Configuration for multi-agent training (time-based episodes)
+    # Ensure train_batch_size is a fixed number of transitions, not tied to episode/step count
     ppo_config = (
         PPOConfig()
         .api_stack(
@@ -118,15 +121,16 @@ def make_train_rllib(config):
                 "reward_weights": config["REWARD_WEIGHTS"],
                 "map_nr": config["MAP_NR"],
                 "game_mode": config["GAME_VERSION"],
-                "step_per_episode": config["NUM_INNER_STEPS"],
+                "inner_seconds": config["INNER_SECONDS"],
                 "path": config["PATH"],
                 "grid_size": config.get("GRID_SIZE", (8, 8)),
                 "payoff_matrix": config.get("PAYOFF_MATRIX", [1,1,-2]),
                 "initial_seed": config.get("INITIAL_SEED", 0),
                 "wait_for_completion": config.get("WAIT_FOR_COMPLETION", True),
                 "start_epoch": start_epoch,
-                # pass the path to the distance_map pickle (or None)
-                "distance_map": distance_map_path
+                "distance_map": distance_map_path,
+                "walking_speeds": config.get("WALKING_SPEEDS", None),
+                "cutting_speeds": config.get("CUTTING_SPEEDS", None),
             },
             clip_actions=True,
         )
@@ -135,19 +139,19 @@ def make_train_rllib(config):
             policy_mapping_fn=dynamic_policy_mapping_fn,
             policies_to_train=policies_to_train
         )
-        .resources(num_gpus=config["NUM_GPUS"]/2)  # Set to 1 if you have a GPU
+        .resources(num_gpus=config["NUM_GPUS"]/2)
         .env_runners(num_env_runners=1, 
                     num_gpus_per_env_runner=config["NUM_GPUS"]/2,
                     num_cpus_per_env_runner=int(config["NUM_CPUS"] / 2))
         .training(
-                train_batch_size=config["NUM_ENVS"] * config["NUM_INNER_STEPS"],
+                train_batch_size=config.get("TRAIN_BATCH_SIZE", 32),  # Fixed number of transitions
                 lr=config["LR"],
                 gamma=config["GAMMA"],
                 lambda_=config["GAE_LAMBDA"],
                 entropy_coeff=config["ENT_COEF"],
                 clip_param=config["CLIP_EPS"],
                 vf_loss_coeff=config["VF_COEF"],
-                minibatch_size=config["NUM_INNER_STEPS"] // config["NUM_MINIBATCHES"],
+                minibatch_size=max(1, config.get("TRAIN_BATCH_SIZE", 32) // config["NUM_MINIBATCHES"]),
                 num_epochs=config["NUM_UPDATES"]
             )
     )

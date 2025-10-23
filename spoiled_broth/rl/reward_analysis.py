@@ -23,10 +23,13 @@ def get_rewards_classic(self, agent_events, agent_penalties, REWARDS):
     for agent_id in self.agents:
         # Event rewards: only positive events
         event_rewards[agent_id] = (
-            agent_events[agent_id]["cut"] * rewards_cfg["item_cut"]
-            + agent_events[agent_id]["salad"] * rewards_cfg["salad_created"]
+            agent_events[agent_id]["raw_food"] * rewards_cfg["raw_food"]
+            + agent_events[agent_id]["plate"] * rewards_cfg["plate"]
+            + agent_events[agent_id]["counter"] * rewards_cfg["counter"]
+            + agent_events[agent_id]["cut"] * rewards_cfg["cut"]
+            + agent_events[agent_id]["salad"] * rewards_cfg["salad"]
         )
-        deliver_rewards[agent_id] = agent_events[agent_id]["delivered"] * rewards_cfg["delivered"]
+        deliver_rewards[agent_id] = agent_events[agent_id]["deliver"] * rewards_cfg["deliver"]
 
     shared_deliver_reward = sum(deliver_rewards.values())
 
@@ -54,29 +57,35 @@ def get_rewards_competition(self, agent_events, agent_penalties, REWARDS):
     pure_rewards = {agent_id: 0.0 for agent_id in self.agents}
     for agent_id in self.agents:
         # Pure rewards: only positive events, no IDLE or useless penalties
-        own_reward = (
-            agent_events[agent_id]["delivered_own"] * rewards_cfg["delivered"]
-            + agent_events[agent_id]["salad_own"] * rewards_cfg["salad_created"]
-            + agent_events[agent_id]["cut_own"] * rewards_cfg["item_cut"]
+        reward_from_own = (
+            agent_events[agent_id]["deliver_own"] * rewards_cfg["deliver"]
+            + agent_events[agent_id]["salad_own"] * rewards_cfg["salad"]
+            + agent_events[agent_id]["cut_own"] * rewards_cfg["cut"]
+            + agent_events[agent_id]["counter"] * rewards_cfg["counter"]
+            + agent_events[agent_id]["raw_food_own"] * rewards_cfg["raw_food"]
+            + agent_events[agent_id]["plate"] * rewards_cfg["plate"]
         )
 
-        other_reward = (
-            agent_events[agent_id]["delivered_other"] * rewards_cfg["delivered"]
-            + agent_events[agent_id]["salad_other"] * rewards_cfg["salad_created"]
-            + agent_events[agent_id]["cut_other"] * rewards_cfg["item_cut"]
+        reward_from_other = (
+            agent_events[agent_id]["deliver_other"] * rewards_cfg["deliver"]
+            + agent_events[agent_id]["salad_other"] * rewards_cfg["salad"]
+            + agent_events[agent_id]["cut_other"] * rewards_cfg["cut"]
+            + agent_events[agent_id]["raw_food_other"] * rewards_cfg["raw_food"]
         )
 
-        other_penalty = 0
+        penalty_from_other = 0
         for other_agent_id in self.agents:
             if other_agent_id == agent_id:
                 continue
-            other_penalty += (
-                agent_events[other_agent_id]["delivered_other"] * rewards_cfg["delivered"]
-                + agent_events[other_agent_id]["salad_other"] * rewards_cfg["salad_created"]
-                + agent_events[other_agent_id]["cut_other"] * rewards_cfg["item_cut"]
+            penalty_from_other += (
+                agent_events[other_agent_id]["deliver_other"] * rewards_cfg["deliver"]
             )
 
-        pure_rewards[agent_id] = (self.payoff_matrix[0] * own_reward + self.payoff_matrix[1] * other_reward + self.payoff_matrix[2] * other_penalty)
+        pure_rewards[agent_id] = (
+            self.payoff_matrix[0] * reward_from_own +
+            self.payoff_matrix[1] * reward_from_other +
+            self.payoff_matrix[2] * penalty_from_other
+        )
         self.cumulated_pure_rewards[agent_id] += pure_rewards[agent_id]
 
     for agent_id in self.agents:

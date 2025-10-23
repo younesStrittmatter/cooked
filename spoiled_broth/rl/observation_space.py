@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import os
 import pickle
 
@@ -59,7 +60,7 @@ def get_distance(distance_map, from_xy, to_xy):
         return None
 
 # ---- Classic mode without ownership awareness ---- #
-def game_to_obs_vector_classic(game, agent_id, distance_map, max_distance):
+def game_to_obs_vector_classic(game, agent_id, distance_map):
     """
     Returns a vector observation for agent_id:
     For each tile type, includes:
@@ -67,8 +68,14 @@ def game_to_obs_vector_classic(game, agent_id, distance_map, max_distance):
       - distance to midpoint (between agents)
     Also includes one-hot agent inventory and other agent inventory.
     """
-    tile_types = ['tomato_dispenser', 'plate_dispenser', 'cutting_board', 'delivery', 'counter']
-    item_names = ['tomato', 'plate', 'tomato_cut', 'tomato_salad']
+    normalization_factor = game.normalization_factor
+
+    tile_types = ['tomato_dispenser', 'plate_dispenser', 'cutting_board', 'delivery']
+    item_names = [None, 'tomato', 'plate', 'tomato_cut', 'tomato_salad']
+
+    # Get agent walking and cutting speeds
+    agent_walking_speed = game.walking_speeds.get(agent_id, 1) * game.walking_time
+    agent_cutting_speed = game.cutting_speeds.get(agent_id, 1) * game.cutting_time 
 
     # Get agent positions
     all_agent_ids = [aid for aid in game.gameObjects if aid.startswith('ai_rl_')]
@@ -84,8 +91,15 @@ def game_to_obs_vector_classic(game, agent_id, distance_map, max_distance):
     midpoint = (int(round((agent.slot_x + other_agent.slot_x) / 2)), int(round((agent.slot_y + other_agent.slot_y) / 2)))
     obs_vector = []
 
+    # --- Add times to tile types ---
     for tile_type in tile_types:
+        if tile_type == 'cutting_board':
+            action_time = agent_cutting_speed 
+        else:
+            action_time = 0
+
         indices = get_tile_indices_by_type(game, tile_type)
+
         # Only consider accessible tiles for agent
         accessible_agent = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
         min_dist = None
@@ -94,50 +108,56 @@ def game_to_obs_vector_classic(game, agent_id, distance_map, max_distance):
             if min_dist is None or d < min_dist:
                 min_dist = d
         if min_dist is not None:
-            obs_vector.append(min_dist)
+            time_to_tile = (min_dist / agent_walking_speed + action_time) / normalization_factor
+            obs_vector.append(time_to_tile)
         else:
-            obs_vector.append(max_distance)
-        # Only consider accessible tiles for midpoint
-        accessible_mid = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, midpoint, (x, y)) is not None]
-        min_dist_mid = None
-        for _, x, y in accessible_mid:
-            d = get_distance(distance_map, midpoint, (x, y))
-            if min_dist_mid is None or d < min_dist_mid:
-                min_dist_mid = d
-        if min_dist_mid is not None:
-            obs_vector.append(min_dist_mid)
-        else:
-            obs_vector.append(max_distance)
+            obs_vector.append(1)
 
-    # --- Add distances to items on counters ---
+
+    # --- Add times to items on counters ---
     for item_name in item_names:
+        action_time = 0
         indices = get_item_indices_on_counters(game, item_name)
-        # Only consider accessible counters for agent
-        accessible_agent = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
-        min_dist = None
-        for _, x, y in accessible_agent:
-            d = get_distance(distance_map, agent_pos, (x, y))
-            if min_dist is None or d < min_dist:
-                min_dist = d
-        if min_dist is not None:
-            obs_vector.append(min_dist)
+
+        if len(indices) > 0:
+            obs_vector.append(1) # There is a tile with that item
+            # Only consider accessible counters for agent
+            accessible_agent = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
+            min_dist = None
+            for _, x, y in accessible_agent:
+                d = get_distance(distance_map, agent_pos, (x, y))
+                if min_dist is None or d < min_dist:
+                    min_dist = d
+            if min_dist is not None:
+                time_to_tile = (min_dist / agent_walking_speed + action_time) / normalization_factor
+                obs_vector.append(time_to_tile)
+            else:
+                obs_vector.append(1)
+
+            # Choose the counter tile that is closest to the midpoint using
+            # Euclidean distance (this ignores path accessibility from the midpoint).
+            # Then compute the agent->tile path distance using get_distance so
+            # the agent time accounts for obstacles; if agent cannot reach the
+            # chosen tile, fall back to max_distance.
+            # pick tile index with minimum Euclidean distance to midpoint
+            best = min(indices, key=lambda it: math.hypot(it[1] - midpoint[0], it[2] - midpoint[1]))
+            _, bx, by = best
+            path_dist = get_distance(distance_map, agent_pos, (bx, by))
+            if path_dist is not None:
+                time_to_midtile = (path_dist / agent_walking_speed + action_time) / normalization_factor
+            else:
+                time_to_midtile = 1
+            obs_vector.append(time_to_midtile)
         else:
-            obs_vector.append(max_distance)
-        # Only consider accessible counters for midpoint
-        accessible_mid = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, midpoint, (x, y)) is not None]
-        min_dist_mid = None
-        for _, x, y in accessible_mid:
-            d = get_distance(distance_map, midpoint, (x, y))
-            if min_dist_mid is None or d < min_dist_mid:
-                min_dist_mid = d
-        if min_dist_mid is not None:
-            obs_vector.append(min_dist_mid)
-        else:
-            obs_vector.append(max_distance)
+            # no counters with that item: append fallbacks for agent time and midpoint time
+            obs_vector.append(0) # There are no tiles with that item
+            obs_vector.append(1) # Fallback for agent time
+            obs_vector.append(1) # Fallback for midpoint time
 
     # Distance to other agent
     dist_to_other = get_distance(distance_map, agent_pos, other_pos)
-    obs_vector.append(dist_to_other if dist_to_other is not None else max_distance)
+    time_to_other = (dist_to_other / agent_walking_speed) / normalization_factor if dist_to_other is not None else 1
+    obs_vector.append(time_to_other)
 
     # One-hot agent inventory
     agent_inventory = np.zeros(len(item_names), dtype=np.float32)
@@ -155,7 +175,7 @@ def game_to_obs_vector_classic(game, agent_id, distance_map, max_distance):
     return np.array(obs_vector, dtype=np.float32)
 
 # ---- Competition mode with ownership awareness ---- #
-def game_to_obs_vector_competition(game, agent_id, distance_map, max_distance):
+def game_to_obs_vector_competition(game, agent_id, distance_map):
     """
     Returns a vector observation for agent_id:
     For each tile type, includes:
@@ -163,8 +183,14 @@ def game_to_obs_vector_competition(game, agent_id, distance_map, max_distance):
       - distance to midpoint (between agents)
     Also includes one-hot agent inventory and other agent inventory.
     """
-    tile_types = ['tomato_dispenser', 'pumpkin_dispenser', 'plate_dispenser', 'cutting_board', 'delivery', 'counter']
-    item_names = ['tomato', 'pumpkin', 'plate', 'tomato_cut', 'tomato_salad']
+    normalization_factor = game.normalization_factor
+
+    tile_types = ['tomato_dispenser', 'pumpkin_dispenser', 'plate_dispenser', 'cutting_board', 'delivery']
+    item_names = [None, 'tomato', 'pumpkin', 'plate', 'tomato_cut', 'pumpkin_cut', 'tomato_salad', 'pumpkin_salad']
+
+    # Get agent walking and cutting speeds
+    agent_walking_speed = game.walking_speeds.get(agent_id, 1)
+    agent_cutting_speed = game.cutting_speeds.get(agent_id, 1)
 
     # Get agent positions
     all_agent_ids = [aid for aid in game.gameObjects if aid.startswith('ai_rl_')]
@@ -180,6 +206,11 @@ def game_to_obs_vector_competition(game, agent_id, distance_map, max_distance):
 
     # --- Add distances to tile types ---
     for tile_type in tile_types:
+        if tile_type == 'cutting_board':
+            action_time = agent_cutting_speed
+        else:
+            action_time = 0
+
         indices = get_tile_indices_by_type(game, tile_type)
         # Only consider accessible tiles for agent
         accessible_agent = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
@@ -189,50 +220,54 @@ def game_to_obs_vector_competition(game, agent_id, distance_map, max_distance):
             if min_dist is None or d < min_dist:
                 min_dist = d
         if min_dist is not None:
-            obs_vector.append(min_dist)
+            time_to_tile = (min_dist / agent_walking_speed + action_time) / normalization_factor
+            obs_vector.append(time_to_tile)
         else:
-            obs_vector.append(max_distance)
-        # Only consider accessible tiles for midpoint
-        accessible_mid = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, midpoint, (x, y)) is not None]
-        min_dist_mid = None
-        for _, x, y in accessible_mid:
-            d = get_distance(distance_map, midpoint, (x, y))
-            if min_dist_mid is None or d < min_dist_mid:
-                min_dist_mid = d
-        if min_dist_mid is not None:
-            obs_vector.append(min_dist_mid)
-        else:
-            obs_vector.append(max_distance)
+            obs_vector.append(1)
 
     # --- Add distances to items on counters ---
     for item_name in item_names:
+        action_time = 0
         indices = get_item_indices_on_counters(game, item_name)
-        # Only consider accessible counters for agent
-        accessible_agent = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
-        min_dist = None
-        for _, x, y in accessible_agent:
-            d = get_distance(distance_map, agent_pos, (x, y))
-            if min_dist is None or d < min_dist:
-                min_dist = d
-        if min_dist is not None:
-            obs_vector.append(min_dist)
+
+        if len(indices) > 0:
+            obs_vector.append(1) # There is a tile with that item
+            # Only consider accessible counters for agent
+            accessible_agent = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
+            min_dist = None
+            for _, x, y in accessible_agent:
+                d = get_distance(distance_map, agent_pos, (x, y))
+                if min_dist is None or d < min_dist:
+                    min_dist = d
+            if min_dist is not None:
+                time_to_tile = (min_dist / agent_walking_speed + action_time) / normalization_factor
+                obs_vector.append(time_to_tile)
+            else:
+                obs_vector.append(1)
+
+            # Choose the counter tile that is closest to the midpoint by Euclidean
+            # distance (ignore midpoint accessibility). For the agent->tile value
+            # use the path distance from the agent to that chosen tile (fall back to
+            # max_distance if unreachable). For competition mode we keep the original
+            # convention of appending agent path distance then midpoint Euclidean distance.
+            best = min(indices, key=lambda it: math.hypot(it[1] - midpoint[0], it[2] - midpoint[1]))
+            _, bx, by = best
+            path_dist = get_distance(distance_map, agent_pos, (bx, by))
+            if path_dist is not None:
+                time_to_midtile = (path_dist / agent_walking_speed + action_time) / normalization_factor
+                obs_vector.append(time_to_midtile)
+            else:
+                obs_vector.append(1)
         else:
-            obs_vector.append(max_distance)
-        # Only consider accessible counters for midpoint
-        accessible_mid = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, midpoint, (x, y)) is not None]
-        min_dist_mid = None
-        for _, x, y in accessible_mid:
-            d = get_distance(distance_map, midpoint, (x, y))
-            if min_dist_mid is None or d < min_dist_mid:
-                min_dist_mid = d
-        if min_dist_mid is not None:
-            obs_vector.append(min_dist_mid)
-        else:
-            obs_vector.append(max_distance)
+            # no counters with that item: append fallbacks for agent distance and midpoint distance
+            obs_vector.append(0) # There are no tiles with that item
+            obs_vector.append(1) # Fallback for agent time
+            obs_vector.append(1) # Fallback for midpoint time
 
     # Distance to other agent
     dist_to_other = get_distance(distance_map, agent_pos, other_pos)
-    obs_vector.append(dist_to_other if dist_to_other is not None else max_distance)
+    time_to_other = (dist_to_other / agent_walking_speed) / normalization_factor if dist_to_other is not None else 1
+    obs_vector.append(time_to_other)
 
     # One-hot agent inventory
     agent_inventory = np.zeros(len(item_names), dtype=np.float32)
@@ -249,55 +284,18 @@ def game_to_obs_vector_competition(game, agent_id, distance_map, max_distance):
     obs_vector.extend(other_inventory.tolist())
     return np.array(obs_vector, dtype=np.float32)
 
-def load_max_distance(map_id, cache_dir=None):
-    """
-    Loads the max distance for the given map_id from cache.
-    """
-    if cache_dir is None:
-        # Default to spoiled_broth/maps/distance_cache
-        cache_dir = os.path.join(os.path.dirname(__file__), '../maps/distance_cache')
-    max_dist_path = os.path.join(cache_dir, f"distance_map_{map_id}_max_distance.npy")
-    if not os.path.exists(max_dist_path):
-        raise FileNotFoundError(f"Max distance cache not found for map_id {map_id} at {max_dist_path}")
-    return float(np.load(max_dist_path))
-
-def normalize_obs_vector(obs_vector, max_distance):
-    """
-    Normalize all distance values in the observation vector by max_distance.
-    Only normalize the distance values (not one-hot inventory).
-    """
-    obs = np.array(obs_vector, dtype=np.float32)
-    # The distance values are the first N elements, rest are one-hot inventory
-    # For classic: 5 tile_types * 2 + 4 item_names * 2 + 1 dist_to_other = 19 distances
-    # For competition: 6 tile_types * 2 + 5 item_names * 2 + 1 dist_to_other = 27 distances
-    # The rest are one-hot vectors
-    if len(obs) == 27 + 10:  # competition
-        dist_len = 27
-    elif len(obs) == 19 + 8:  # classic
-        dist_len = 19
-    else:
-        # fallback: try to infer
-        dist_len = len(obs) - 2 * ((len(obs) - 1) // 3)
-    obs[:dist_len] = obs[:dist_len] / max_distance
-    return obs
-
 # Wrapper to select observation vector function based on game_mode.
-def game_to_obs_vector(game, agent_id, game_mode="classic", map_nr=None, distance_map=None, normalize=True):
+def game_to_obs_vector(game, agent_id, game_mode="classic", distance_map=None):
     """
     Wrapper to select observation vector function based on game_mode.
     If normalize=True, normalizes the distance values using max_distance for the map.
     map_id must be provided for normalization.
     """
-    max_distance = load_max_distance(map_nr)
     if game_mode == "classic":
-        obs_vector = game_to_obs_vector_classic(game, agent_id, distance_map, max_distance)
+        obs_vector = game_to_obs_vector_classic(game, agent_id, distance_map)
     elif game_mode == "competition":
-        obs_vector = game_to_obs_vector_competition(game, agent_id, distance_map, max_distance)
+        obs_vector = game_to_obs_vector_competition(game, agent_id, distance_map)
     else:
         raise ValueError(f"Unknown game mode: {game_mode}")
-    if normalize:
-        if map_nr is None:
-            raise ValueError("map_nr must be provided for normalization.")
-        obs_vector = normalize_obs_vector(obs_vector, max_distance)
     return obs_vector
     

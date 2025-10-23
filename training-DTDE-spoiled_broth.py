@@ -12,12 +12,12 @@ os.environ["MKL_NUM_THREADS"] = "1"
 
 ##### Cluster config ##################
 NUM_GPUS = 1
-NUM_CPUS = 10
-CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
+NUM_CPUS = 24
+CLUSTER = 'brigit'  # Options: 'brigit', 'local', 'cuenca'
 
 # Read input file
 input_path = sys.argv[1]
-MAP_NR = sys.argv[2]
+MAP_NR = str(sys.argv[2]).lower()
 LR = float(sys.argv[3])
 GAME_VERSION = str(sys.argv[4]).lower() ## If game_version = classic, one type of food (tomato); if game_version = competition, two types of food (tomato and pumpkin)
 if len(sys.argv) > 5:
@@ -35,17 +35,27 @@ SEED = int(sys.argv[8]) if len(sys.argv) > 8 else 0
 with open(input_path, "r") as f:
     lines = f.readlines()
     alpha_1, beta_1 = [round(float(x), 4) for x in lines[0].strip().split()]
+    walking_speed_1, cutting_speed_1 = [round(float(x), 4) for x in lines[1].strip().split()]
     if NUM_AGENTS == 2:
-        alpha_2, beta_2 = [round(float(x), 4) for x in lines[1].strip().split()]
+        alpha_2, beta_2 = [round(float(x), 4) for x in lines[2].strip().split()]
+        walking_speed_2, cutting_speed_2 = [round(float(x), 4) for x in lines[3].strip().split()]
 
 if NUM_AGENTS == 1:
-    reward_weights = {
-        "ai_rl_1": (alpha_1, beta_1),
-    }
+    reward_weights = {"ai_rl_1": (alpha_1, beta_1)}
+    walking_speeds = {"ai_rl_1": walking_speed_1}
+    cutting_speeds = {"ai_rl_1": cutting_speed_1}
 else:
     reward_weights = {
         "ai_rl_1": (alpha_1, beta_1),
         "ai_rl_2": (alpha_2, beta_2),
+    }
+    walking_speeds = {
+        "ai_rl_1": walking_speed_1,
+        "ai_rl_2": walking_speed_2,
+    }
+    cutting_speeds = {
+        "ai_rl_1": cutting_speed_1,
+        "ai_rl_2": cutting_speed_2,
     }
 
 if CLUSTER == 'brigit':
@@ -59,12 +69,15 @@ else:
 
 # Hyperparameters
 NUM_ENVS = 1
-NUM_INNER_STEPS = 450
-NUM_EPOCHS = 5
+INNER_SECONDS = 720 # In seconds
+NUM_EPOCHS = 10
+TRAIN_BATCH_SIZE = 400
 NUM_MINIBATCHES = 20
 SHOW_EVERY_N_EPOCHS = 1
 SAVE_EVERY_N_EPOCHS = 500
 PAYOFF_MATRIX = [1,1,-2]
+
+# Neural network architecture
 MLP_LAYERS = [512, 512, 256]
 
 if NUM_AGENTS == 1:
@@ -76,7 +89,7 @@ os.makedirs(save_dir, exist_ok=True)
 
 pretrained_policies = {}
 
-if CHECKPOINT_ID is not None:
+if CHECKPOINT_ID is not None and CHECKPOINT_ID.lower() != "none":
     if PRETRAINING.upper() == "YES":
         CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/{GAME_VERSION}/map_{MAP_NR}/Training_{CHECKPOINT_ID}'
     else:
@@ -104,7 +117,8 @@ GRID_SIZE = (rows, cols)
 # RLlib specific configuration
 config = {
     "NUM_ENVS": NUM_ENVS,
-    "NUM_INNER_STEPS": NUM_INNER_STEPS,
+    "INNER_SECONDS": INNER_SECONDS,
+    "TRAIN_BATCH_SIZE": TRAIN_BATCH_SIZE,
     "NUM_MINIBATCHES": NUM_MINIBATCHES,
     "NUM_EPOCHS": NUM_EPOCHS,
     "NUM_AGENTS": NUM_AGENTS,
@@ -115,6 +129,8 @@ config = {
     "REWARD_WEIGHTS": reward_weights,
     "GAME_VERSION": GAME_VERSION,
     "PAYOFF_MATRIX": PAYOFF_MATRIX,
+    "WALKING_SPEEDS": walking_speeds,
+    "CUTTING_SPEEDS": cutting_speeds,
     "INITIAL_SEED": SEED,
     "WAIT_FOR_COMPLETION": True,
     "SAVE_DIR": save_dir,

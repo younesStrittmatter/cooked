@@ -8,10 +8,12 @@ from spoiled_broth.ui.score import Score
 
 from pathlib import Path
 
+import os
+import numpy as np
 import random
 
 class SpoiledBroth(BaseGame):
-    def __init__(self, map_nr=None, grid_size=(8, 8), num_agents=2, seed=None):
+    def __init__(self, map_nr=None, grid_size=(8, 8), num_agents=2, seed=None, walking_speeds=None, cutting_speeds=None, walking_time=2, cutting_time=3):
         super().__init__()
         self.rng = random.Random(seed)
         if map_nr is None:
@@ -19,6 +21,13 @@ class SpoiledBroth(BaseGame):
         width, height = grid_size
         self.num_agents = num_agents
         self.agent_start_tiles = {}
+        self.walking_speeds = walking_speeds
+        self.cutting_speeds = cutting_speeds
+        self.walking_time = walking_time
+        self.cutting_time = cutting_time
+        max_distance = load_max_distance(map_nr)
+        self.normalization_factor = max_distance / self.walking_time + self.cutting_time
+
         self.clickable_indices = []  # Initialize clickable indices storage
         # Track action completion status for each agent
         self.agent_action_status = {}
@@ -62,8 +71,8 @@ class SpoiledBroth(BaseGame):
                     index = y * self.grid.width + x
                     self.clickable_indices.append(index)
 
-    def add_agent(self, agent_id):
-        agent = Agent(agent_id, self.grid, self)
+    def add_agent(self, agent_id, walk_speed=1, cut_speed=1):
+        agent = Agent(agent_id, self.grid, self, walk_speed=walk_speed, cut_speed=cut_speed)
 
         # Get fixed A1/A2 tiles if present
         a1_tile = self.agent_start_tiles.get('1', None)
@@ -103,9 +112,6 @@ class SpoiledBroth(BaseGame):
         for agent_id, action in actions.items():
             if action is not None and isinstance(action, dict):
                 filtered_actions[agent_id] = action
-            elif hasattr(self.gameObjects.get(agent_id), 'action_complete'):
-                # If no valid action but agent exists, ensure it's marked as complete
-                self.gameObjects[agent_id].action_complete = True
         
         super().step(filtered_actions, delta_time)
 
@@ -125,3 +131,15 @@ def random_game_state(game):
     for agent in game.gameObjects.values():
         if hasattr(agent, "item") and agent.item is not None:
             agent.item = None
+
+def load_max_distance(map_id, cache_dir=None):
+    """
+    Loads the max distance for the given map_id from cache.
+    """
+    if cache_dir is None:
+        # Default to spoiled_broth/maps/distance_cache
+        cache_dir = os.path.join(os.path.dirname(__file__), './maps/distance_cache')
+    max_dist_path = os.path.join(cache_dir, f"distance_map_{map_id}_max_distance.npy")
+    if not os.path.exists(max_dist_path):
+        raise FileNotFoundError(f"Max distance cache not found for map_id {map_id} at {max_dist_path}")
+    return float(np.load(max_dist_path))

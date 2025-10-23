@@ -15,7 +15,6 @@ class PickUpIntent(_base_intent.Intent):
     def finished(self, agent):
         return self.has_ended
 
-
 class ItemExchangeIntent(_base_intent.Intent):
     def __init__(self, tile):
         super().__init__()
@@ -28,14 +27,12 @@ class ItemExchangeIntent(_base_intent.Intent):
             # Case 1: agent has a cutted ingredient and tile has a plate
             if agent.item and self.tile.item and agent.item.endswith('_cut') and self.tile.item == 'plate':
                 self.tile.item = agent.item.split('_')[0] + '_salad'
-                self.tile.salad_by = agent.id
                 self.tile.salad_item = self.tile.item
                 agent.item = None
 
             # Case 2: agent has a plate and tile has a cutted ingredient
             elif agent.item == 'plate' and self.tile.item and self.tile.item.endswith('_cut'):
                 self.tile.item = self.tile.item.split('_')[0] + '_salad'
-                self.tile.salad_by = agent.id
                 self.tile.salad_item = self.tile.item
                 agent.item = None
 
@@ -66,16 +63,14 @@ class CuttingBoardIntent(_base_intent.Intent):
                 if agent.is_simulation:
                     agent.provisional_item = cut_item
                     agent.item = None
-                    agent.action_complete = False
                     # Set agent cutting state with start time for controller to manage waiting
-                    agent.is_cutting = True
+                    agent.is_busy = True
                     agent.cutting_start_time = time.time()
-                    agent.cutting_duration = 3.0  # 3 seconds that controller will wait
+                    agent.cutting_duration = self.game.cutting_time 
                 else:
                     agent.item = cut_item
                 
                 # Set tile metadata for tracking
-                self.tile.cut_by = agent.id
                 self.tile.cut_item = cut_item
                 self.tile.item = None  # Clear the cutting board
                 
@@ -83,90 +78,11 @@ class CuttingBoardIntent(_base_intent.Intent):
                 self.has_ended = True
             else:
                 # No valid item to cut, end intent immediately
+                self.tile.cut_item = None
                 self.has_ended = True
 
     def finished(self, agent):
         return self.has_ended
-
-
-# --------------- LEGACY INTENTS (to be removed) -----------------
-class old_CuttingBoardIntent(_base_intent.Intent):
-    def __init__(self, tile):
-        super().__init__()
-        self.tile = tile
-        self.has_ended = False
-        self.has_started = False
-        # elapsed cutting time while agent is at the board
-        self._elapsed = 0.0
-        # required cutting duration in seconds for the normal behavior
-        self._required_cut_time = 3.0
-
-    def update(self, agent, delta_time: float):
-        if not self.has_started:
-            if self.tile.item is not None:
-                if self.tile.cut_stage >= 3:
-                    _a_temp = agent.item
-                    agent.item = f'{self.tile.item}_cut'
-                    self.tile.cut_by = agent.id
-                    self.tile.cut_item = agent.item
-                    if _a_temp in ['tomato', 'pumpkin', 'cabbage']:
-                        self.tile.cut_time_accumulated = 0
-                        self.tile.item = _a_temp
-                    else:
-                        self.tile.item = None
-                    self.has_ended = True
-                elif agent.item is None:
-                    self.has_started = True
-                else:
-                    self.has_ended = True
-            else:
-                if agent.item in ['tomato', 'pumpkin', 'cabbage']:
-                    # cut instantly
-                    agent.item = f'{agent.item}_cut'
-                    self.tile.cut_by = agent.id
-                    self.tile.cut_item = agent.item
-                    self.tile.item = None
-                    self.tile.cut_time_accumulated = 0
-                    self.has_ended = True
-                else:
-                    self.has_ended = True
-        else:
-            # accumulate local elapsed time while agent stays on the cutting board
-            # agent.cut_speed may be used to scale speed, but we implement a fixed
-            # wall-clock duration of 3.0 seconds (scaled by agent.cut_speed for
-            # backwards compatibility if cut_speed != 1.0)
-            try:
-                speed = float(getattr(agent, 'cut_speed', 1.0))
-            except Exception:
-                speed = 1.0
-
-            self._elapsed += delta_time * speed
-
-            # also keep the tile-level accumulator in sync for compatibility
-            try:
-                self.tile.cut_time_accumulated += delta_time * speed
-            except Exception:
-                pass
-
-            # When required duration reached, transfer cut item to agent and finish
-            if self._elapsed >= self._required_cut_time:
-                # Only perform the transfer if there is an ingredient on the board
-                if self.tile.item is not None:
-                    orig = self.tile.item
-                    agent.item = f"{orig}_cut"
-                    self.tile.cut_by = agent.id
-                    self.tile.cut_item = agent.item
-                    # For this implementation, after cutting we clear the tile
-                    self.tile.item = None
-                    try:
-                        self.tile.cut_time_accumulated = 0
-                    except Exception:
-                        pass
-                self.has_ended = True
-
-    def finished(self, agent):
-        return self.has_ended
-
 
 class DeliveryIntent(_base_intent.Intent):
     def __init__(self, tile):
@@ -180,7 +96,6 @@ class DeliveryIntent(_base_intent.Intent):
             valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
 
             if agent.item in valid_items:
-                self.tile.delivered_by = agent.id
                 self.tile.delivered_item = agent.item
                 agent.item = None
                 agent.score += 1
