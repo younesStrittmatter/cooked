@@ -12,6 +12,9 @@ from spoiled_broth.rl.classify_action_type import get_action_type_and_agent_even
 from spoiled_broth.rl.reward_analysis import get_rewards
 from spoiled_broth.game import SpoiledBroth, random_game_state
 
+INTENT_TIME = 0.1
+MOVE_TIME = 0.1
+
 BUSY_PENALTY = 0.01  # Penalty for being busy
 USELESS_ACTION_PENALTY = 0.2  # Penalty for performing a useless action
 DESTRUCTIVE_ACTION_PENALTY = 1.0  # Harsh penalty for performing a destructive action
@@ -174,6 +177,7 @@ class GameEnv(ParallelEnv):
         default_weights = {agent: (1.0, 0.0) for agent in self.agents}
         self.reward_weights = reward_weights if reward_weights is not None else default_weights
         self.wait_for_completion = wait_for_completion
+        self.counted_cuts = {agent: False for agent in self.agents}
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
 
@@ -244,6 +248,7 @@ class GameEnv(ParallelEnv):
 
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
+        self.counted_cuts = {agent: False for agent in self.agents}
 
         self._elapsed_time = 0.0
 
@@ -286,16 +291,10 @@ class GameEnv(ParallelEnv):
         return obs
 
     def step(self, actions):
-        # --- Time-based step logic ---
-        # 1. For each agent, if not busy and action is provided, process action and set busy time
-        # 2. Advance simulation by the minimum busy time (or until episode ends)
-        # 3. Assign negative reward proportional to busy time at action selection
-        # 4. End episode if elapsed time >= max seconds
-
-        validated_actions = {}
-
-        # Tracking for rewards and events
+        # --- Simultaneous agent update for minimal delta_time ---
+        self.agent_map = {agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents}
         agent_penalties = {agent_id: 0.0 for agent_id in self.agents}
+        # Prepare agent_events dict
         if self.game_mode == "competition":
             agent_events = {agent_id: {"deliver_own": 0, "deliver_other": 0, "salad_own": 0, "salad_other": 0, "cut_own": 0, "cut_other": 0, "plate": 0, "raw_food_own": 0, "raw_food_other": 0, "counter": 0} for agent_id in self.agents}
         elif self.game_mode == "classic":
@@ -303,73 +302,88 @@ class GameEnv(ParallelEnv):
         else:
             raise ValueError(f"Unknown game mode: {self.game_mode}")
 
-
-        # Process new actions for available agents
+        # Track current actions and busy times
+        busy_times = {}
+        validated_actions = {}
+        action_info = {}
+        # For each agent, determine if a new action is needed
         for agent_id, action_idx in actions.items():
             agent = self.agent_map[agent_id]
-            self.total_actions_asked[agent_id] += 1
-            print(f'Item on hand for agent {agent_id}: {getattr(agent, "item", None)}')
+            # If agent is not busy, process new action
             if getattr(agent, "busy_until", None) is None or self._elapsed_time >= agent.busy_until:
-                # Convert RL action to tile index
+                self.total_actions_asked[agent_id] += 1
                 action_name = get_rl_action_space(self.game_mode)[action_idx]
                 tile_index = convert_action_to_tile(agent, self.game, action_name, distance_map=self.distance_map)
                 if tile_index is None:
                     self.total_actions_not_performed[agent_id] += 1
                     agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
+                    busy_times[agent_id] = 0.1
                     continue
                 grid_w = self.game.grid.width
                 x = tile_index % grid_w
                 y = tile_index // grid_w
                 tile = self.game.grid.tiles[x][y]
                 action_type, agent_events = get_action_type_and_agent_events(self, tile, agent, agent_id, agent_events, x=x, y=y, accessibility_map=self.accessibility_map)
-                busy_time = 0.2  # Default minimal busy time for game step
-
-                # Penalty for inaccessible action
+                obs = self.observations.get(agent_id)
+                # Default movement time
+                move_time = obs[self.action_obs_mapping[action_idx]] * getattr(self.game, 'normalization_factor', 1.0) if obs is not None else MOVE_TIME
+                intent_time = INTENT_TIME
+                # Cutting board: only add intent time if valid item
+                if action_type == "useful_cutting_board":
+                    # Check if agent.item is a valid cuttable item
+                    if agent.item in ["tomato", "pumpkin"]:
+                        # Use agent.cut_speed and game.cutting_time
+                        intent_time = agent.cut_speed * getattr(self.game, 'cutting_time', 3.0)
+                # For useless/destructive/inaccessible actions, only movement time
+                busy_time = move_time + intent_time
+                agent.busy_until = self._elapsed_time + busy_time
+                busy_times[agent_id] = busy_time
+                # Penalties
                 if action_type == self.ACTION_TYPE_INACCESSIBLE:
                     self.total_actions_inaccessible[agent_id] += 1
                     agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
-                    agent.busy_until = self._elapsed_time + busy_time
                     continue
-
-                # Penalty for useless actions
                 elif action_type.startswith("useless_"):
                     agent_penalties[agent_id] += USELESS_ACTION_PENALTY
-
-                # Penalty for destructive actions
                 elif action_type.startswith("destructive_"):
                     agent_penalties[agent_id] += DESTRUCTIVE_ACTION_PENALTY
-                
-                # Estimate busy time (move + action duration)  
-                obs = self.observations.get(agent_id)
-                busy_time = obs[self.action_obs_mapping[action_idx]] * getattr(self.game, 'normalization_factor', 1.0)
-                agent.busy_until = self._elapsed_time + busy_time
-
-                # Assign negative reward proportional to busy time
                 agent_penalties[agent_id] += BUSY_PENALTY * busy_time
-
-                # Store the validated action
                 validated_actions[agent_id] = {"type": "click", "target": tile_index}
-                self.total_action_types[agent_id][action_type] += 1
+                action_info[agent_id] = {
+                    "action_type": action_type,
+                    "tile_index": tile_index,
+                    "action_idx": action_idx
+                }
             else:
-                self.total_actions_not_performed[agent_id] += 1
+                # Agent is still busy, maintain current action, do not record new events
+                busy_left = agent.busy_until - self._elapsed_time
+                busy_times[agent_id] = busy_left if busy_left > 0 else MOVE_TIME + INTENT_TIME
 
-        # Find minimum time until next agent is available or episode ends
-        active_busy_times = [
-            agent.busy_until for agent in self.agent_map.values()
-            if getattr(agent, "busy_until", None) is not None and agent.busy_until > self._elapsed_time
-        ]
-        # If no agent is busy, advance by a minimal time step of 0.2 seconds
-        if active_busy_times:
-            next_time = min(min(active_busy_times), self._max_seconds_per_episode)
+        # Find minimal delta_time (the next action to finish)
+        if busy_times:
+            min_delta = min(busy_times.values())
         else:
-            next_time = min(self._elapsed_time + 0.2, self._max_seconds_per_episode)
-        
-        # Advance time and game state
+            min_delta = MOVE_TIME + INTENT_TIME
+        next_time = min(self._elapsed_time + min_delta, self._max_seconds_per_episode)
         advanced_time = next_time - self._elapsed_time
         self._elapsed_time = next_time
-        self.game.step(validated_actions, delta_time=advanced_time)
 
-        # Update busy_times and mark agents as available if their busy_until has passed
+        # Only record agent events for actions that finish in this step
+        finished_agents = [agent_id for agent_id, agent in self.agent_map.items() if getattr(agent, "busy_until", None) is not None and self._elapsed_time >= agent.busy_until]
+        for agent_id in finished_agents:
+            # Only reset counted_cuts if agent's item is a new cuttable item
+            agent = self.agent_map[agent_id]
+            if getattr(agent, "item", None) in ["tomato", "pumpkin"] and not self.counted_cuts[agent_id]:
+                self.counted_cuts[agent_id] = False
+            if agent_id in action_info:
+                info = action_info[agent_id]
+                self.total_action_types[agent_id][info["action_type"]] += 1
+
+        # Step the game for all agents for advanced_time
+        self.game.step(validated_actions, delta_time=advanced_time)
+        self.agent_map = {agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents}
+
+        # Mark agents as available if their busy_until has passed
         for agent_id, agent in self.agent_map.items():
             if hasattr(agent, 'busy_until') and agent.busy_until is not None and self._elapsed_time >= agent.busy_until:
                 agent.busy_until = None
@@ -393,7 +407,6 @@ class GameEnv(ParallelEnv):
             for agent in self.agents
         }
 
-        # Update last observation for each agent after stepping
         self.observations = {agent: self.observe(agent) for agent in self.agents}
         terminations = self.dones
         truncations = {agent: False for agent in self.agents}
@@ -406,14 +419,12 @@ class GameEnv(ParallelEnv):
                 row[f"pure_reward_{agent_id}"] = float(self.cumulated_pure_rewards[agent_id])
                 row[f"modified_reward_{agent_id}"] = float(self.cumulated_modified_rewards[agent_id])
 
-                # Add result events
                 for result_event in self.total_agent_events[agent_id]:
                     row[f"{result_event}_{agent_id}"] = self.total_agent_events[agent_id][result_event]
                 row[f"actions_asked_{agent_id}"] = self.total_actions_asked[agent_id]
                 row[f"actions_not_performed_{agent_id}"] = self.total_actions_not_performed[agent_id]
                 row[f"inaccessible_actions_{agent_id}"] = self.total_actions_inaccessible[agent_id]
 
-                # Add action type columns dynamically
                 for action_type in get_action_type_list(self.game_mode):
                     row[f"{action_type}_{agent_id}"] = self.total_action_types[agent_id][action_type]
 
@@ -424,7 +435,6 @@ class GameEnv(ParallelEnv):
                     self.write_header = False
                 writer.writerow(row)
 
-            # Reset log for next episode
             self.episode_infos_log = {agent: [] for agent in self.agents}
             self.episode_count += 1
             self.write_csv = False

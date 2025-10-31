@@ -95,7 +95,6 @@ def a_star(grid, start, goal):
     came_from = {}
     g_score = {start: 0}
     f_score = {start: euclidean_distance(start, goal)}
-
     open_set.enqueue(start, f_score[start])
 
     while open_set.queue:
@@ -103,10 +102,9 @@ def a_star(grid, start, goal):
 
         if current == goal:
             return reconstruct_path(came_from, current)
-
         for neighbor in get_neighbors(grid, current):
             tentative_g = g_score[current] + euclidean_distance(current, neighbor)
-
+            
             if neighbor not in g_score or tentative_g < g_score[neighbor]:
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g
@@ -117,10 +115,25 @@ def a_star(grid, start, goal):
 
     return None  # No path found
 
-
-def find_path(grid, start, goal):
-    return a_star(grid, start, goal)
-
+def find_path(grid, start, goal, is_walkable=True):
+    if is_walkable:
+        return a_star(grid, start, goal)
+    else:
+        target_node = goal
+        neighbors = get_neighbors(grid, target_node, include_diagonal=False)
+        if len(neighbors) == 0:
+            return None
+        else:
+            d = 9999
+            target = None
+            for neighbor in neighbors:
+                _d = distance(grid, start, neighbor)
+                if _d is not None and _d < d:
+                    d = _d
+                    target = neighbor
+        if target is None:
+            return None
+        return a_star(grid, start, target)
 
 def path_length(path):
     if not path or len(path) < 2:

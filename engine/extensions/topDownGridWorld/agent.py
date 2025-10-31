@@ -52,11 +52,9 @@ class Agent(GameObject):
         # Check if agent is busy (e.g., cutting) - if so, don't set new movement targets
         if getattr(self, 'is_busy', False):
             return
-            
         start = self.node
         goal = Node(tile.slot_x, tile.slot_y)
-        path = find_path(self.grid, start, goal)
-
+        path = find_path(self.grid, start, goal, getattr(tile, 'is_walkable', None))
         if path:
             self.path = path[1:]  # Skip current tile
             self.path_index = 0
@@ -86,12 +84,6 @@ class Agent(GameObject):
         if getattr(self, 'is_busy', False):
             return
 
-        # if self.path_index >= len(self.path):
-        #     return  # No path or finished
-        #
-        # next_tile = self.path[self.path_index]
-        # target_pos = grid_to_world(next_tile, self.grid)
-
         d_t = delta_time / PHYSICS_STEPS
 
         for i in range(PHYSICS_STEPS):
@@ -110,11 +102,7 @@ class Agent(GameObject):
 
             # Snap to tile and advance index
             if close(self.x, target_pos['x']) and close(self.y, target_pos['y']):
-                # if self.path_index == len(self.path) - 1:  # Check if it's the last tile
-                #     self.x = target_pos['x']
-                #     self.y = target_pos['y']
                 self.path_index += 1
-                # break
 
     def sync(self):
         for drawable in self.drawables:

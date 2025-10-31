@@ -11,9 +11,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
 ##### Cluster config ##################
-NUM_GPUS = 1
-NUM_CPUS = 24
-CLUSTER = 'brigit'  # Options: 'brigit', 'local', 'cuenca'
+NUM_GPUS = 0.3
+NUM_CPUS = 10
+CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
 
 # Read input file
 input_path = sys.argv[1]
@@ -69,9 +69,9 @@ else:
 
 # Hyperparameters
 NUM_ENVS = 1
-INNER_SECONDS = 720 # In seconds
-NUM_EPOCHS = 10
-TRAIN_BATCH_SIZE = 400
+INNER_SECONDS = 360 # In seconds
+NUM_EPOCHS = 5000
+TRAIN_BATCH_SIZE = 400 
 NUM_MINIBATCHES = 20
 SHOW_EVERY_N_EPOCHS = 1
 SAVE_EVERY_N_EPOCHS = 500

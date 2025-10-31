@@ -105,8 +105,7 @@ class Counter(SoiledBrothTile):
             self.drawables[1].height = 0
         
     def get_intent(self, agent):
-        self.intent_version = agent.intent_version
-        return [MoveToIntent(self), ItemExchangeIntent(self, version=agent.intent_version)]
+        return [MoveToIntent(self), ItemExchangeIntent(self)]
 
 
 class Dispenser(SoiledBrothTile):
@@ -130,8 +129,7 @@ class Dispenser(SoiledBrothTile):
         self.intent_version = None
 
     def get_intent(self, agent):
-        self.intent_version = agent.intent_version
-        return [MoveToIntent(self), PickUpIntent(self, version=self.intent_version)]
+        return [MoveToIntent(self), PickUpIntent(self)]
 
 
 class CuttingBoard(SoiledBrothTile):

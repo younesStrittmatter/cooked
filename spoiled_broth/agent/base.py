@@ -5,6 +5,8 @@ from engine.extensions.renderer2d.basic_2d import Basic2D
 from engine.extensions.topDownGridWorld import agent
 import random
 from spoiled_broth.world.tiles import ITEM_LIST
+from spoiled_broth.world.tiles import Dispenser
+from spoiled_broth.agent.intents import PickUpIntent
 
 
 class Agent(agent.Agent):
@@ -15,6 +17,8 @@ class Agent(agent.Agent):
         self.path_index = 0
         self.move_target = None
 
+        self.last_click_target = None  # Store last RL click target for intent processing
+
         self.item = None
         self.provisional_item = None  # Item that is being processed (e.g., being cut)
         self.walk_speed = walk_speed
@@ -24,8 +28,6 @@ class Agent(agent.Agent):
         self.current_action = None
         self.is_busy = False  # Initially no action is in progress
         self.is_simulation = False  # Flag to indicate if this agent is in a simulation environment
-        # Maximum time (seconds) to consider an action valid before forcing completion
-        self.ACTION_TIMEOUT = 5.0
         hair_n = random.randint(0, 8)
         mustache_n = random.randint(0, 8)
         skin_n = random.randint(0, 8)
@@ -62,18 +64,51 @@ class Agent(agent.Agent):
         return self.path_index < len(self.path)
 
     def update(self, actions: dict, delta_time: float):
-        super().update(actions, delta_time)
+        # Process RL 'click' actions to set movement target FIRST
+        if self.id in actions:
+            action = actions[self.id]
+            if isinstance(action, dict) and action.get("type") == "click":
+                tile_index = action.get("target")
+                if tile_index is not None:
+                    grid_w = self.grid.width
+                    x = tile_index % grid_w
+                    y = tile_index // grid_w
+                    tile = self.grid.tiles[x][y]
+                    self.set_move_target(tile)
+                    self.last_click_target = tile_index  # Track last RL click target
 
         # Check if there are actions for this agent
         if self.id in actions:
             # If we're getting a new action but the agent is busy, ignore it
             if getattr(self, 'is_busy', False):
-                # Remove the new action from the actions dict to prevent it from being processed
                 actions.pop(self.id)
             else:
-                # New action is starting
-                if actions[self.id] is not None:
-                    self.is_busy = True            
+                # Only set is_busy for non-movement actions (not RL click/move)
+                action = actions[self.id]
+                if action is not None and (not isinstance(action, dict) or action.get("type") != "click"):
+                    self.is_busy = True
+
+        # Always move agent if a path is set (for RL movement)
+        self.move(delta_time)
+        # Now call base update logic
+        super().update(actions, delta_time)
+
+        # After movement, check if agent is at the target and trigger intent(s) for the clickable tile
+        if not self.is_moving and self.last_click_target is not None:
+            grid_w = self.grid.width
+            x = self.last_click_target % grid_w
+            y = self.last_click_target // grid_w
+            tile = self.grid.tiles[x][y]
+            if hasattr(tile, "get_intent"):
+                intents = tile.get_intent(self)
+                if intents:
+                    for intent in intents:
+                        if type(intent).__name__ != "MoveToIntent":
+                            try:
+                                intent.update(self, delta_time)
+                            except TypeError:
+                                intent.update(self)
+            self.last_click_target = None  # Reset after processing
 
         # Handle animation updates
         if not self.is_moving:
