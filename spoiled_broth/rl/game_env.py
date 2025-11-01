@@ -177,7 +177,6 @@ class GameEnv(ParallelEnv):
         default_weights = {agent: (1.0, 0.0) for agent in self.agents}
         self.reward_weights = reward_weights if reward_weights is not None else default_weights
         self.wait_for_completion = wait_for_completion
-        self.counted_cuts = {agent: False for agent in self.agents}
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
 
@@ -189,7 +188,7 @@ class GameEnv(ParallelEnv):
                 "ai_rl_2": "pumpkin",
                 }
         elif self.game_mode == "classic":
-            self.total_agent_events = {agent_id: {"deliver": 0, "cut": 0, "salad": 0, "plate": 0, "raw_food": 0, "counter": 0} for agent_id in self.agents}
+            self.total_agent_events = {agent_id: {"deliver": 0, "salad": 0, "cut": 0, "plate": 0, "raw_food": 0, "counter": 0} for agent_id in self.agents}
             self.action_obs_mapping = ACTIONS_OBSERVATION_MAPPING_CLASSIC
         else:
             raise ValueError(f"Unknown game mode: {self.game_mode}")
@@ -248,7 +247,6 @@ class GameEnv(ParallelEnv):
 
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
-        self.counted_cuts = {agent: False for agent in self.agents}
 
         self._elapsed_time = 0.0
 
@@ -259,13 +257,13 @@ class GameEnv(ParallelEnv):
             self._last_obs_raw[agent] = obs_raw
 
         if self.game_mode == "competition":
-            self.total_agent_events = {agent_id: {"deliver_own": 0, "deliver_other": 0, "salad_own": 0, "salad_other": 0, "cut_own": 0, "cut_other": 0} for agent_id in self.agents}
+            self.total_agent_events = {agent_id: {"deliver_own": 0, "deliver_other": 0, "salad_own": 0, "salad_other": 0, "cut_own": 0, "cut_other": 0, "plate": 0, "raw_food_own": 0, "raw_food_other": 0, "counter": 0} for agent_id in self.agents}
             self.agent_food_type = {
                 "ai_rl_1": "tomato",
                 "ai_rl_2": "pumpkin",
                 }
         elif self.game_mode == "classic":
-            self.total_agent_events = {agent_id: {"deliver": 0, "cut": 0, "salad": 0, "plate": 0, "raw_food": 0, "counter": 0} for agent_id in self.agents}
+            self.total_agent_events = {agent_id: {"deliver": 0, "salad": 0, "cut": 0, "plate": 0, "raw_food": 0, "counter": 0} for agent_id in self.agents}
         else:
             raise ValueError(f"Unknown game mode: {self.game_mode}")
 
@@ -298,7 +296,7 @@ class GameEnv(ParallelEnv):
         if self.game_mode == "competition":
             agent_events = {agent_id: {"deliver_own": 0, "deliver_other": 0, "salad_own": 0, "salad_other": 0, "cut_own": 0, "cut_other": 0, "plate": 0, "raw_food_own": 0, "raw_food_other": 0, "counter": 0} for agent_id in self.agents}
         elif self.game_mode == "classic":
-            agent_events = {agent_id: {"deliver": 0, "cut": 0, "salad": 0, "plate": 0, "raw_food": 0, "counter": 0} for agent_id in self.agents}
+            agent_events = {agent_id: {"deliver": 0, "salad": 0, "cut": 0, "plate": 0, "raw_food": 0, "counter": 0} for agent_id in self.agents}
         else:
             raise ValueError(f"Unknown game mode: {self.game_mode}")
 
@@ -314,16 +312,37 @@ class GameEnv(ParallelEnv):
                 self.total_actions_asked[agent_id] += 1
                 action_name = get_rl_action_space(self.game_mode)[action_idx]
                 tile_index = convert_action_to_tile(agent, self.game, action_name, distance_map=self.distance_map)
+                
+                # Check if this is a counter-related action that failed to find a target
+                is_counter_action = ("counter" in action_name.lower() or 
+                                   "pick_up" in action_name and "from_counter" in action_name)
+                
                 if tile_index is None:
-                    self.total_actions_not_performed[agent_id] += 1
-                    agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
-                    busy_times[agent_id] = 0.1
-                    continue
-                grid_w = self.game.grid.width
-                x = tile_index % grid_w
-                y = tile_index // grid_w
-                tile = self.game.grid.tiles[x][y]
-                action_type, agent_events = get_action_type_and_agent_events(self, tile, agent, agent_id, agent_events, x=x, y=y, accessibility_map=self.accessibility_map)
+                    if is_counter_action:
+                        # For counter actions that fail to find a target, treat as useless counter
+                        # Find any counter to use as the target tile for classification
+                        for x in range(self.game.grid.width):
+                            for y in range(self.game.grid.height):
+                                potential_tile = self.game.grid.tiles[x][y]
+                                if getattr(potential_tile, "_type", None) == 2:  # Counter type
+                                    tile_index = y * self.game.grid.width + x
+                                    tile = potential_tile
+                                    break
+                            if tile_index is not None:
+                                break
+                    
+                    if tile_index is None:
+                        # Still no valid tile found (non-counter action or no counters exist)
+                        self.total_actions_not_performed[agent_id] += 1
+                        agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
+                        busy_times[agent_id] = 0.1
+                        continue
+                else:
+                    grid_w = self.game.grid.width
+                    x = tile_index % grid_w
+                    y = tile_index // grid_w
+                    tile = self.game.grid.tiles[x][y]
+                action_type, agent_events = get_action_type_and_agent_events(self, tile, agent, agent_id, agent_events, agent_food_type=self.agent_food_type if self.game_mode == "competition" else None, game_mode=self.game_mode, x=x, y=y, accessibility_map=self.accessibility_map, update_totals=False)
                 obs = self.observations.get(agent_id)
                 # Default movement time
                 move_time = obs[self.action_obs_mapping[action_idx]] * getattr(self.game, 'normalization_factor', 1.0) if obs is not None else MOVE_TIME
@@ -341,6 +360,7 @@ class GameEnv(ParallelEnv):
                 # Penalties
                 if action_type == self.ACTION_TYPE_INACCESSIBLE:
                     self.total_actions_inaccessible[agent_id] += 1
+                    self.total_action_types[agent_id][action_type] += 1
                     agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
                     continue
                 elif action_type.startswith("useless_"):
@@ -354,6 +374,8 @@ class GameEnv(ParallelEnv):
                     "tile_index": tile_index,
                     "action_idx": action_idx
                 }
+                # Track action types immediately when selected (for all actions, including useless ones)
+                self.total_action_types[agent_id][action_type] += 1
             else:
                 # Agent is still busy, maintain current action, do not record new events
                 busy_left = agent.busy_until - self._elapsed_time
@@ -368,20 +390,16 @@ class GameEnv(ParallelEnv):
         advanced_time = next_time - self._elapsed_time
         self._elapsed_time = next_time
 
-        # Only record agent events for actions that finish in this step
-        finished_agents = [agent_id for agent_id, agent in self.agent_map.items() if getattr(agent, "busy_until", None) is not None and self._elapsed_time >= agent.busy_until]
-        for agent_id in finished_agents:
-            # Only reset counted_cuts if agent's item is a new cuttable item
-            agent = self.agent_map[agent_id]
-            if getattr(agent, "item", None) in ["tomato", "pumpkin"] and not self.counted_cuts[agent_id]:
-                self.counted_cuts[agent_id] = False
-            if agent_id in action_info:
-                info = action_info[agent_id]
-                self.total_action_types[agent_id][info["action_type"]] += 1
-
         # Step the game for all agents for advanced_time
         self.game.step(validated_actions, delta_time=advanced_time)
         self.agent_map = {agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents}
+
+        # Update totals for actions that just completed (for logging purposes only)
+        # We should use the events that were already recorded during action selection, not re-evaluate
+        for agent_id in self.agents:
+            for event_type in agent_events[agent_id]:
+                if agent_events[agent_id][event_type] > 0:
+                    self.total_agent_events[agent_id][event_type] += agent_events[agent_id][event_type]
 
         # Mark agents as available if their busy_until has passed
         for agent_id, agent in self.agent_map.items():

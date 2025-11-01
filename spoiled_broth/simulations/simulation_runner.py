@@ -4,6 +4,7 @@ Main simulation runner class for managing complete simulation execution.
 Author: Samuel Lozano
 """
 
+import os
 import time
 import sys
 import threading
@@ -34,8 +35,8 @@ class SimulationRunner:
         self.ray_manager = RayManager()
         self.game_manager = GameManager(config)
         
-    def run_simulation(self, map_nr: str, num_agents: int, intent_version: str,
-                      cooperative: bool, game_version: str, training_id: str,
+    def run_simulation(self, map_nr: str, num_agents: int,
+                      game_version: str, training_id: str,
                       checkpoint_number: str, timestamp: str) -> Dict[str, Path]:
         """
         Run a complete simulation.
@@ -43,8 +44,6 @@ class SimulationRunner:
         Args:
             map_nr: Name of the map
             num_agents: Number of agents
-            intent_version: Intent version identifier
-            cooperative: Whether this is cooperative
             game_version: Game version identifier
             training_id: Training identifier
             checkpoint_number: Checkpoint number (integer or "final")
@@ -59,17 +58,15 @@ class SimulationRunner:
         try:
             # Setup paths
             paths = self.path_manager.setup_paths(
-                map_nr, num_agents, intent_version, cooperative,
-                game_version, training_id, checkpoint_number
+                map_nr, num_agents, game_version, training_id, checkpoint_number
             )
             
             # Get grid size
             grid_size = self.path_manager.get_grid_size_from_map(paths['map_txt_path'])
             
             # Initialize controllers
-            controller_type = self.controller_manager.determine_controller_type(paths['config_path'])
             controllers = self.controller_manager.initialize_controllers(
-                num_agents, paths['checkpoint_dir'], controller_type, game_version, 
+                num_agents, paths['checkpoint_dir'], game_version, 
                 tick_rate=self.config.engine_tick_rate
             )
             
@@ -80,8 +77,6 @@ class SimulationRunner:
             simulation_config = {
                 'MAP_NR': map_nr,
                 'NUM_AGENTS': num_agents,
-                'INTENT_VERSION': intent_version,
-                'COOPERATIVE': cooperative,
                 'GAME_VERSION': game_version,
                 'TRAINING_ID': training_id,
                 'CLUSTER': self.config.cluster,
@@ -93,8 +88,6 @@ class SimulationRunner:
                 'TILE_SIZE': self.config.tile_size,
                 'ENABLE_VIDEO': self.config.enable_video,
                 'VIDEO_FPS': self.config.video_fps,
-                'CONTROLLER_TYPE': controller_type,
-                'USE_LSTM': controller_type == 'lstm',
                 'CHECKPOINT_DIR': str(paths['checkpoint_dir']),
                 'MAP_FILE': str(paths['map_txt_path']),
                 'AGENT_INITIALIZATION_PERIOD': self.config.agent_initialization_period,
@@ -110,13 +103,13 @@ class SimulationRunner:
             
             # Setup game
             game_factory = self.game_manager.create_game_factory(
-                map_nr, grid_size, intent_version
+                map_nr, grid_size, self.config.walking_speeds, self.config.cutting_speeds
             )
             
             # Run the simulation
             output_paths = self._execute_simulation(
                 game_factory, controllers, paths, data_logger, 
-                raw_action_logger, timestamp
+                raw_action_logger, timestamp, map_nr
             )
             
             return output_paths
@@ -127,7 +120,7 @@ class SimulationRunner:
     def _execute_simulation(self, game_factory: Callable, controllers: Dict,
                            paths: Dict, data_logger: DataLogger,
                            raw_action_logger: RawActionLogger, 
-                           timestamp: str) -> Dict[str, Path]:
+                           timestamp: str, map_nr: str) -> Dict[str, Path]:
         """Execute the main simulation loop."""
         
         # Create engine app
@@ -144,6 +137,39 @@ class SimulationRunner:
         
         session = engine_app.get_session()
         game = session.engine.game
+        
+        # Load and attach distance map to the game
+        try:
+            from spoiled_broth.maps.cache_distance_map import load_or_compute_distance_map
+            distance_cache_dir = os.path.join(os.path.dirname(__file__), "../distance_cache")
+            distance_map_path = load_or_compute_distance_map(game, game.grid, map_nr, distance_cache_dir)
+            
+            # Load the distance map from the npz file
+            import numpy as np
+            data = np.load(distance_map_path)
+            D = data['D']
+            pos_from = data['pos_from']
+            pos_to = data['pos_to']
+            
+            # Convert back to dictionary format
+            distance_map = {}
+            for i, from_pos in enumerate(pos_from):
+                from_tuple = tuple(from_pos)
+                distance_map[from_tuple] = {}
+                for j, to_pos in enumerate(pos_to):
+                    to_tuple = tuple(to_pos)
+                    dist = D[i, j]
+                    if not np.isnan(dist):
+                        distance_map[from_tuple][to_tuple] = float(dist)
+            
+            # Attach distance map to game
+            game.distance_map = distance_map
+            print(f"Successfully loaded distance map for {map_nr} with {len(distance_map)} positions")
+            
+        except Exception as e:
+            print(f"Warning: Could not load distance map for {map_nr}: {e}")
+            print("Setting game.distance_map to empty dict to prevent crashes")
+            game.distance_map = {}
         
         # Attach raw action logger
         game.raw_action_logger = raw_action_logger
@@ -335,7 +361,7 @@ class SimulationRunner:
             except Exception as e:
                 print(f"Unexpected error during threaded engine stop: {e}")
     
-    def _wait_for_agent_initialization(self, game: Any, max_wait_time: float = 5.0):
+    def _wait_for_agent_initialization(self, game: Any, max_wait_time: float = 60.0):
         """Wait for all agents to be properly initialized and positioned."""
         import time
         

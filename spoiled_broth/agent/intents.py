@@ -60,13 +60,14 @@ class CuttingBoardIntent(_base_intent.Intent):
                 cut_item = f"{original_item}_cut"
                 
                 # Give cut item directly to agent (instant cutting)
-                if agent.is_simulation:
+                if hasattr(agent, 'is_simulation') and agent.is_simulation:
                     agent.provisional_item = cut_item
                     agent.item = None
                     # Set agent cutting state with start time for controller to manage waiting
                     agent.is_busy = True
                     agent.cutting_start_time = time.time()
-                    agent.cutting_duration = self.game.cutting_time 
+                    # Get cutting_time from agent's game object
+                    agent.cutting_duration = getattr(agent.game, 'cutting_time', 3.0) 
                 else:
                     agent.item = cut_item
                 
@@ -90,7 +91,7 @@ class DeliveryIntent(_base_intent.Intent):
         self.tile = tile
         self.has_ended = False
 
-    def update(self, agent, delta_time: float):
+    def update(self, agent):
         if not self.has_ended:
             self.has_ended = True
             valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
@@ -99,7 +100,7 @@ class DeliveryIntent(_base_intent.Intent):
                 self.tile.delivered_item = agent.item
                 agent.item = None
                 agent.score += 1
-                if 'score' in self.tile.game.gameObjects and self.tile.game.gameObjects['score'] is not None:
+                if hasattr(self.tile, 'game') and 'score' in self.tile.game.gameObjects and self.tile.game.gameObjects['score'] is not None:
                     self.tile.game.gameObjects['score'].score += 1
 
     def finished(self, agent):

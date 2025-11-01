@@ -58,6 +58,53 @@ class RawActionLogger:
         
         return tile_type, x_tile, y_tile
     
+    def _calculate_rl_action_coordinates(self, agent_id: str, action_name: str, game: Any) -> tuple[Optional[int], Optional[int]]:
+        """Calculate target tile coordinates for an RL action."""
+        try:
+            print(f"[RAW_ACTION_LOGGER] Calculating coordinates for action '{action_name}' by agent {agent_id}")
+            
+            # Import here to avoid circular imports
+            from spoiled_broth.rl.action_space import convert_action_to_tile
+            
+            # Find the agent object
+            agent = None
+            for a_id, a_obj in game.gameObjects.items():
+                if a_id == agent_id and hasattr(a_obj, 'slot_x'):
+                    agent = a_obj
+                    break
+            
+            if agent is None:
+                print(f"[RAW_ACTION_LOGGER] Could not find agent {agent_id}")
+                return None, None
+                
+            # Get distance map
+            distance_map = getattr(game, 'distance_map', None)
+            if distance_map is None:
+                print(f"[RAW_ACTION_LOGGER] No distance_map available for action '{action_name}'")
+                return None, None
+            
+            # Convert action to tile index
+            tile_index = convert_action_to_tile(agent, game, action_name, distance_map=distance_map)
+            print(f"[RAW_ACTION_LOGGER] convert_action_to_tile returned: {tile_index}")
+            
+            if tile_index is not None:
+                # Convert tile index to coordinates (1-indexed)
+                grid = getattr(game, 'grid', None)
+                if grid is not None:
+                    x = tile_index % grid.width
+                    y = tile_index // grid.width
+                    coords = (x + 1, y + 1)  # Convert to 1-indexed
+                    print(f"[RAW_ACTION_LOGGER] Final coordinates: {coords}")
+                    return coords
+                    
+        except Exception as e:
+            print(f"[RAW_ACTION_LOGGER] Error calculating coordinates for RL action: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        print(f"[RAW_ACTION_LOGGER] Returning None, None for action '{action_name}'")
+        return None, None
+    
     def log_action(self, agent_id: str, raw_action: int, game: Any, clickable_indices: list):
         """Log a raw integer action to CSV."""
         with self.lock:
@@ -98,3 +145,43 @@ class RawActionLogger:
                                         
             except Exception as e:
                 print(f"[RAW_ACTION_LOGGER] Error logging action for {agent_id}: {e}")
+
+    def log_rl_action(self, agent_id: str, rl_action_index: int, action_name: str, game: Any):
+        """Log a high-level RL action to CSV."""
+        with self.lock:
+            try:
+                # Get action_id for this agent (0-indexed per agent)
+                if agent_id not in self.action_id_counters:
+                    self.action_id_counters[agent_id] = 0
+                else:
+                    self.action_id_counters[agent_id] += 1
+                
+                action_id = self.action_id_counters[agent_id]
+                
+                # For RL actions, we log the high-level action name
+                action_type = 'rl_action'
+                tile_type = action_name
+                
+                # Calculate target coordinates for the action
+                x_tile, y_tile = self._calculate_rl_action_coordinates(agent_id, action_name, game)
+                action_number = rl_action_index
+                
+                # Debug: Print what coordinates we calculated
+                print(f"[RAW_ACTION_LOGGER] Action '{action_name}' for {agent_id} -> coordinates: ({x_tile}, {y_tile})")
+                
+                # Write action immediately to CSV in same format as ActionTracker
+                with open(self.csv_path, 'a', newline='') as f:
+                    writer = csv.writer(f)
+                    row = [
+                        action_id,
+                        agent_id,
+                        action_number,
+                        action_type,
+                        tile_type,
+                        x_tile or '',  # Convert None to empty string
+                        y_tile or ''   # Convert None to empty string
+                    ]
+                    writer.writerow(row)
+                                        
+            except Exception as e:
+                print(f"[RAW_ACTION_LOGGER] Error logging RL action for {agent_id}: {e}")

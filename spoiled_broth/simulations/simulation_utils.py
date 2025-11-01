@@ -11,6 +11,7 @@ from typing import Dict
 
 from .simulation_config import SimulationConfig
 from .simulation_runner import SimulationRunner
+from .path_manager import PathManager
 
 
 def setup_simulation_argument_parser() -> argparse.ArgumentParser:
@@ -35,19 +36,6 @@ def setup_simulation_argument_parser() -> argparse.ArgumentParser:
         'num_agents',
         type=int,
         help='Number of agents in the simulation'
-    )
-    
-    parser.add_argument(
-        'intent_version',
-        type=str,
-        help='Intent version identifier'
-    )
-    
-    parser.add_argument(
-        'cooperative',
-        type=int,
-        choices=[0, 1],
-        help='Whether simulation is cooperative (1) or competitive (0)'
     )
     
     parser.add_argument(
@@ -115,8 +103,8 @@ def setup_simulation_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main_simulation_pipeline(map_nr: str, num_agents: int, intent_version: str,
-                           cooperative: bool, game_version: str, training_id: str,
+def main_simulation_pipeline(map_nr: str, num_agents: int,
+                           game_version: str, training_id: str,
                            checkpoint_number: str, enable_video: bool = True,
                            cluster: str = 'cuenca', duration: int = 180,
                            tick_rate: int = 24, video_fps: int = 24,
@@ -127,28 +115,40 @@ def main_simulation_pipeline(map_nr: str, num_agents: int, intent_version: str,
     Args:
         MAP_NR: Map name identifier
         NUM_AGENTS: Number of agents
-        intent_version: Intent version identifier
-        cooperative: Whether simulation is cooperative
-        game_version: Game version identifier
-        training_id: Training identifier
-        checkpoint_number: Checkpoint number (integer or "final")
-        enable_video: Whether to enable video recording
-        cluster: Cluster type
-        duration: Simulation duration in seconds
-        tick_rate: Engine tick rate
-        video_fps: Video frame rate
-        
+        GAME_VERSION: Game version identifier
+        TRAINING_ID: Training identifier
+        CHECKPOINT_NUMBER: Checkpoint number (integer or "final")
+        ENABLE_VIDEO: Whether to enable video recording
+        CLUSTER: Cluster type
+        DURATION: Simulation duration in seconds
+        TICK_RATE: Engine tick rate
+        VIDEO_FPS: Video frame rate
+        AGENT_INITIALIZATION_PERIOD: Time period for agent initialization in seconds
     Returns:
         Dictionary containing output file paths
     """
-    # Create configuration
+    # Create a temporary config to get paths for loading speeds
+    temp_config = SimulationConfig(cluster=cluster)
+    temp_path_manager = PathManager(temp_config)
+    temp_paths = temp_path_manager.setup_paths(
+        map_nr, num_agents, game_version, training_id, checkpoint_number
+    )
+    
+    # Load agent speeds from training configuration
+    walking_speeds, cutting_speeds = temp_path_manager.load_agent_speeds_from_training(
+        temp_paths['training_path'], num_agents
+    )
+    
+    # Create configuration with loaded speeds
     config = SimulationConfig(
         cluster=cluster,
         engine_tick_rate=tick_rate,
         duration_seconds=duration,
         enable_video=enable_video,
         video_fps=video_fps,
-        agent_initialization_period=agent_initialization_period
+        agent_initialization_period=agent_initialization_period,
+        walking_speeds=walking_speeds,
+        cutting_speeds=cutting_speeds
     )
     
     # Create timestamp
@@ -160,8 +160,6 @@ def main_simulation_pipeline(map_nr: str, num_agents: int, intent_version: str,
     output_paths = runner.run_simulation(
         map_nr=map_nr,
         num_agents=num_agents,
-        intent_version=intent_version,
-        cooperative=cooperative,
         game_version=game_version,
         training_id=training_id,
         checkpoint_number=checkpoint_number,

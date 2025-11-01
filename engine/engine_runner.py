@@ -34,7 +34,7 @@ class EngineRunner:
     def _run_agents(self):
         last_action_time = 0.0
         decision_interval = 1.0 / self.ai_tick_rate
-
+        
         while not self.game.done:
             sim_time = getattr(self.engine, "sim_time", self.engine.tick_count * self.engine.tick_interval)
 

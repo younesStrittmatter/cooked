@@ -60,8 +60,8 @@ class PathManager:
 
         return None
 
-    def setup_paths(self, map_nr: str, num_agents: int, intent_version: str,
-                   cooperative: bool, game_version: str, training_id: str,
+    def setup_paths(self, map_nr: str, num_agents: int,
+                   game_version: str, training_id: str,
                    checkpoint_number: str) -> Dict[str, Path]:
         """
         Set up all necessary paths for a simulation run.
@@ -69,8 +69,6 @@ class PathManager:
         Args:
             map_nr: Name of the map
             num_agents: Number of agents
-            intent_version: Intent version identifier
-            cooperative: Whether this is a cooperative simulation
             game_version: Game version identifier
             training_id: Training identifier
             checkpoint_number: Checkpoint number to load (integer or "final")
@@ -78,16 +76,15 @@ class PathManager:
         Returns:
             Dictionary containing all relevant paths
         """
-        # Updated path structure: /data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
-        base_path = Path(f"{self.config.local_path}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}")
-        
+        # Updated path structure: /data/samuel_lozano/cooked/{game_version}/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
+        base_path = Path(f"{self.config.local_path}/data/samuel_lozano/cooked/{game_version}/map_{map_nr}")
+
         # New structure: all simulations go under /simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
         simulations_base = base_path / "simulations"
         training_simulations_path = simulations_base / f"Training_{training_id}"
 
         # Training path for model checkpoints (original structure for backward compatibility)
-        training_type = "cooperative" if cooperative else "competitive"
-        training_path = base_path / f"{training_type}/Training_{training_id}"
+        training_path = base_path / f"Training_{training_id}"
         checkpoint_dir = training_path / f"checkpoint_{checkpoint_number}"
         
         # Handle "final" checkpoint by finding the last epoch
@@ -156,3 +153,56 @@ class PathManager:
             print(f"Warning: Could not read map file {map_txt_path}: {e}")
         
         return self.config.default_grid_size
+    
+    def load_agent_speeds_from_training(self, training_path: Path, num_agents: int) -> Tuple[Dict[str, float], Dict[str, float]]:
+        """
+        Load agent walking and cutting speeds from training config file.
+        
+        Args:
+            training_path: Path to the training directory
+            num_agents: Number of agents
+            
+        Returns:
+            Tuple of (walking_speeds, cutting_speeds) dictionaries
+        """
+        walking_speeds = {}
+        cutting_speeds = {}
+        
+        # Look for config.txt file in training directory
+        config_file = training_path / "config.txt"
+        
+        if config_file.exists():
+            try:
+                with open(config_file, "r") as f:
+                    lines = f.readlines()
+                
+                # Parse config file to extract speeds
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith("WALKING_SPEEDS:"):
+                        # Extract dictionary from line like "WALKING_SPEEDS: {'ai_rl_1': 1.0, 'ai_rl_2': 1.0}"
+                        dict_str = line.split(":", 1)[1].strip()
+                        walking_speeds = eval(dict_str)  # Safe since this is our own config file
+                        print(f"Loaded walking speeds from {config_file}: {walking_speeds}")
+                    elif line.startswith("CUTTING_SPEEDS:"):
+                        # Extract dictionary from line like "CUTTING_SPEEDS: {'ai_rl_1': 1.0, 'ai_rl_2': 1.0}"
+                        dict_str = line.split(":", 1)[1].strip()
+                        cutting_speeds = eval(dict_str)  # Safe since this is our own config file
+                        print(f"Loaded cutting speeds from {config_file}: {cutting_speeds}")
+                        
+            except Exception as e:
+                print(f"Warning: Could not read speeds from {config_file}: {e}")
+        else:
+            print(f"Warning: Config file not found at {config_file}")
+        
+        # Set defaults if not loaded
+        for i in range(1, num_agents + 1):
+            agent_id = f"ai_rl_{i}"
+            if agent_id not in walking_speeds:
+                walking_speeds[agent_id] = 1.0
+                print(f"Using default walking speed 1.0 for {agent_id}")
+            if agent_id not in cutting_speeds:
+                cutting_speeds[agent_id] = 1.0
+                print(f"Using default cutting speed 1.0 for {agent_id}")
+        
+        return walking_speeds, cutting_speeds

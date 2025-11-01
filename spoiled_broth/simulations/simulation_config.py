@@ -31,6 +31,10 @@ class SimulationConfig:
     default_grid_size: Tuple[int, int] = (8, 8)
     tile_size: int = 16
     
+    # Agent speeds
+    walking_speeds: Dict[str, float] = None
+    cutting_speeds: Dict[str, float] = None
+    
     def __post_init__(self):
         if self.cluster_paths is None:
             self.cluster_paths = {
@@ -38,6 +42,12 @@ class SimulationConfig:
                 'cuenca': '',
                 'local': 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
             }
+        
+        # Initialize speed dictionaries with defaults if not provided
+        if self.walking_speeds is None:
+            self.walking_speeds = {}
+        if self.cutting_speeds is None:
+            self.cutting_speeds = {}
     
     def validate_cluster(self):
         """Validate cluster configuration."""

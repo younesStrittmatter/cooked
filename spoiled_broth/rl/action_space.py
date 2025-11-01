@@ -96,6 +96,8 @@ def convert_action_to_tile(agent, game, action_name, distance_map=None):
     Given an agent, game state, and high-level action name (with _closest or _midpoint), return the tile index to click (or None for do_nothing).
     Uses the cached distance map for efficient selection.
     """
+    print(f"[ACTION_SPACE_DEBUG] Converting action '{action_name}' for agent at ({agent.slot_x}, {agent.slot_y})")
+    
     # Parse action_name for target_mode
     if action_name.endswith("_midpoint"):
         base_action = action_name[:-9]
@@ -106,6 +108,8 @@ def convert_action_to_tile(agent, game, action_name, distance_map=None):
     else:
         base_action = action_name
         target_mode = "closest"
+
+    print(f"[ACTION_SPACE_DEBUG] Base action: '{base_action}', target_mode: '{target_mode}'")
 
     # Use passed distance_map, fallback to game.distance_map if not provided
     if distance_map is None:
@@ -188,10 +192,17 @@ def convert_action_to_tile(agent, game, action_name, distance_map=None):
 
     # Use the appropriate selection helper
     if not candidates:
+        print(f"[ACTION_SPACE_DEBUG] No candidates found for action '{action_name}'")
         return None
+    
+    print(f"[ACTION_SPACE_DEBUG] Found {len(candidates)} candidates: {candidates}")
+    
     if target_mode == "closest":
-        return find_closest_tile(agent, candidates, distance_map)
+        result = find_closest_tile(agent, candidates, distance_map)
     elif target_mode == "midpoint" and other_agent is not None:
-        return find_midpoint_tile(agent, other_agent, candidates, distance_map)
+        result = find_midpoint_tile(agent, other_agent, candidates, distance_map)
     else:
-        return find_closest_tile(agent, candidates, distance_map)
+        result = find_closest_tile(agent, candidates, distance_map)
+    
+    print(f"[ACTION_SPACE_DEBUG] Selected tile index: {result}")
+    return result

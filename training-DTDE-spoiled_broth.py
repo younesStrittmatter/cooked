@@ -69,10 +69,10 @@ else:
 
 # Hyperparameters
 NUM_ENVS = 1
-INNER_SECONDS = 360 # In seconds
+INNER_SECONDS = 180 # In seconds
 NUM_EPOCHS = 5000
-TRAIN_BATCH_SIZE = 400 
-NUM_MINIBATCHES = 20
+TRAIN_BATCH_SIZE = 200 # (Train batch size should be aprox equal to inner_seconds)
+NUM_MINIBATCHES = 10
 SHOW_EVERY_N_EPOCHS = 1
 SAVE_EVERY_N_EPOCHS = 500
 PAYOFF_MATRIX = [1,1,-2]

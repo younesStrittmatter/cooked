@@ -70,6 +70,13 @@ class Agent(agent.Agent):
             if isinstance(action, dict) and action.get("type") == "click":
                 tile_index = action.get("target")
                 if tile_index is not None:
+                    # Ensure tile_index is an integer
+                    try:
+                        tile_index = int(tile_index)
+                    except (ValueError, TypeError):
+                        print(f"Warning: Invalid tile_index '{tile_index}' for agent {self.id}")
+                        return
+                    
                     grid_w = self.grid.width
                     x = tile_index % grid_w
                     y = tile_index // grid_w

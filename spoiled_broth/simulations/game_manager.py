@@ -5,7 +5,7 @@ Author: Samuel Lozano
 """
 
 from typing import Tuple, Callable, Any
-
+from spoiled_broth.game import SpoiledBroth as Game
 from .simulation_config import SimulationConfig
 
 
@@ -14,27 +14,28 @@ class GameManager:
     
     def __init__(self, config: SimulationConfig):
         self.config = config
-    
+
     def create_game_factory(self, map_nr: str, grid_size: Tuple[int, int], 
-                           intent_version: str) -> Callable:
+                           walking_speeds: dict = None, cutting_speeds: dict = None) -> Callable:
         """
         Create a game factory function for the simulation.
         
         Args:
             map_nr: Name of the map to load
             grid_size: Grid size tuple (width, height)
-            intent_version: Intent version identifier
+            walking_speeds: Dictionary of walking speeds for each agent
+            cutting_speeds: Dictionary of cutting speeds for each agent
             
         Returns:
             Game factory function
         """
         def game_factory():
-            from spoiled_broth.game import SpoiledBroth as Game
             
             game = Game(
-                map_nr=map_nr, 
-                grid_size=grid_size, 
-                intent_version=intent_version
+                map_nr=map_nr,
+                grid_size=grid_size,
+                walking_speeds=walking_speeds,
+                cutting_speeds=cutting_speeds
             )
             
             # Reset game state

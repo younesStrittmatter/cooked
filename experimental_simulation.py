@@ -15,13 +15,13 @@ are positioned but do not perform any actions. This ensures complete system
 stabilization and prevents teleportation artifacts.
 
 Usage:
-python experimental_simulation.py <map_nr> <num_agents> <intent_version> <cooperative> <game_version> <training_id> <checkpoint_number> [options]
+python experimental_simulation.py <map_nr> <num_agents> <game_version> <training_id> <checkpoint_number> [options]
 
 For background execution:
-nohup python experimental_simulation.py <map_nr> <num_agents> <intent_version> <cooperative> <game_version> <training_id> <checkpoint_number> [options] > experimental_simulation.log 2>&1 &
+nohup python experimental_simulation.py <map_nr> <num_agents> <game_version> <training_id> <checkpoint_number> [options] > experimental_simulation.log 2>&1 &
 
 Example:
-nohup python experimental_simulation.py baseline_division_of_labor 2 v3.1 1 classic 2025-09-13_13-27-52 final --enable_video true > experimental_simulation.log 2>&1 &
+nohup python experimental_simulation.py baseline_division_of_labor 2 classic 2025-09-13_13-27-52 final --enable_video true > experimental_simulation.log 2>&1 &
 """
 
 import sys
@@ -88,8 +88,6 @@ def main():
     print(f"Starting experimental simulation at: {startup_time}")
     print(f"Map: {args.map_nr}")
     print(f"Agents: {args.num_agents}")
-    print(f"Intent version: {args.intent_version}")
-    print(f"Cooperative: {'Yes' if args.cooperative else 'No'}")
     print(f"Game version: {args.game_version}")
     print(f"Training ID: {args.training_id}")
     print(f"Checkpoint: {args.checkpoint_number}")
@@ -106,8 +104,6 @@ def main():
         output_paths = main_simulation_pipeline(
             map_nr=args.map_nr,
             num_agents=args.num_agents,
-            intent_version=args.intent_version,
-            cooperative=bool(args.cooperative),
             game_version=args.game_version,
             training_id=args.training_id,
             checkpoint_number=args.checkpoint_number,

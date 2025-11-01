@@ -81,7 +81,7 @@ def get_action_type_list(game_mode):
         raise ValueError(f"Unknown game mode: {game_mode}")
 
 # ---- Classic mode without ownership awareness ---- #
-def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, accessibility_map):
+def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, accessibility_map, update_totals=True):
     """
     Determine the type of action based on the tile clicked and agent state.
     """
@@ -113,11 +113,13 @@ def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, acc
         valid_items = ["tomato_cut", "pumpkin_cut", "cabbage_cut"]
         if (holding_item == "plate" and item_on_counter in valid_items) or (holding_item in valid_items and item_on_counter == "plate"):
             agent_events[agent_id]["salad"] += 1
-            self.total_agent_events[agent_id]["salad"] += 1
+            if update_totals:
+                self.total_agent_events[agent_id]["salad"] += 1
             return ACTION_TYPE_SALAD_ASSEMBLY, agent_events
         elif holding_item is not None or item_on_counter is not None:
             agent_events[agent_id]["counter"] += 1
-            self.total_agent_events[agent_id]["counter"] += 1
+            if update_totals:
+                self.total_agent_events[agent_id]["counter"] += 1
             return ACTION_TYPE_USEFUL_COUNTER, agent_events
         else:
             return ACTION_TYPE_USELESS_COUNTER, agent_events
@@ -127,14 +129,16 @@ def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, acc
         if getattr(tile, "item", None) == "plate":
             if holding_item is None:
                 agent_events[agent_id]["plate"] += 1
-                self.total_agent_events[agent_id]["plate"] += 1
+                if update_totals:
+                    self.total_agent_events[agent_id]["plate"] += 1
                 return ACTION_TYPE_USEFUL_PLATE_DISPENSER, agent_events
             else:
                 return ACTION_TYPE_USELESS_PLATE_DISPENSER, agent_events
         else:
             if holding_item is None:
                 agent_events[agent_id]["raw_food"] += 1
-                self.total_agent_events[agent_id]["raw_food"] += 1
+                if update_totals:
+                    self.total_agent_events[agent_id]["raw_food"] += 1
                 return ACTION_TYPE_USEFUL_FOOD_DISPENSER, agent_events
             else:
                 return ACTION_TYPE_USELESS_FOOD_DISPENSER, agent_events
@@ -143,11 +147,11 @@ def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, acc
     if tile._type == 4:
         # Agent holds an item that can be cut
         valid_items = ["tomato", "pumpkin", "cabbage"]
-        if holding_item in valid_items and self.counted_cuts[agent_id] is False:
-            # Only count cut if not already counted for this item
+        if holding_item in valid_items:
+            # Always record the event for immediate rewards
             agent_events[agent_id]["cut"] += 1
-            self.total_agent_events[agent_id]["cut"] += 1
-            self.counted_cuts[agent_id] = True
+            if update_totals:
+                self.total_agent_events[agent_id]["cut"] += 1
             return ACTION_TYPE_USEFUL_CUTTING_BOARD, agent_events
         else:
             return ACTION_TYPE_USELESS_CUTTING_BOARD, agent_events
@@ -159,7 +163,8 @@ def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, acc
 
         if holding_item in valid_items:
             agent_events[agent_id]["deliver"] += 1
-            self.total_agent_events[agent_id]["deliver"] += 1
+            if update_totals:
+                self.total_agent_events[agent_id]["deliver"] += 1
             return ACTION_TYPE_USEFUL_DELIVERY, agent_events
         else:
             return ACTION_TYPE_USELESS_DELIVERY, agent_events
@@ -168,7 +173,7 @@ def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, acc
     return ACTION_TYPE_FLOOR, agent_events
 
 # ---- Competition mode with ownership awareness ---- #
-def get_action_type_competition(self, tile, agent, agent_id, agent_events, agent_food_type, x, y, accessibility_map):
+def get_action_type_competition(self, tile, agent, agent_id, agent_events, agent_food_type, x, y, accessibility_map, update_totals=True):
     """
     Determine the type of action based on the tile clicked and agent state.
     Uses agent_food_type to distinguish own food from other food.
@@ -209,24 +214,29 @@ def get_action_type_competition(self, tile, agent, agent_id, agent_events, agent
             if holding_item in valid_items:
                 if holding_item.startswith(own_food):
                     agent_events[agent_id]["salad_own"] += 1
-                    self.total_agent_events[agent_id]["salad_own"] += 1
+                    if update_totals:
+                        self.total_agent_events[agent_id]["salad_own"] += 1
                     return ACTION_TYPE_OWN_SALAD_ASSEMBLY, agent_events
                 elif holding_item.startswith(other_food):
                     agent_events[agent_id]["salad_other"] += 1
-                    self.total_agent_events[agent_id]["salad_other"] += 1
+                    if update_totals:
+                        self.total_agent_events[agent_id]["salad_other"] += 1
                     return ACTION_TYPE_OTHER_SALAD_ASSEMBLY, agent_events
             else:
                 if item_on_counter.startswith(own_food):
                     agent_events[agent_id]["salad_own"] += 1
-                    self.total_agent_events[agent_id]["salad_own"] += 1
+                    if update_totals:
+                        self.total_agent_events[agent_id]["salad_own"] += 1
                     return ACTION_TYPE_OWN_SALAD_ASSEMBLY, agent_events
                 elif item_on_counter.startswith(other_food):
                     agent_events[agent_id]["salad_other"] += 1
-                    self.total_agent_events[agent_id]["salad_other"] += 1
+                    if update_totals:
+                        self.total_agent_events[agent_id]["salad_other"] += 1
                     return ACTION_TYPE_OTHER_SALAD_ASSEMBLY, agent_events
         elif holding_item is not None or item_on_counter is not None:
             agent_events[agent_id]["counter"] += 1
-            self.total_agent_events[agent_id]["counter"] += 1
+            if update_totals:
+                self.total_agent_events[agent_id]["counter"] += 1
             return ACTION_TYPE_USEFUL_COUNTER, agent_events
         else:
             return ACTION_TYPE_USELESS_COUNTER, agent_events
@@ -237,21 +247,24 @@ def get_action_type_competition(self, tile, agent, agent_id, agent_events, agent
         if disp_item == "plate":
             if holding_item is None:
                 agent_events[agent_id]["plate"] += 1
-                self.total_agent_events[agent_id]["plate"] += 1
+                if update_totals:
+                    self.total_agent_events[agent_id]["plate"] += 1
                 return ACTION_TYPE_USEFUL_PLATE_DISPENSER, agent_events
             else:
                 return ACTION_TYPE_USELESS_PLATE_DISPENSER, agent_events
         elif disp_item == own_food:
             if holding_item is None:
                 agent_events[agent_id]["raw_food_own"] += 1
-                self.total_agent_events[agent_id]["raw_food_own"] += 1
+                if update_totals:
+                    self.total_agent_events[agent_id]["raw_food_own"] += 1
                 return ACTION_TYPE_OWN_USEFUL_FOOD_DISPENSER, agent_events
             else:
                 return ACTION_TYPE_OWN_USELESS_FOOD_DISPENSER, agent_events
         elif disp_item == other_food:
             if holding_item is None:
                 agent_events[agent_id]["raw_food_other"] += 1
-                self.total_agent_events[agent_id]["raw_food_other"] += 1
+                if update_totals:
+                    self.total_agent_events[agent_id]["raw_food_other"] += 1
                 return ACTION_TYPE_OTHER_USEFUL_FOOD_DISPENSER, agent_events
             else:
                 return ACTION_TYPE_OTHER_USELESS_FOOD_DISPENSER, agent_events
@@ -261,16 +274,17 @@ def get_action_type_competition(self, tile, agent, agent_id, agent_events, agent
         # Item in hand can be cut (not already cut/salad)
         valid_items = ["tomato", "pumpkin", "cabbage"]
         # Check if it's own or other food
-        if holding_item in valid_items and self.counted_cuts.get(agent_id, False) is False:
+        if holding_item in valid_items:
             if holding_item == own_food:
                 agent_events[agent_id]["cut_own"] += 1
-                self.total_agent_events[agent_id]["cut_own"] += 1
-                self.counted_cuts[agent_id] = True
+                if update_totals:
+                    self.total_agent_events[agent_id]["cut_own"] += 1
                 return ACTION_TYPE_OWN_USEFUL_CUTTING_BOARD, agent_events
             elif holding_item == other_food:
                 agent_events[agent_id]["cut_other"] += 1
-                self.total_agent_events[agent_id]["cut_other"] += 1
-            return ACTION_TYPE_OTHER_USEFUL_CUTTING_BOARD, agent_events
+                if update_totals:
+                    self.total_agent_events[agent_id]["cut_other"] += 1
+                return ACTION_TYPE_OTHER_USEFUL_CUTTING_BOARD, agent_events
         return ACTION_TYPE_USELESS_CUTTING_BOARD, agent_events
 
     # Tile type 5: delivery
@@ -281,11 +295,13 @@ def get_action_type_competition(self, tile, agent, agent_id, agent_events, agent
         if holding_item in valid_items:
             if holding_item.startswith(own_food):
                 agent_events[agent_id]["deliver_own"] += 1
-                self.total_agent_events[agent_id]["deliver_own"] += 1
+                if update_totals:
+                    self.total_agent_events[agent_id]["deliver_own"] += 1
                 return ACTION_TYPE_OWN_USEFUL_DELIVERY, agent_events
             elif holding_item.startswith(other_food):
                 agent_events[agent_id]["deliver_other"] += 1
-                self.total_agent_events[agent_id]["deliver_other"] += 1
+                if update_totals:
+                    self.total_agent_events[agent_id]["deliver_other"] += 1
                 return ACTION_TYPE_OTHER_USEFUL_DELIVERY, agent_events
         else:
             return ACTION_TYPE_USELESS_DELIVERY, agent_events
@@ -293,13 +309,13 @@ def get_action_type_competition(self, tile, agent, agent_id, agent_events, agent
     # Default fallback
     return ACTION_TYPE_FLOOR, agent_events
 
-def get_action_type_and_agent_events(self, tile, agent, agent_id=None, agent_events=None, agent_food_type=None, game_mode="classic", x=None, y=None, accessibility_map=None):
+def get_action_type_and_agent_events(self, tile, agent, agent_id=None, agent_events=None, agent_food_type=None, game_mode="classic", x=None, y=None, accessibility_map=None, update_totals=True):
     """
     Wrapper to select appropriate action type function based on game mode.
     """
     if game_mode == "classic":
-        return get_action_type_classic(self, tile, agent, agent_id, agent_events, x=x, y=y, accessibility_map=accessibility_map)
+        return get_action_type_classic(self, tile, agent, agent_id, agent_events, x=x, y=y, accessibility_map=accessibility_map, update_totals=update_totals)
     elif game_mode == "competition":
-        return get_action_type_competition(self, tile, agent, agent_id, agent_events, agent_food_type, x=x, y=y, accessibility_map=accessibility_map)
+        return get_action_type_competition(self, tile, agent, agent_id, agent_events, agent_food_type, x=x, y=y, accessibility_map=accessibility_map, update_totals=update_totals)
     else:
         raise ValueError(f"Unknown game mode: {game_mode}")
