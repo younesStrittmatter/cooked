@@ -154,10 +154,16 @@ def game_to_obs_vector_classic(game, agent_id, distance_map):
             obs_vector.append(1) # Fallback for agent time
             obs_vector.append(1) # Fallback for midpoint time
 
-    # Distance to other agent
-    dist_to_other = get_distance(distance_map, agent_pos, other_pos)
-    time_to_other = (dist_to_other / agent_walking_speed) / normalization_factor if dist_to_other is not None else 1
-    obs_vector.append(time_to_other)
+    # Distance to other agent - both Euclidean and pathfinding distances
+    # 1. Euclidean distance (straight-line distance)
+    euclidean_dist = math.sqrt((agent_pos[0] - other_pos[0])**2 + (agent_pos[1] - other_pos[1])**2)
+    euclidean_time = (euclidean_dist / agent_walking_speed) / normalization_factor
+    obs_vector.append(euclidean_time)
+    
+    # 2. Pathfinding distance (using distance map for accessibility)
+    pathfinding_dist = get_distance(distance_map, agent_pos, other_pos)
+    pathfinding_time = (pathfinding_dist / agent_walking_speed) / normalization_factor if pathfinding_dist is not None else 1
+    obs_vector.append(pathfinding_time)
 
     # One-hot agent inventory
     agent_inventory = np.zeros(len(item_names), dtype=np.float32)
@@ -264,10 +270,16 @@ def game_to_obs_vector_competition(game, agent_id, distance_map):
             obs_vector.append(1) # Fallback for agent time
             obs_vector.append(1) # Fallback for midpoint time
 
-    # Distance to other agent
-    dist_to_other = get_distance(distance_map, agent_pos, other_pos)
-    time_to_other = (dist_to_other / agent_walking_speed) / normalization_factor if dist_to_other is not None else 1
-    obs_vector.append(time_to_other)
+    # Distance to other agent - both Euclidean and pathfinding distances
+    # 1. Euclidean distance (straight-line distance)
+    euclidean_dist = math.sqrt((agent_pos[0] - other_pos[0])**2 + (agent_pos[1] - other_pos[1])**2)
+    euclidean_time = (euclidean_dist / agent_walking_speed) / normalization_factor
+    obs_vector.append(euclidean_time)
+    
+    # 2. Pathfinding distance (using distance map for accessibility)
+    pathfinding_dist = get_distance(distance_map, agent_pos, other_pos)
+    pathfinding_time = (pathfinding_dist / agent_walking_speed) / normalization_factor if pathfinding_dist is not None else 1
+    obs_vector.append(pathfinding_time)
 
     # One-hot agent inventory
     agent_inventory = np.zeros(len(item_names), dtype=np.float32)

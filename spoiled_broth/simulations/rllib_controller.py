@@ -54,7 +54,9 @@ class RLlibController(Controller):
                 if hasattr(game, 'frame_count'):
                     frame_count = getattr(game, 'frame_count')
                     
-                    if frame_count < self.agent_initialization_frames:
+                    # Use <= instead of < to be more conservative and ensure agents don't act
+                    # until the initialization period is completely finished
+                    if frame_count <= self.agent_initialization_frames:
                         # During initialization, return None (no action)
                         return None
                     
@@ -71,22 +73,17 @@ class RLlibController(Controller):
         if getattr(self.agent, 'is_busy', False):
             current_action = getattr(self.agent, 'current_action', None)
             is_moving = getattr(self.agent, 'is_moving', True)
-            
-            # Debug logging for busy state
-            print(f"[RLLIB_DEBUG] Agent {self.agent_id} is busy, is_moving: {is_moving}, has_current_action: {current_action is not None}")
-            
+                        
             # Check if the agent has finished moving
             if not is_moving:
                 # Agent has finished moving, mark as not busy
                 self.agent.is_busy = False
                 if hasattr(self.agent, 'current_action'):
                     self.agent.current_action = None
-                print(f"[RLLIB_DEBUG] Agent {self.agent_id} completed movement, setting is_busy = False")
             elif current_action is not None:
                 # Check if action has been running too long (timeout mechanism)
                 action_start_time = current_action.get('start_time', time.time())
                 if time.time() - action_start_time > 10.0:  # 10 second timeout
-                    print(f"[RLLIB_DEBUG] Agent {self.agent_id} action timed out, resetting busy state")
                     self.agent.is_busy = False
                     self.agent.current_action = None
                 else:
@@ -94,8 +91,19 @@ class RLlibController(Controller):
                     return None
             else:
                 # Busy but no current action - reset immediately
-                print(f"[RLLIB_DEBUG] Agent {self.agent_id} was busy but no current_action, resetting")
                 self.agent.is_busy = False
+        
+        # Check if agent is still moving from a previous action
+        elif getattr(self.agent, 'current_action', None) is not None:
+            is_moving = getattr(self.agent, 'is_moving', False)
+            current_action = self.agent.current_action
+                        
+            if is_moving:
+                # Still moving to target, don't issue new action
+                return None
+            else:
+                # Reached target, clear action tracking
+                self.agent.current_action = None
         
         # Check if agent is in cutting state and still needs to wait
         if getattr(self.agent, 'is_cutting', False):
@@ -165,41 +173,35 @@ class RLlibController(Controller):
                 print(f"[RLLIB_DEBUG] Warning: No distance_map available for action '{action_name}', skipping action")
                 return None
                 
-            print(f"[RLLIB_DEBUG] Converting action '{action_name}' to tile for agent {self.agent_id}")
             tile_index = convert_action_to_tile(self.agent, self.agent.game, action_name, distance_map=distance_map)
-            print(f"[RLLIB_DEBUG] Action '{action_name}' -> tile_index: {tile_index}")
             
             if tile_index is not None:
                 grid = self.agent.grid
                 x = tile_index % grid.width
                 y = tile_index // grid.width
                 tile = grid.tiles[x][y]
-                print(f"[RLLIB_DEBUG] Tile at ({x}, {y}): {tile}, has_click: {hasattr(tile, 'click') if tile else False}")
                 if tile and hasattr(tile, "click"):
-                    # Mark agent as busy when starting new action
-                    self.agent.is_busy = True
+                    # Don't mark agent as busy immediately - let movement happen first
+                    # The agent will be marked as busy by the intent system when it reaches the tile
                     action_dict = {
                         "type": "click", 
                         "target": tile_index,  # Use numeric tile_index instead of tile.id
                         "start_time": time.time()
                     }
-                    # Store the current action for tracking
+                    # Store the current action for tracking, but don't set is_busy yet
                     self.agent.current_action = action_dict
                     
                     # Notify state manager of action
                     if hasattr(self, 'agent_state_manager'):
                         self.agent_state_manager.update_agent_action(self.agent_id)
                     
-                    print(f"[RLLIB_DEBUG] Action successful: {action_dict}")
                     return action_dict
                 else:
-                    print(f"[RLLIB_DEBUG] Warning: Tile at index {tile_index} is invalid or has no click method.")
                     return None
             else:
-                print(f"[RLLIB_DEBUG] Warning: convert_action_to_tile returned None for action '{action_name}'")
                 return None
         else:
-            print(f"Warning: Action index {action} is out of bounds for action space of size {len(action_space)}.")
+            return None
         
         # If we reach here, no valid action was taken
         return None        

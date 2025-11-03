@@ -26,7 +26,7 @@ class SpoiledBroth(BaseGame):
         self.walking_time = walking_time
         self.cutting_time = cutting_time
         max_distance = load_max_distance(map_nr)
-        self.normalization_factor = max_distance / self.walking_time + self.cutting_time
+        self.normalization_factor = max_distance / self.walking_time + self.cutting_time # Walking_time in tiles/second + cutting_time in seconds
 
         self.clickable_indices = []  # Initialize clickable indices storage
         # Track action completion status for each agent

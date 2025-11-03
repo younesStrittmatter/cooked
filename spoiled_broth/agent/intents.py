@@ -62,7 +62,7 @@ class CuttingBoardIntent(_base_intent.Intent):
                 # Give cut item directly to agent (instant cutting)
                 if hasattr(agent, 'is_simulation') and agent.is_simulation:
                     agent.provisional_item = cut_item
-                    agent.item = None
+                    agent.item = cut_item
                     # Set agent cutting state with start time for controller to manage waiting
                     agent.is_busy = True
                     agent.cutting_start_time = time.time()

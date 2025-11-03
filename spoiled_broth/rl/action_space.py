@@ -96,8 +96,6 @@ def convert_action_to_tile(agent, game, action_name, distance_map=None):
     Given an agent, game state, and high-level action name (with _closest or _midpoint), return the tile index to click (or None for do_nothing).
     Uses the cached distance map for efficient selection.
     """
-    print(f"[ACTION_SPACE_DEBUG] Converting action '{action_name}' for agent at ({agent.slot_x}, {agent.slot_y})")
-    
     # Parse action_name for target_mode
     if action_name.endswith("_midpoint"):
         base_action = action_name[:-9]
@@ -108,8 +106,6 @@ def convert_action_to_tile(agent, game, action_name, distance_map=None):
     else:
         base_action = action_name
         target_mode = "closest"
-
-    print(f"[ACTION_SPACE_DEBUG] Base action: '{base_action}', target_mode: '{target_mode}'")
 
     # Use passed distance_map, fallback to game.distance_map if not provided
     if distance_map is None:
@@ -155,35 +151,35 @@ def convert_action_to_tile(agent, game, action_name, distance_map=None):
         def is_delivery(tile):
             return getattr(tile, "_type", None) == 5
         candidates = get_tiles_by_type(is_delivery)
-    elif base_action == "put_down_item_on_free_counter_closest" or base_action == "put_down_item_on_free_counter_midpoint":
+    elif base_action == "put_down_item_on_free_counter":
         def is_free_counter(tile):
             return getattr(tile, "_type", None) == 2 and getattr(tile, "item", None) is None
         candidates = get_tiles_by_type(is_free_counter)
-    elif base_action == "pick_up_tomato_from_counter_closest" or base_action == "pick_up_tomato_from_counter_midpoint":
+    elif base_action == "pick_up_tomato_from_counter":
         def is_tomato_on_counter(tile):
             return getattr(tile, "_type", None) == 2 and getattr(tile, "item", None) == "tomato"
         candidates = get_tiles_by_type(is_tomato_on_counter)
-    elif base_action == "pick_up_pumpkin_from_counter_closest" or base_action == "pick_up_pumpkin_from_counter_midpoint":
+    elif base_action == "pick_up_pumpkin_from_counter":
         def is_pumpkin_on_counter(tile):
             return getattr(tile, "_type", None) == 2 and getattr(tile, "item", None) == "pumpkin"
         candidates = get_tiles_by_type(is_pumpkin_on_counter)
-    elif base_action == "pick_up_plate_from_counter_closest" or base_action == "pick_up_plate_from_counter_midpoint":
+    elif base_action == "pick_up_plate_from_counter":
         def is_plate_on_counter(tile):
             return getattr(tile, "_type", None) == 2 and getattr(tile, "item", None) == "plate"
         candidates = get_tiles_by_type(is_plate_on_counter)
-    elif base_action == "pick_up_tomato_cut_from_counter_closest" or base_action == "pick_up_tomato_cut_from_counter_midpoint":
+    elif base_action == "pick_up_tomato_cut_from_counter":
         def is_tomato_cut_on_counter(tile):
             return getattr(tile, "_type", None) == 2 and getattr(tile, "item", None) == "tomato_cut"
         candidates = get_tiles_by_type(is_tomato_cut_on_counter)
-    elif base_action == "pick_up_pumpkin_cut_from_counter_closest" or base_action == "pick_up_pumpkin_cut_from_counter_midpoint":
+    elif base_action == "pick_up_pumpkin_cut_from_counter":
         def is_pumpkin_cut_on_counter(tile):
             return getattr(tile, "_type", None) == 2 and getattr(tile, "item", None) == "pumpkin_cut"
         candidates = get_tiles_by_type(is_pumpkin_cut_on_counter)
-    elif base_action == "pick_up_tomato_salad_from_counter_closest" or base_action == "pick_up_tomato_salad_from_counter_midpoint":
+    elif base_action == "pick_up_tomato_salad_from_counter":
         def is_tomato_salad_on_counter(tile):
             return getattr(tile, "_type", None) == 2 and getattr(tile, "item", None) == "tomato_salad"
         candidates = get_tiles_by_type(is_tomato_salad_on_counter)
-    elif base_action == "pick_up_pumpkin_salad_from_counter_closest" or base_action == "pick_up_pumpkin_salad_from_counter_midpoint":
+    elif base_action == "pick_up_pumpkin_salad_from_counter":
         def is_pumpkin_salad_on_counter(tile):
             return getattr(tile, "_type", None) == 2 and getattr(tile, "item", None) == "pumpkin_salad"
         candidates = get_tiles_by_type(is_pumpkin_salad_on_counter)
@@ -192,11 +188,8 @@ def convert_action_to_tile(agent, game, action_name, distance_map=None):
 
     # Use the appropriate selection helper
     if not candidates:
-        print(f"[ACTION_SPACE_DEBUG] No candidates found for action '{action_name}'")
         return None
-    
-    print(f"[ACTION_SPACE_DEBUG] Found {len(candidates)} candidates: {candidates}")
-    
+        
     if target_mode == "closest":
         result = find_closest_tile(agent, candidates, distance_map)
     elif target_mode == "midpoint" and other_agent is not None:
@@ -204,5 +197,4 @@ def convert_action_to_tile(agent, game, action_name, distance_map=None):
     else:
         result = find_closest_tile(agent, candidates, distance_map)
     
-    print(f"[ACTION_SPACE_DEBUG] Selected tile index: {result}")
     return result

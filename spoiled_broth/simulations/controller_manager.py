@@ -36,7 +36,7 @@ class ControllerManager:
         is_competition = game_version.upper() == "COMPETITION"
         
         # Convert initialization period from seconds to frames. Add a small buffer to account for AI/engine synchronization
-        agent_initialization_frames = int((self.config.agent_initialization_period) * tick_rate)
+        agent_initialization_frames = int((self.config.agent_initialization_period + 0.01) * tick_rate)  # +0.01s buffer
         
         controllers = {}
         

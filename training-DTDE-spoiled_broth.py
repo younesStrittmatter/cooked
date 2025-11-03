@@ -157,12 +157,23 @@ ray.init(num_cpus=NUM_CPUS)
 torch.set_num_threads(NUM_CPUS)
 
 # Run training
-trainer, current_date = make_train_rllib(config)
+trainer, current_date, final_episode_count = make_train_rllib(config)
 
 # Save the final model
 path = os.path.join(config["SAVE_DIR"], f"Training_{current_date}")
 os.makedirs(path, exist_ok=True)
 
+# Update config with final episode count
+if final_episode_count is not None:
+    config["NUM_EPISODES"] = final_episode_count
+    
+    # Append the final episode count to config.txt
+    config_path = os.path.join(path, "config.txt")
+    with open(config_path, "a") as f:
+        f.write(f"NUM_EPISODES: {final_episode_count}\n")
+
 # Save the final policy
 final_checkpoint = trainer.save(os.path.join(path, f"checkpoint_final"))
 print(f"Final checkpoint saved at {final_checkpoint}")
+if final_episode_count is not None:
+    print(f"Training completed after {final_episode_count} episodes")

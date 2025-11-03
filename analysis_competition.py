@@ -134,7 +134,7 @@ def generate_individual_attitude_plots(df, paths, unique_individual_attitudes, c
                 filtered_subset = df[mask_conditions & (mask_agent_1 | mask_agent_2)].copy()
                 
                 if len(filtered_subset) > 0:
-                    filtered_subset["epoch_block"] = (filtered_subset["epoch"] // N)
+                    filtered_subset["episode_block"] = (filtered_subset["episode"] // N)
                     
                     # Plot delivery metrics
                     plt.figure(figsize=(12, 6))
@@ -142,10 +142,10 @@ def generate_individual_attitude_plots(df, paths, unique_individual_attitudes, c
                     # Combine metrics from both agents when they have this attitude
                     delivery_own_combined = []
                     delivery_other_combined = []
-                    middle_epochs = []
+                    middle_episodes = []
                     
-                    for epoch_block in filtered_subset["epoch_block"].unique():
-                        block_data = filtered_subset[filtered_subset["epoch_block"] == epoch_block]
+                    for episode_block in filtered_subset["episode_block"].unique():
+                        block_data = filtered_subset[filtered_subset["episode_block"] == episode_block]
                         
                         own_total = 0
                         other_total = 0
@@ -164,14 +164,14 @@ def generate_individual_attitude_plots(df, paths, unique_individual_attitudes, c
                         if count > 0:
                             delivery_own_combined.append(own_total / count)
                             delivery_other_combined.append(other_total / count)
-                            middle_epochs.append(block_data["epoch"].median())
+                            middle_episodes.append(block_data["episode"].median())
                     
-                    plt.plot(middle_epochs, delivery_own_combined, label="Delivered Own", color="#A9DFBF")
-                    plt.plot(middle_epochs, delivery_other_combined, label="Delivered Other", color="#27AE60")
+                    plt.plot(middle_episodes, delivery_own_combined, label="Delivered Own", color="#A9DFBF")
+                    plt.plot(middle_episodes, delivery_other_combined, label="Delivered Other", color="#27AE60")
                     
                     plt.title(f"Delivery Metrics - Individual Attitude {individual_attitude} ({degree:.1f}°)\n"
                              f"Game Type {game_type}, LR {lr} (Smoothed {N})")
-                    plt.xlabel("Epoch")
+                    plt.xlabel("Episode")
                     plt.ylabel("Mean value")
                     plt.legend()
                     plt.tight_layout()
@@ -200,33 +200,33 @@ def generate_combined_attitude_plots(df, paths, unique_attitudes, config):
             
             if len(game_filtered) > 0:
                 game_filtered = game_filtered.copy()
-                game_filtered["epoch_block"] = (game_filtered["epoch"] // N)
+                game_filtered["episode_block"] = (game_filtered["episode"] // N)
                 
                 # Plot combined delivery metrics
                 plt.figure(figsize=(12, 6))
                 
                 # Agent 1 metrics
-                block_means_own_1 = game_filtered.groupby("epoch_block")["delivered_own_ai_rl_1"].mean()
-                block_means_other_1 = game_filtered.groupby("epoch_block")["delivered_other_ai_rl_1"].mean()
-                middle_epochs = game_filtered.groupby("epoch_block")["epoch"].median()
+                block_means_own_1 = game_filtered.groupby("episode_block")["delivered_own_ai_rl_1"].mean()
+                block_means_other_1 = game_filtered.groupby("episode_block")["delivered_other_ai_rl_1"].mean()
+                middle_episodes = game_filtered.groupby("episode_block")["episode"].median()
                 
-                plt.plot(middle_epochs, block_means_own_1, label=f"Agent 1 Own ({att1_title})", 
+                plt.plot(middle_episodes, block_means_own_1, label=f"Agent 1 Own ({att1_title})", 
                         color="#A9DFBF", linestyle='-')
-                plt.plot(middle_epochs, block_means_other_1, label=f"Agent 1 Other ({att1_title})", 
+                plt.plot(middle_episodes, block_means_other_1, label=f"Agent 1 Other ({att1_title})", 
                         color="#27AE60", linestyle='-')
                 
                 # Agent 2 metrics
-                block_means_own_2 = game_filtered.groupby("epoch_block")["delivered_own_ai_rl_2"].mean()
-                block_means_other_2 = game_filtered.groupby("epoch_block")["delivered_other_ai_rl_2"].mean()
+                block_means_own_2 = game_filtered.groupby("episode_block")["delivered_own_ai_rl_2"].mean()
+                block_means_other_2 = game_filtered.groupby("episode_block")["delivered_other_ai_rl_2"].mean()
                 
-                plt.plot(middle_epochs, block_means_own_2, label=f"Agent 2 Own ({att2_title})", 
+                plt.plot(middle_episodes, block_means_own_2, label=f"Agent 2 Own ({att2_title})", 
                         color="#AED6F1", linestyle='--')
-                plt.plot(middle_epochs, block_means_other_2, label=f"Agent 2 Other ({att2_title})", 
+                plt.plot(middle_episodes, block_means_other_2, label=f"Agent 2 Other ({att2_title})", 
                         color="#2980B9", linestyle='--')
                 
                 plt.title(f"Combined Delivery Metrics - Attitude {attitude}\n"
                          f"Game Type {game_type} (Smoothed {N})")
-                plt.xlabel("Epoch")
+                plt.xlabel("Episode")
                 plt.ylabel("Mean deliveries")
                 plt.legend()
                 plt.tight_layout()

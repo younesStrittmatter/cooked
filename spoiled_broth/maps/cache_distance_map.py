@@ -37,10 +37,23 @@ def get_clickable_tiles(game):
 def compute_distance_map(game, grid, cache_path=None):
 	"""
 	Returns: dict[(from_x, from_y)][(to_x, to_y)] = path_length (float or None)
+	Computes distances from all floor tiles to all reachable tiles (both floor and clickable).
 	Optionally caches to a pickle file.
 	"""
 	floor_tiles = get_floor_tiles(grid)
 	clickable_tiles = get_clickable_tiles(game)
+	
+	# Create a combined list of all target tiles (floor + clickable positions)
+	all_target_positions = set()
+	
+	# Add all floor tile positions
+	for floor_pos in floor_tiles:
+		all_target_positions.add(floor_pos)
+	
+	# Add all clickable tile positions  
+	for idx, x, y in clickable_tiles:
+		all_target_positions.add((x, y))
+	
 	# Helper to get adjacent walkable tiles
 	def get_adjacent_walkable(x, y):
 		adj = []
@@ -51,25 +64,49 @@ def compute_distance_map(game, grid, cache_path=None):
 				if hasattr(tile, 'is_walkable') and tile.is_walkable:
 					adj.append((nx, ny))
 		return adj
+
 	distance_map = {}
 	max_distance = 0
+	
 	for from_xy in floor_tiles:
 		distance_map[from_xy] = {}
 		from_node = a_star.Node(*from_xy)
-		for idx, to_x, to_y in clickable_tiles:
-			adj_walkable = get_adjacent_walkable(to_x, to_y)
-			min_dist = None
-			for adj_xy in adj_walkable:
-				to_node = a_star.Node(*adj_xy)
+		
+		for to_xy in all_target_positions:
+			to_x, to_y = to_xy
+			
+			# If it's the same position, distance is 0
+			if from_xy == to_xy:
+				distance_map[from_xy][to_xy] = 0.0
+				continue
+			
+			# Check if target position is walkable (for floor tiles)
+			target_tile = grid.tiles[to_x][to_y]
+			if hasattr(target_tile, 'is_walkable') and target_tile.is_walkable:
+				# Direct path to walkable tile
+				to_node = a_star.Node(to_x, to_y)
 				path = a_star.find_path(grid, from_node, to_node)
 				dist = a_star.path_length(path) if path else None
-				if dist is not None and (min_dist is None or dist < min_dist):
-					min_dist = dist
-			if min_dist is None:
-				print(f"[DEBUG] No path from {from_xy} to any adjacent walkable of {(to_x, to_y)}")
-			distance_map[from_xy][(to_x, to_y)] = min_dist
-			if min_dist is not None and min_dist > max_distance:
-				max_distance = min_dist
+				distance_map[from_xy][to_xy] = dist
+				if dist is not None and dist > max_distance:
+					max_distance = dist
+			else:
+				# For non-walkable tiles (like clickable tiles), find path to adjacent walkable tiles
+				adj_walkable = get_adjacent_walkable(to_x, to_y)
+				min_dist = None
+				for adj_xy in adj_walkable:
+					to_node = a_star.Node(*adj_xy)
+					path = a_star.find_path(grid, from_node, to_node)
+					dist = a_star.path_length(path) if path else None
+					# Add 1 for the step from adjacent tile to the target tile
+					if dist is not None:
+						dist += 1.0
+					if dist is not None and (min_dist is None or dist < min_dist):
+						min_dist = dist
+				
+				distance_map[from_xy][to_xy] = min_dist
+				if min_dist is not None and min_dist > max_distance:
+					max_distance = min_dist
 	if cache_path:
 		# Save a fast numpy representation (.npz) with separate from/to position lists
 		try:
@@ -101,14 +138,16 @@ def compute_distance_map(game, grid, cache_path=None):
 		except Exception as e:
 			print(f"[WARNING] Failed to save .npz distance map for {cache_path}: {e}")
 		# Also write a readable .txt version
-		readable_dir = os.path.join(os.path.dirname(cache_path), "../readable_distances")
+		readable_dir = os.path.join(os.path.dirname(cache_path), "./readable_distances")
 		os.makedirs(readable_dir, exist_ok=True)
 		base_noext = os.path.splitext(os.path.basename(cache_path))[0]
 		txt_path = os.path.join(readable_dir, base_noext + '.txt')
 		with open(txt_path, 'w') as f:
-			for from_xy, to_dict in distance_map.items():
+			for from_xy, to_dict in sorted(distance_map.items()):
 				f.write(f"FROM {from_xy}\n")
-				for to_xy, dist in to_dict.items():
+				# Sort by distance (None values go to the end)
+				sorted_items = sorted(to_dict.items(), key=lambda x: (x[1] is None, x[1] if x[1] is not None else float('inf')))
+				for to_xy, dist in sorted_items:
 					f.write(f"  TO {to_xy}: {dist}\n")
 		# Write max_distance to readable txt
 		txt_max_path = os.path.join(readable_dir, base_noext + '_max_distance.txt')
@@ -134,8 +173,8 @@ def load_or_compute_distance_map(game, grid, map_id, cache_dir="./distance_cache
 # --- Main script for CLI execution ---
 if __name__ == "__main__":
 	print("[Distance Cache] Cleaning and recreating cache folders...")
-	cache_dir = os.path.join(os.path.dirname(__file__), "../distance_cache")
-	readable_dir = os.path.join(os.path.dirname(__file__), "../readable_distances")
+	cache_dir = os.path.join(os.path.dirname(__file__), "./distance_cache")
+	readable_dir = os.path.join(os.path.dirname(__file__), "./readable_distances")
 	# Always delete and recreate the folders
 	if os.path.exists(cache_dir):
 		shutil.rmtree(cache_dir)
@@ -157,6 +196,13 @@ if __name__ == "__main__":
 			continue
 		print(f"  Processing map {map_id}...")
 		try:
+			# First, create a dummy max distance file to avoid circular dependency
+			cache_dir = os.path.join(os.path.dirname(__file__), "./distance_cache")
+			dummy_max_dist_path = os.path.join(cache_dir, f"distance_map_{map_id}_max_distance.npy")
+			if not os.path.exists(dummy_max_dist_path):
+				# Create a temporary dummy file with a reasonable default value
+				np.save(dummy_max_dist_path, np.array(100.0))  # Temporary placeholder
+			
 			game = SpoiledBroth(map_nr=map_id)
 			grid = game.grid
 			_ = load_or_compute_distance_map(game, grid, map_id)

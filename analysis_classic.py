@@ -133,7 +133,7 @@ def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2,
                     continue
                     
                 filtered_subset = filtered_subset.copy()
-                filtered_subset["epoch_block"] = (filtered_subset["epoch"] // N)
+                filtered_subset["episode_block"] = (filtered_subset["episode"] // N)
                 
                 # Create combined plot for rewarded metrics
                 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
@@ -141,9 +141,9 @@ def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2,
                 # Agent 1 metrics
                 for metric in rewarded_metrics_1:
                     label, color = get_metric_info(metric)
-                    block_means = filtered_subset.groupby("epoch_block")[metric].mean()
-                    middle_epochs = filtered_subset.groupby("epoch_block")["epoch"].median()
-                    ax1.plot(middle_epochs, block_means, label=label, color=color)
+                    block_means = filtered_subset.groupby("episode_block")[metric].mean()
+                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                    ax1.plot(middle_episodes, block_means, label=label, color=color)
                 
                 ax1.set_title(f"Agent 1 - Attitude {att1_title}")
                 ax1.set_ylabel("Number of times the action was taken", fontsize=18)
@@ -152,9 +152,9 @@ def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2,
                 # Agent 2 metrics
                 for metric in rewarded_metrics_2:
                     label, color = get_metric_info(metric)
-                    block_means = filtered_subset.groupby("epoch_block")[metric].mean()
-                    middle_epochs = filtered_subset.groupby("epoch_block")["epoch"].median()
-                    ax2.plot(middle_epochs, block_means, label=label, color=color)
+                    block_means = filtered_subset.groupby("episode_block")[metric].mean()
+                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                    ax2.plot(middle_episodes, block_means, label=label, color=color)
                 
                 ax2.set_title(f"Agent 2 - Attitude {att2_title}")
                 ax2.set_xlabel("Episodes", fontsize=20)
@@ -175,9 +175,9 @@ def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2,
                 # Agent 1 metrics
                 for metric in movement_metrics_1:
                     label, color = get_metric_info(metric)
-                    block_means = filtered_subset.groupby("epoch_block")[metric].mean()
-                    middle_epochs = filtered_subset.groupby("epoch_block")["epoch"].median()
-                    ax1.plot(middle_epochs, block_means, label=label, color=color)
+                    block_means = filtered_subset.groupby("episode_block")[metric].mean()
+                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                    ax1.plot(middle_episodes, block_means, label=label, color=color)
                 
                 ax1.set_title(f"Agent 1 - Attitude {att1_title}")
                 ax1.set_ylabel("Number of times the action was taken", fontsize=18)
@@ -193,9 +193,9 @@ def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2,
                 # Agent 2 metrics
                 for metric in movement_metrics_2:
                     label, color = get_metric_info(metric)
-                    block_means = filtered_subset.groupby("epoch_block")[metric].mean()
-                    middle_epochs = filtered_subset.groupby("epoch_block")["epoch"].median()
-                    ax2.plot(middle_epochs, block_means, label=label, color=color)
+                    block_means = filtered_subset.groupby("episode_block")[metric].mean()
+                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                    ax2.plot(middle_episodes, block_means, label=label, color=color)
                 
                 ax2.set_title(f"Agent 2 - Attitude {att2_title}")
                 ax2.set_xlabel("Episodes", fontsize=20)

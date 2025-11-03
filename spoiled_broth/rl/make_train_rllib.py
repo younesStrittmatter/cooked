@@ -67,7 +67,8 @@ def make_train_rllib(config):
 
     start_epoch = 0
     end_epoch = config["NUM_EPOCHS"]
-    checkpoint_epochs = []
+    start_episode = 0
+    checkpoint_episodes = []
     if "CHECKPOINT_ID_USED" in config and not ("PRETRAINED" in config and config["PRETRAINED"] == "Yes"): 
         for agent_id, checkpoint_info in config["CHECKPOINT_ID_USED"].items():
             if checkpoint_info and "path" in checkpoint_info:
@@ -80,9 +81,9 @@ def make_train_rllib(config):
                             if lines:
                                 last_line = lines[-1].strip()
                                 if last_line:
-                                    epoch_str = last_line.split(",")[0]
+                                    episode_str = last_line.split(",")[0]
                                     try:
-                                        checkpoint_epochs.append(int(epoch_str))
+                                        checkpoint_episodes.append(int(episode_str))
                                     except Exception:
                                         pass
 
@@ -91,8 +92,9 @@ def make_train_rllib(config):
                     checkpoint_log_lines.append(msg)
                     raise
 
-        if checkpoint_epochs:
-            start_epoch = min(checkpoint_epochs) + 1
+        if checkpoint_episodes:
+            start_episode = min(checkpoint_episodes) + 1
+            start_epoch = start_episode
             end_epoch = start_epoch + config["NUM_EPOCHS"]
 
     def dynamic_policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
@@ -127,7 +129,7 @@ def make_train_rllib(config):
                 "payoff_matrix": config.get("PAYOFF_MATRIX", [1,1,-2]),
                 "initial_seed": config.get("INITIAL_SEED", 0),
                 "wait_for_completion": config.get("WAIT_FOR_COMPLETION", True),
-                "start_epoch": start_epoch,
+                "start_epoch": start_episode,
                 "distance_map": distance_map_path,
                 "walking_speeds": config.get("WALKING_SPEEDS", None),
                 "cutting_speeds": config.get("CUTTING_SPEEDS", None),
@@ -263,8 +265,9 @@ def make_train_rllib(config):
                         checkpoint_log_lines.append(msg)
                         raise
 
-            if checkpoint_epochs:
-                start_epoch = min(checkpoint_epochs) + 1
+            if checkpoint_episodes:
+                start_episode = min(checkpoint_episodes) + 1
+                start_epoch = start_episode
                 end_epoch = start_epoch + config["NUM_EPOCHS"]
     else:
         msg = f"No checkpoint specified, training from scratch."
@@ -276,16 +279,49 @@ def make_train_rllib(config):
         for line in checkpoint_log_lines:
             logf.write(line + "\n")        
 
+    # Save initial checkpoint at episode 0 (or start_episode if resuming)
+    initial_episode = start_episode
+    initial_checkpoint_path = trainer.save(os.path.join(path, f"checkpoint_{initial_episode}"))
+    print(f"Initial checkpoint saved at {initial_checkpoint_path} (episode {initial_episode})")
+
     for epoch in range(start_epoch, end_epoch):
         result = trainer.train()
 
         # Log metrics
-        if (epoch - start_epoch) % config["SHOW_EVERY_N_EPOCHS"] == 0:
+        if (epoch - start_epoch - 1) % config["SHOW_EVERY_N_EPOCHS"] == 0:
             print(f"Epoch {epoch} complete.")
 
         # Save checkpoint
-        if (epoch - start_epoch) % config["SAVE_EVERY_N_EPOCHS"] == 0:
-            checkpoint_path = trainer.save(os.path.join(path, f"checkpoint_{epoch}"))
-            print(f"Checkpoint saved at {checkpoint_path}")
+        if (epoch - start_epoch - 1) % config["SAVE_EVERY_N_EPOCHS"] == 0:
+            # Get current episode count from training_stats.csv for checkpoint naming
+            current_episode = epoch  # fallback to epoch if CSV reading fails
+            stats_csv_path = os.path.join(path, "training_stats.csv")
+            if os.path.exists(stats_csv_path):
+                try:
+                    with open(stats_csv_path, "r") as f:
+                        lines = f.readlines()
+                        if lines:
+                            last_line = lines[-1].strip()
+                            if last_line:
+                                current_episode = int(last_line.split(",")[0])
+                except Exception:
+                    pass  # Use fallback value
+            
+            checkpoint_path = trainer.save(os.path.join(path, f"checkpoint_{current_episode}"))
+            print(f"Checkpoint saved at {checkpoint_path} (episode {current_episode})")
 
-    return trainer, current_date
+    # Get the final episode count from training_stats.csv
+    final_episode_count = None
+    stats_csv_path = os.path.join(path, "training_stats.csv")
+    if os.path.exists(stats_csv_path):
+        try:
+            with open(stats_csv_path, "r") as f:
+                lines = f.readlines()
+                if lines:
+                    last_line = lines[-1].strip()
+                    if last_line:
+                        final_episode_count = int(last_line.split(",")[0])
+        except Exception as e:
+            print(f"Warning: Could not read final episode count from CSV: {e}")
+
+    return trainer, current_date, final_episode_count

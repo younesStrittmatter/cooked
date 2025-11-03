@@ -141,7 +141,7 @@ class SimulationRunner:
         # Load and attach distance map to the game
         try:
             from spoiled_broth.maps.cache_distance_map import load_or_compute_distance_map
-            distance_cache_dir = os.path.join(os.path.dirname(__file__), "../distance_cache")
+            distance_cache_dir = os.path.join(os.path.dirname(__file__), "../maps/distance_cache")
             distance_map_path = load_or_compute_distance_map(game, game.grid, map_nr, distance_cache_dir)
             
             # Load the distance map from the npz file
@@ -187,6 +187,53 @@ class SimulationRunner:
                     obj.speed = self.config.agent_speed_px_per_sec
                 except Exception:
                     pass
+        
+        # EXPLICIT AGENT STATE RESET: Clear any items and reset states from checkpoint
+        # This ensures agents start fresh regardless of their training checkpoint state
+        for agent_id, obj in list(game.gameObjects.items()):
+            if agent_id.startswith('ai_rl_') and obj is not None:
+                try:
+                    # Clear items in hand
+                    if hasattr(obj, 'item'):
+                        obj.item = None
+                    if hasattr(obj, 'provisional_item'):
+                        obj.provisional_item = None
+                    # Reset action states
+                    if hasattr(obj, 'current_action'):
+                        obj.current_action = None
+                    if hasattr(obj, 'is_busy'):
+                        obj.is_busy = False
+                    if hasattr(obj, 'is_cutting'):
+                        obj.is_cutting = False
+                    if hasattr(obj, 'cutting_start_time'):
+                        obj.cutting_start_time = None
+                    # Reset movement states
+                    if hasattr(obj, 'move_target'):
+                        obj.move_target = None
+                    if hasattr(obj, 'path'):
+                        obj.path = []
+                    if hasattr(obj, 'path_index'):
+                        obj.path_index = 0
+                    
+                    # REPOSITION AGENTS TO CORRECT STARTING POSITIONS
+                    # Extract agent number from ID (e.g., 'ai_rl_1' -> 1)
+                    agent_number = int(agent_id.split('_')[-1])
+                    
+                    # Get the correct starting tile based on agent number
+                    if hasattr(game, 'agent_start_tiles'):
+                        start_tile_key = str(agent_number)
+                        if start_tile_key in game.agent_start_tiles:
+                            start_tile = game.agent_start_tiles[start_tile_key]
+                            # Set pixel position to the correct starting tile
+                            obj.x = start_tile.slot_x * game.grid.tile_size + game.grid.tile_size // 2
+                            obj.y = start_tile.slot_y * game.grid.tile_size + game.grid.tile_size // 2
+                            print(f"Repositioned agent {agent_id} to starting position: tile=({start_tile.slot_x}, {start_tile.slot_y}), pixel=({obj.x}, {obj.y})")
+                        else:
+                            print(f"Warning: No starting tile found for agent {agent_id} (number {agent_number})")
+                    
+                    print(f"Reset agent {agent_id} state: item={getattr(obj, 'item', None)}, position=({obj.x}, {obj.y})")
+                except Exception as e:
+                    print(f"Warning: Error resetting agent {agent_id} state: {e}")
         
         # Setup rendering
         renderer = Renderer2DOffline(
@@ -362,46 +409,93 @@ class SimulationRunner:
                 print(f"Unexpected error during threaded engine stop: {e}")
     
     def _wait_for_agent_initialization(self, game: Any, max_wait_time: float = 60.0):
-        """Wait for all agents to be properly initialized and positioned."""
+        """Wait for all agents to complete their initialization period and be ready to act."""
         import time
         
         start_wait = time.time()
         print("Waiting for agent initialization...")
         
+        # First, wait for basic agent setup
         while time.time() - start_wait < max_wait_time:
             all_agents_ready = True
+            agent_count = 0
             
             for agent_id, obj in game.gameObjects.items():
                 if agent_id.startswith('ai_rl_'):
+                    agent_count += 1
+                    
                     # Check if agent has valid position
                     if not hasattr(obj, 'x') or not hasattr(obj, 'y') or obj.x is None or obj.y is None:
                         all_agents_ready = False
                         break
                     
-                    # Check if agent is at a reasonable position (not 0,0 unless that's intentional)
-                    if obj.x == 0 and obj.y == 0:
+                    # Check if agent has grid reference
+                    if not hasattr(obj, 'grid') or obj.grid is None:
                         all_agents_ready = False
                         break
                         
-                    # Check if agent has proper controller attachment
-                    if not hasattr(obj, 'action_complete'):
+                    # Check if agent has slot coordinates
+                    try:
+                        slot_x, slot_y = obj.slot_x, obj.slot_y
+                        if slot_x < 0 or slot_y < 0:
+                            all_agents_ready = False
+                            break
+                    except Exception:
                         all_agents_ready = False
                         break
             
+            # Also check that we have the expected number of agents
+            if agent_count == 0:
+                all_agents_ready = False
+            
             if all_agents_ready:
-                print("All agents initialized successfully")
-                # Log final agent positions
-                for agent_id, obj in game.gameObjects.items():
-                    if agent_id.startswith('ai_rl_'):
-                        print(f"  {agent_id}: position ({obj.x}, {obj.y}), tile ({obj.slot_x}, {obj.slot_y})")
-                return
+                print(f"Basic agent setup complete for {agent_count} agents")
+                break
             
             time.sleep(0.1)  # Wait 100ms before checking again
         
-        print(f"Warning: Agent initialization check timed out after {max_wait_time} seconds")
-        # Log current agent states for debugging
+        if not all_agents_ready:
+            print(f"Warning: Basic agent setup timed out after {max_wait_time} seconds")
+            # Log current agent states for debugging
+            for agent_id, obj in game.gameObjects.items():
+                if agent_id.startswith('ai_rl_'):
+                    x = getattr(obj, 'x', 'MISSING')
+                    y = getattr(obj, 'y', 'MISSING')
+                    grid = getattr(obj, 'grid', 'MISSING')
+                    print(f"  {agent_id}: position ({x}, {y}), grid={grid is not None}")
+            return
+        
+        # Now wait for the frame-based initialization period to complete
+        # This ensures agents don't start acting until the initialization period is over
+        print("Basic agent setup complete, waiting for initialization period...")
+        
+        start_init_wait = time.time()
+        initialization_complete = False
+        
+        while time.time() - start_init_wait < max_wait_time:
+            # Check if initialization period is complete
+            if hasattr(game, 'frame_count'):
+                frame_count = game.frame_count
+                
+                # Get initialization frames from config
+                init_frames = int(self.config.agent_initialization_period * self.config.engine_tick_rate)
+                
+                if frame_count >= init_frames:
+                    initialization_complete = True
+                    print(f"Initialization period complete at frame {frame_count} (required: {init_frames})")
+                    break
+            
+            time.sleep(0.1)
+            
+        if not initialization_complete:
+            print(f"Warning: Initialization period did not complete within {max_wait_time} seconds")
+            if hasattr(game, 'frame_count'):
+                print(f"  Current frame: {game.frame_count}, Required: {int(self.config.agent_initialization_period * self.config.engine_tick_rate)}")
+            else:
+                print("  Game has no frame_count attribute")
+        
+        print("All agents initialized successfully")
+        # Log final agent positions
         for agent_id, obj in game.gameObjects.items():
             if agent_id.startswith('ai_rl_'):
-                x = getattr(obj, 'x', 'MISSING')
-                y = getattr(obj, 'y', 'MISSING')
-                print(f"  {agent_id}: position ({x}, {y})")
+                print(f"  {agent_id}: position ({obj.x}, {obj.y}), tile ({obj.slot_x}, {obj.slot_y})")

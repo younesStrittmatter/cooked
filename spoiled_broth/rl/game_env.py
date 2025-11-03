@@ -366,7 +366,21 @@ class GameEnv(ParallelEnv):
                 elif action_type.startswith("useless_"):
                     agent_penalties[agent_id] += USELESS_ACTION_PENALTY
                 elif action_type.startswith("destructive_"):
-                    agent_penalties[agent_id] += DESTRUCTIVE_ACTION_PENALTY
+                    # Get the penalty for the destroyed item based on what the agent is carrying
+                    destroyed_item_penalty = 0.0
+                    if hasattr(agent, 'item') and agent.item:
+                        # Map agent's item to corresponding reward value
+                        if agent.item in ["tomato", "pumpkin"]:
+                            destroyed_item_penalty = REWARDS["raw_food"]
+                        elif agent.item == "plate":
+                            destroyed_item_penalty = REWARDS["plate"]
+                        elif agent.item in ["tomato_cut", "pumpkin_cut"]:
+                            destroyed_item_penalty = REWARDS["cut"]
+                        elif agent.item in ["tomato_salad", "pumpkin_salad"]:
+                            destroyed_item_penalty = REWARDS["salad"]
+                    
+                    # Apply both the base destructive penalty and the destroyed item penalty
+                    agent_penalties[agent_id] += DESTRUCTIVE_ACTION_PENALTY + destroyed_item_penalty
                 agent_penalties[agent_id] += BUSY_PENALTY * busy_time
                 validated_actions[agent_id] = {"type": "click", "target": tile_index}
                 action_info[agent_id] = {
@@ -432,7 +446,7 @@ class GameEnv(ParallelEnv):
         # If episode is done, aggregate and log
         if self.write_csv:
             print(f"[Episode {self.episode_count}] Logging episode data to csv")
-            row = {"epoch": self.episode_count}
+            row = {"episode": self.episode_count}
             for agent_id in self.agents:
                 row[f"pure_reward_{agent_id}"] = float(self.cumulated_pure_rewards[agent_id])
                 row[f"modified_reward_{agent_id}"] = float(self.cumulated_modified_rewards[agent_id])

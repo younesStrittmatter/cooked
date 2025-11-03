@@ -60,9 +60,7 @@ class RawActionLogger:
     
     def _calculate_rl_action_coordinates(self, agent_id: str, action_name: str, game: Any) -> tuple[Optional[int], Optional[int]]:
         """Calculate target tile coordinates for an RL action."""
-        try:
-            print(f"[RAW_ACTION_LOGGER] Calculating coordinates for action '{action_name}' by agent {agent_id}")
-            
+        try:            
             # Import here to avoid circular imports
             from spoiled_broth.rl.action_space import convert_action_to_tile
             
@@ -85,7 +83,6 @@ class RawActionLogger:
             
             # Convert action to tile index
             tile_index = convert_action_to_tile(agent, game, action_name, distance_map=distance_map)
-            print(f"[RAW_ACTION_LOGGER] convert_action_to_tile returned: {tile_index}")
             
             if tile_index is not None:
                 # Convert tile index to coordinates (1-indexed)
@@ -94,7 +91,6 @@ class RawActionLogger:
                     x = tile_index % grid.width
                     y = tile_index // grid.width
                     coords = (x + 1, y + 1)  # Convert to 1-indexed
-                    print(f"[RAW_ACTION_LOGGER] Final coordinates: {coords}")
                     return coords
                     
         except Exception as e:
@@ -102,7 +98,6 @@ class RawActionLogger:
             import traceback
             traceback.print_exc()
         
-        print(f"[RAW_ACTION_LOGGER] Returning None, None for action '{action_name}'")
         return None, None
     
     def log_action(self, agent_id: str, raw_action: int, game: Any, clickable_indices: list):
@@ -165,10 +160,7 @@ class RawActionLogger:
                 # Calculate target coordinates for the action
                 x_tile, y_tile = self._calculate_rl_action_coordinates(agent_id, action_name, game)
                 action_number = rl_action_index
-                
-                # Debug: Print what coordinates we calculated
-                print(f"[RAW_ACTION_LOGGER] Action '{action_name}' for {agent_id} -> coordinates: ({x_tile}, {y_tile})")
-                
+                                
                 # Write action immediately to CSV in same format as ActionTracker
                 with open(self.csv_path, 'a', newline='') as f:
                     writer = csv.writer(f)

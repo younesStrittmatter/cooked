@@ -34,9 +34,23 @@ class EngineRunner:
     def _run_agents(self):
         last_action_time = 0.0
         decision_interval = 1.0 / self.ai_tick_rate
+        agents_started_acting = False
         
         while not self.game.done:
             sim_time = getattr(self.engine, "sim_time", self.engine.tick_count * self.engine.tick_interval)
+
+            # Check if initialization period has passed
+            if sim_time < self.agent_initialization_period:
+                # During initialization period, agents should not act
+                if not self.is_max_speed:
+                    time.sleep(0.001)
+                continue
+            
+            # Log when agents first start acting (only once)
+            if not agents_started_acting:
+                frame_count = getattr(self.engine, 'tick_count', 0)
+                print(f"Agents starting to act at frame {frame_count} (time: {sim_time:.3f}s)")
+                agents_started_acting = True
 
             if sim_time - last_action_time >= decision_interval:
                 last_action_time = sim_time
