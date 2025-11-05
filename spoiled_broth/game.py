@@ -72,6 +72,12 @@ class SpoiledBroth(BaseGame):
                     self.clickable_indices.append(index)
 
     def add_agent(self, agent_id, walk_speed=1, cut_speed=1):
+        # Get individual speeds from dictionaries if available
+        if self.walking_speeds and agent_id in self.walking_speeds:
+            walk_speed = self.walking_speeds[agent_id]
+        if self.cutting_speeds and agent_id in self.cutting_speeds:
+            cut_speed = self.cutting_speeds[agent_id]
+            
         agent = Agent(agent_id, self.grid, self, walk_speed=walk_speed, cut_speed=cut_speed)
 
         # Get fixed A1/A2 tiles if present
@@ -101,7 +107,6 @@ class SpoiledBroth(BaseGame):
         agent.y = start_tile.slot_y * self.grid.tile_size + self.grid.tile_size // 2
     
         self.gameObjects[agent_id] = agent
-
 
     def step(self, actions: dict, delta_time: float):
         # Increment frame counter

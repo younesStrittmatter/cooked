@@ -12,52 +12,8 @@ Author: Samuel Lozano
 import pandas as pd
 import numpy as np
 import math
+import re
 from pathlib import Path
-
-def load_map_info(map_nr):
-    """Load map information to understand what each dispenser provides"""
-    # Try to read the map file to understand dispenser types
-    map_file = Path(__file__).parent.parent / 'maps' / f'{map_nr}.txt'
-    
-    dispenser_info = {}
-    
-    if map_file.exists():
-        with open(map_file, 'r') as f:
-            lines = f.readlines()
-        
-        # Parse map - look for dispenser positions
-        # T=tomato dispenser, X=plate dispenser, B=cuttingboard, M=counter, D=delivery
-        # Convert from 0-indexed map coordinates to 1-indexed coordinates used in actions.csv
-        for y, line in enumerate(lines):
-            line = line.strip()
-            for x, char in enumerate(line):
-                # Convert to 1-indexed coordinates
-                coord_x, coord_y = x + 1, y + 1
-                
-                if char == 'X':  # Plate dispenser
-                    dispenser_info[(coord_x, coord_y)] = 'plate'
-                elif char == 'T':  # Tomato dispenser  
-                    dispenser_info[(coord_x, coord_y)] = 'tomato'
-                elif char == 'P':  # Pumpkin dispenser (if any)
-                    dispenser_info[(coord_x, coord_y)] = 'pumpkin'
-                elif char == 'C':  # Cabbage dispenser (if any)
-                    dispenser_info[(coord_x, coord_y)] = 'cabbage'
-    else:
-        print(f"Map file not found: {map_file}")
-        # Fallback: From actual map layout WBBWTTXW
-        # Convert from 0-indexed map to 1-indexed coordinates used in actions.csv
-        # X at position (6,0) -> (7,1), T at (4,0) -> (5,1) and (5,0) -> (6,1), also X at (7,1) -> (8,2)
-        dispenser_info = {
-            (5, 1): 'tomato',    # T at map position (4,0) 
-            (6, 1): 'tomato',    # T at map position (5,0)
-            (7, 1): 'plate',     # X at map position (6,0)
-            (8, 2): 'plate'      # X at map position (7,1)
-        }
-        print("Using fallback dispenser info (1-indexed coordinates):")
-        for pos, item_type in dispenser_info.items():
-            print(f"  {item_type} dispenser at {pos}")
-    
-    return dispenser_info
 
 def is_near_target(agent_x, agent_y, target_x, target_y, max_distance=1.5):
     """Check if agent is near the target tile (within max_distance tiles)
@@ -107,10 +63,9 @@ def find_nearby_tiles(agent_x, agent_y, actions_df, tile_types):
     
     return nearby_tiles
 
-def get_action_category(item_change_type, previous_item, current_item, target_tile_type):
-    """Map item change to action category from actionMap"""
-    
-    # Define the actionMap
+# Create a mapping of new action types to our categories
+def get_action_category(action_type, item_change_type, previous_agent_item, current_agent_item, target_tile_type):
+    """Map action type to action category"""
     actionMap = [
         'put down plate on counter',           # 0
         'pick up tomato from dispenser',       # 1
@@ -128,219 +83,62 @@ def get_action_category(item_change_type, previous_item, current_item, target_ti
         'put down tomato_salad on counter',    # 13
         'put down tomato on dispenser',        # 14 (destructive)
         'put down plate on dispenser',         # 15 (destructive)
-        'put down plate on cuttingboard',      # 16
+        'put down plate on cuttingboard',      # 16 (destructive)
         'put down tomato_cut on dispenser',    # 17 (destructive)
         'put down tomato_salad on dispenser',  # 18 (destructive)
         'put down tomato on cuttingboard',     # 19
         'put down tomato_salad on cuttingboard' # 20 (destructive)
     ]
     
-    # Normalize item names
-    prev_item = previous_item if previous_item else 'None'
-    curr_item = current_item if current_item else 'None'
-    
-    if item_change_type == "pickup":
-        # Agent picked up an item
-        if curr_item == 'plate':
-            if target_tile_type == 'dispenser':
-                return 2, actionMap[2]  # 'pick up plate from dispenser'
-            elif target_tile_type == 'counter':
-                return 10, actionMap[10]  # 'pick up plate from counter'
-        
-        elif curr_item == 'tomato':
-            if target_tile_type == 'dispenser':
-                return 1, actionMap[1]  # 'pick up tomato from dispenser'
-            elif target_tile_type == 'counter':
-                return 8, actionMap[8]  # 'pick up tomato from counter'
-        
-        elif curr_item == 'tomato_cut':
-            if target_tile_type == 'cuttingboard':
-                return 4, actionMap[4]  # 'pick up tomato_cut from cuttingboard'
-            elif target_tile_type == 'counter':
-                return 12, actionMap[12]  # 'pick up tomato_cut from counter'
-        
-        elif curr_item == 'tomato_salad':
-            if target_tile_type == 'counter':
-                return 5, actionMap[5]  # 'pick up tomato_salad from counter'
-    
-    elif item_change_type == "drop":
-        # Agent dropped an item
-        if prev_item == 'plate':
-            if target_tile_type == 'counter':
-                return 0, actionMap[0]  # 'put down plate on counter'
-            elif target_tile_type == 'dispenser':
-                return 15, actionMap[15]  # 'put down plate on dispenser' (destructive)
-        
-        elif prev_item == 'tomato':
-            if target_tile_type == 'counter':
-                return 6, actionMap[6]  # 'put down tomato on counter'
-            elif target_tile_type == 'dispenser':
-                return 14, actionMap[14]  # 'put down tomato on dispenser' (destructive)
-            elif target_tile_type == 'cuttingboard':
-                return 19, actionMap[19]  # 'put down tomato on cuttingboard'
-        
-        elif prev_item == 'tomato_cut':
-            if target_tile_type == 'counter':
-                return 11, actionMap[11]  # 'put down tomato_cut on counter'
-            elif target_tile_type == 'dispenser':
-                return 17, actionMap[17]  # 'put down tomato_cut on dispenser' (destructive)
-        
-        elif prev_item == 'tomato_salad':
-            if target_tile_type == 'counter':
-                return 13, actionMap[13]  # 'put down tomato_salad on counter'
-            elif target_tile_type == 'delivery':
-                return 9, actionMap[9]  # 'deliver tomato_salad'
-            elif target_tile_type == 'dispenser':
-                return 18, actionMap[18]  # 'put down tomato_salad on dispenser' (destructive)
-            
-    # If no match found, return unknown
-    return -1, f"UNKNOWN: {item_change_type} {prev_item} -> {curr_item} at {target_tile_type}"
+    # Map action types that include coordinates
+    if action_type in ['pick_up_plate_from_dispenser']:
+        return 2, actionMap[2]  # 'pick up plate from dispenser'
+    elif action_type in ['pick_up_tomato_from_dispenser']:
+        return 1, actionMap[1]  # 'pick up tomato from dispenser'
+    elif action_type.startswith('destructive_dispenser'):
+        if previous_agent_item == 'tomato':
+            return 14, actionMap[14]  # 'put down tomato on dispenser'
+        elif previous_agent_item == 'plate':
+            return 15, actionMap[15]  # 'put down plate on dispenser'
+        elif previous_agent_item == 'tomato_cut':
+            return 17, actionMap[17]  # 'put down tomato_cut on dispenser'
+        elif previous_agent_item == 'tomato_salad':
+            return 18, actionMap[18]  # 'put down tomato_salad on dispenser'
+    elif action_type in ['use_cutting_board']:
+        if item_change_type == "drop":
+            return 19, actionMap[19]  # 'put down tomato on cuttingboard'
+        elif item_change_type == "cutting":
+            return 3, actionMap[3]  # 'start cutting tomato'
+        elif item_change_type == "pickup":
+            return 4, actionMap[4]  # 'pick up tomato_cut from cuttingboard'
+    elif action_type in ['use_delivery']:
+        return 9, actionMap[9]  # 'deliver tomato_salad'
+    elif action_type.startswith('put_down_item_on_free_counter'):
+        if previous_agent_item == 'plate':
+            return 0, actionMap[0]  # 'put down plate on counter'
+        elif previous_agent_item == 'tomato':
+            return 6, actionMap[6]  # 'put down tomato on counter'
+        elif previous_agent_item == 'tomato_cut':
+            return 11, actionMap[11]  # 'put down tomato_cut on counter'
+        elif previous_agent_item == 'tomato_salad':
+            return 13, actionMap[13]  # 'put down tomato_salad on counter'
+    elif action_type in ['pick_up_plate_from_counter_closest', 'pick_up_plate_from_counter_midpoint']:
+        return 10, actionMap[10]  # 'pick up plate from counter'
+    elif action_type in ['pick_up_tomato_from_counter_closest', 'pick_up_tomato_from_counter_midpoint']:
+        return 8, actionMap[8]  # 'pick up tomato from counter'
+    elif action_type in ['pick_up_tomato_cut_from_counter_closest', 'pick_up_tomato_cut_from_counter_midpoint']:
+        return 12, actionMap[12]  # 'pick up tomato_cut from counter'
+    elif action_type in ['pick_up_tomato_salad_from_counter_closest', 'pick_up_tomato_salad_from_counter_midpoint']:
+        return 5, actionMap[5]  # 'pick up tomato_salad from counter'
 
-def verify_cuttingboard_usage(simulation_df, agent_id, current_frame, agent_tile_x, agent_tile_y, agent_states, engine_tick_rate=24):
-    """Look for None -> tomato_cut transition between current frame and target frame to verify cuttingboard usage
-    
-    Returns:
-        tuple: (is_cuttingboard, pickup_frame, future_item) where:
-            - is_cuttingboard: True if agent gets None -> tomato_cut transition on same tile OR if not enough frames to verify
-            - pickup_frame: The frame where None -> tomato_cut transition was detected (or None)
-            - future_item: The item the agent has at that frame
-    """
-    target_frame = current_frame + 3 * engine_tick_rate  # 3 seconds later
-    
-    # Check if we have enough frames in the data to verify
-    max_frame_in_data = simulation_df['frame'].max()
-    if target_frame > max_frame_in_data:
-        print(f"      Not enough frames to verify cuttingboard usage (need frame {target_frame}, max available {max_frame_in_data})")
-        
-        # Before assuming, check if there are any actions that could match this position
-        # Look for cuttingboard actions at this position first
-        agent_actions = agent_states[agent_id]['actions']
-        current_action_idx = agent_states[agent_id]['current_action_idx']
-        
-        has_cuttingboard_action = False
-        for check_idx in range(current_action_idx, len(agent_actions)):
-            action = agent_actions.iloc[check_idx]
-            
-            # Skip actions with NaN coordinates
-            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                continue
-                
-            is_near = is_near_target(agent_tile_x, agent_tile_y, 
-                                   action['target_tile_x'], action['target_tile_y'])
-            
-            if is_near and action['target_tile_type'] == 'cuttingboard':
-                has_cuttingboard_action = True
-                print(f"      Found matching cuttingboard action at position ({action['target_tile_x']}, {action['target_tile_y']})")
-                break
-        
-        if has_cuttingboard_action:
-            print(f"      Assuming cuttingboard usage due to insufficient data but matching cuttingboard action found")
-            return True, None, 'tomato_cut'  # Assume cutting when we can't verify but have matching cuttingboard action
-        else:
-            # No cuttingboard actions found - check if there are nearby counter tiles with matching actions
-            # This means the agent was actually interacting with a counter, not a cutting board
-            print(f"      No cuttingboard actions found - checking for nearby actual counters")
-            
-            # Find nearby counter tiles (not the current position, but adjacent positions)
-            nearby_counters = find_nearby_tiles(agent_tile_x, agent_tile_y, 
-                                               agent_actions, ['counter'])
-            
-            if nearby_counters:
-                print(f"      Found {len(nearby_counters)} nearby counter tiles - checking for matching actions")
-                for counter in nearby_counters:
-                    counter_x, counter_y = counter['x'], counter['y']
-                    
-                    # Check if there are actions targeting this counter position
-                    for check_idx in range(current_action_idx, len(agent_actions)):
-                        action = agent_actions.iloc[check_idx]
-                        
-                        # Skip actions with NaN coordinates
-                        if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                            continue
-                        
-                        if (action['target_tile_x'] == counter_x and 
-                            action['target_tile_y'] == counter_y and 
-                            action['target_tile_type'] == 'counter'):
-                            
-                            print(f"      Found counter action at ({counter_x}, {counter_y}) - this was NOT a cuttingboard interaction")
-                            return False, None, None  # This was a counter interaction, not cutting
-                
-                print(f"      No matching counter actions found despite nearby counters")
-                return False, None, None  # No matching actions found
-            else:
-                print(f"      No nearby counters found either - assuming NOT cuttingboard usage")
-                return False, None, None  # No cuttingboard actions and no nearby counters
-    
-    # Look for the None -> tomato_cut transition in frames between current and target
-    search_frames = range(current_frame + 1, target_frame + 2 * engine_tick_rate)  # Look ahead up to target + small buffer
-    
-    for check_frame in search_frames:
-        future_data = simulation_df[
-            (simulation_df['frame'] == check_frame) & 
-            (simulation_df['agent_id'] == agent_id)
-        ]
-        
-        if not future_data.empty:
-            future_row = future_data.iloc[0]
-            
-            # Check for NaN values before converting to int
-            if pd.isna(future_row['tile_x']) or pd.isna(future_row['tile_y']):
-                print(f"      WARNING: Agent {agent_id} has NaN coordinates at frame {check_frame}, skipping cuttingboard verification")
-                continue
-                
-            future_tile_x = int(future_row['tile_x'])
-            future_tile_y = int(future_row['tile_y'])
-            future_item = future_row['item'] if pd.notna(future_row['item']) else None
-            
-            # Check if agent is still on the same tile and gets tomato_cut
-            if future_tile_x == agent_tile_x and future_tile_y == agent_tile_y:
-                if future_item == 'tomato_cut':
-                    print(f"      Verified cuttingboard usage: Agent {agent_id} at frame {check_frame} on tile ({agent_tile_x}, {agent_tile_y}) with tomato_cut")
-                    
-                    # Mark this frame to be skipped in main processing (to avoid double-counting the pickup)
-                    agent_states[agent_id]['skip_frames'].add(check_frame)
-                    print(f"      Marked frame {check_frame} to be skipped (pickup already handled in cutting sequence)")
-                    
-                    return True, check_frame, future_item
-    
-    print(f"      No None -> tomato_cut transition found for agent {agent_id} between frames {current_frame} and {target_frame}")
-    
-    # No cuttingboard actions found - check if there are nearby actual counters with matching actions
-    # This means the agent was actually interacting with a counter, not a cutting board
-    agent_actions = agent_states[agent_id]['actions']
-    current_action_idx = agent_states[agent_id]['current_action_idx']
-    print(f"      No cuttingboard actions found - checking for nearby actual counters")
-    
-    nearby_counters = find_nearby_tiles(agent_tile_x, agent_tile_y, 
-                                       agent_actions, ['counter'])
-    
-    if nearby_counters:
-        print(f"      Found {len(nearby_counters)} nearby counter tiles - checking for matching actions")
-        for counter in nearby_counters:
-            counter_x, counter_y = counter['x'], counter['y']
-            
-            # Check if there are actions targeting this counter position
-            for check_idx in range(current_action_idx, len(agent_actions)):
-                action = agent_actions.iloc[check_idx]
-                
-                # Skip actions with NaN coordinates
-                if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                    continue
-                
-                if (action['target_tile_x'] == counter_x and 
-                    action['target_tile_y'] == counter_y and 
-                    action['target_tile_type'] == 'counter'):
-                    
-                    print(f"      Found counter action at ({counter_x}, {counter_y}) - this was NOT a cuttingboard interaction")
-                    return False, None, None  # This was a counter interaction, not cutting
-        
-        print(f"      No matching counter actions found despite nearby counters")
-        return False, None, None  # No matching actions found
-    else:
-        print(f"      No nearby counters found either - assuming NOT cuttingboard usage")
-        return False, None, None  # No cuttingboard actions and no nearby counters
+    # Special case for assembly
+    elif item_change_type == "assembly":
+        return 7, actionMap[7]  # 'assemble salad'
 
-def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=None, engine_tick_rate=24):
+    # Fallback
+    return -1, f"UNKNOWN: {item_change_type} {previous_agent_item} -> {current_agent_item} at {target_tile_type}"
+
+def analyze_meaningful_actions(actions_df, simulation_df, counter_df, map_nr, output_dir=None, engine_tick_rate=24, cutting_speeds=None):
     """Detect meaningful actions by finding item state changes and matching to actions.csv"""
     
     # Read the CSV files if they are paths, otherwise use the dataframes directly
@@ -348,9 +146,11 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
         print("Reading CSV files...")
         actions_df = pd.read_csv(actions_df)
         simulation_df = pd.read_csv(simulation_df)
+        counter_df = pd.read_csv(counter_df)
     
     print(f"Actions shape: {actions_df.shape}")
     print(f"Simulation shape: {simulation_df.shape}")
+    print(f"Counter shape: {counter_df.shape}")
     
     # DEBUG: Check for NaN values in the data
     print("\n=== DEBUGGING NaN VALUES ===")
@@ -386,17 +186,26 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
             print(nan_actions[['agent_id', 'action_id', 'action_number', 'action_type', 'target_tile_x', 'target_tile_y', 'target_tile_type']].head())
             print(f"Total actions with NaN coordinates: {len(nan_actions)} out of {len(actions_df)} ({100*len(nan_actions)/len(actions_df):.1f}%)")
     
+    # Remove NaN values from actions DataFrame for target_tile_x and target_tile_y
+    actions_df = actions_df[pd.notna(actions_df['target_tile_x']) & pd.notna(actions_df['target_tile_y'])].reset_index(drop=True)
+
     print("=== END NaN DEBUGGING ===\n")
-    
-    # Load map information
-    dispenser_info = load_map_info(map_nr)
-    
+        
     # Sort by agent_id and action_id (chronological order)
     actions_df = actions_df.sort_values(['agent_id', 'action_id']).reset_index(drop=True)
     
-    # Sort simulation by frame
+    # Sort simulation and counter by frame
     simulation_df = simulation_df.sort_values('frame').reset_index(drop=True)
-    
+    counter_df = counter_df.sort_values('frame').reset_index(drop=True)
+
+    available_counters = {}
+    for i, col in enumerate(counter_df.columns[2:], start=2):  # position starts at 2
+        # column name format: counter_x_y
+        parts = col.split("_")
+        if len(parts) == 3 and parts[0] == "counter":
+            x, y = int(parts[1]), int(parts[2])
+            available_counters[i] = (x, y)
+
     meaningful_actions = []
     
     # Track states for each agent
@@ -404,68 +213,37 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
     for agent_id in actions_df['agent_id'].unique():
         agent_states[agent_id] = {
             'current_action_idx': 0,
-            'previous_item': None,
+            'previous_agent_item': None,
             'actions': actions_df[actions_df['agent_id'] == agent_id].copy().reset_index(drop=True),
             'skip_frames': set()  # Frames to skip processing (already handled in compound actions)
         }
         print(f"Agent {agent_id} has {len(agent_states[agent_id]['actions'])} actions")
     
-    # Track counter states - what items are on each counter position (shared between all agents)
-    # Key: (x, y) position, Value: item type on that counter
-    counter_states = {}
-    
     # Process all agents simultaneously, frame by frame
     for frame in sorted(simulation_df['frame'].unique()):
         frame_data = simulation_df[simulation_df['frame'] == frame]
-        
-        # Normalize counter_states keys to integers to avoid numpy float comparison issues
-        normalized_counter_states = {}
-        for pos, item in counter_states.items():
-            normalized_pos = (int(pos[0]), int(pos[1]))
-            normalized_counter_states[normalized_pos] = item
-        counter_states = normalized_counter_states
-        
-        print(f"\n=== Processing Frame {frame}, Second {frame / engine_tick_rate} ===")
-        print(f"    Current counter states: {counter_states}")
+        counter_states_prev = counter_df[counter_df['frame'] == frame - 1] if frame > 0 else None
+        counter_states = counter_df[counter_df['frame'] == frame]
+
+        print(f"\n=== Processing Frame {frame}, Second {frame / engine_tick_rate} ===")        
         
         # Process each agent in this frame
         for _, sim_row in frame_data.iterrows():
             agent_id = sim_row['agent_id']
-            
-            current_item = sim_row['item'] if pd.notna(sim_row['item']) else None
-            previous_item = agent_states[agent_id]['previous_item']
-            
+            current_agent_item = sim_row['item'] if pd.notna(sim_row['item']) else None
+            previous_agent_item = agent_states[agent_id]['previous_agent_item']
+
             # Skip frames that are already handled (e.g., pickup part of cuttingboard sequence)
             if frame in agent_states[agent_id]['skip_frames']:
                 print(f"  Agent {agent_id}: Skipping frame {frame} (already processed as part of previous action)")
-                # Still update the previous_item even when skipping to maintain state consistency
-                agent_states[agent_id]['previous_item'] = current_item
+                # Still update the previous_agent_item even when skipping to maintain state consistency
+                agent_states[agent_id]['previous_agent_item'] = current_agent_item
                 continue
             
             # DEBUG: Check this specific row for NaN values
             if pd.isna(sim_row['tile_x']) or pd.isna(sim_row['tile_y']):
-                print(f"      DEBUG: Found NaN coordinates for agent {agent_id} at frame {frame}")
-                print(f"        Full row data: {sim_row.to_dict()}")
-                print(f"        tile_x: {sim_row['tile_x']} (type: {type(sim_row['tile_x'])})")
-                print(f"        tile_y: {sim_row['tile_y']} (type: {type(sim_row['tile_y'])})")
-                print(f"        x: {sim_row['x']} (type: {type(sim_row['x'])})")
-                print(f"        y: {sim_row['y']} (type: {type(sim_row['y'])})")
-                print(f"        item: {sim_row['item']}")
-                
-                # POTENTIAL FIX: Check if x,y coordinates exist and could be used
-                if pd.notna(sim_row['x']) and pd.notna(sim_row['y']):
-                    # Convert continuous coordinates to tile coordinates
-                    # Assuming 32-pixel tiles (common in games)
-                    converted_tile_x = int(sim_row['x'] // 32)
-                    converted_tile_y = int(sim_row['y'] // 32)
-                    print(f"        ATTEMPTING FIX: Converting x={sim_row['x']}, y={sim_row['y']} to tiles ({converted_tile_x}, {converted_tile_y})")
-                    
-                    # Use converted coordinates
-                    agent_tile_x = converted_tile_x
-                    agent_tile_y = converted_tile_y
-                else:
-                    print(f"      WARNING: Agent {agent_id} has NaN coordinates at frame {frame}, skipping")
-                    continue
+                print(f"      WARNING: Agent {agent_id} has NaN coordinates at frame {frame}, skipping")
+                continue
             else:
                 agent_tile_x = int(sim_row['tile_x'])
                 agent_tile_y = int(sim_row['tile_y'])
@@ -474,76 +252,377 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
             item_changed = False
             change_type = ""
             
-            if previous_item != current_item:
-                if previous_item is None and current_item is not None:
+            if previous_agent_item != current_agent_item:
+                if previous_agent_item is None and current_agent_item is not None:
                     item_changed = True
                     change_type = "pickup"
-                elif previous_item is not None and current_item is None:
+                elif previous_agent_item is not None and current_agent_item is None:
                     item_changed = True
                     change_type = "drop"
-                elif previous_item != current_item:
+                elif previous_agent_item != current_agent_item:
                     item_changed = True
                     change_type = "change"
-            
-            print(f"  Agent {agent_id}: {previous_item} -> {current_item} (change_type: {change_type if item_changed else 'no_change'}) at tile ({agent_tile_x}, {agent_tile_y})")
-            
+
+            print(f"  Agent {agent_id}: {previous_agent_item} -> {current_agent_item} (change_type: {change_type if item_changed else 'no_change'}) at tile ({agent_tile_x}, {agent_tile_y})")
+
             if item_changed:
+                action_found = False
                 print(f"      Item changed detected: {change_type}")
                 
                 # Find if agent is near any counter
                 nearby_counters = find_nearby_tiles(agent_tile_x, agent_tile_y, 
                                                    agent_states[agent_id]['actions'], ['counter'])
-                
-                # Check for salad assembly BEFORE updating counter states (drop action or change to tomato_salad)
-                is_salad_assembly = False
-                if nearby_counters:
-                    counter_pos = (int(nearby_counters[0]['x']), int(nearby_counters[0]['y']))
-                    
-                    # Drop action that completes a salad
-                    if change_type == "drop" and previous_item in ['plate', 'tomato_cut']:
-                        if previous_item == 'plate' and counter_pos in counter_states and counter_states[counter_pos] == 'tomato_cut':
-                            is_salad_assembly = True
-                        elif previous_item == 'tomato_cut' and counter_pos in counter_states and counter_states[counter_pos] == 'plate':
-                            is_salad_assembly = True
-                                
-                # Get current action index for this agent
+
+                # Track transitions for each nearby counter
+                counter_transitions = {}
+
+                # Check for counter use if there has been a change in item on nearby counters
+                if counter_states_prev is not None and nearby_counters:
+                    for counter in nearby_counters:
+                        counter_pos = (int(counter['x']), int(counter['y']))
+                        
+                        counter_col_name = f'counter_{counter_pos[0]}_{counter_pos[1]}'
+                        if counter_col_name in counter_states_prev.columns and counter_col_name in counter_states.columns:
+                            prev_counter_item = counter_states_prev[counter_col_name].iloc[0]
+                            curr_counter_item = counter_states[counter_col_name].iloc[0]
+                            prev_counter_item = None if pd.isna(prev_counter_item) else prev_counter_item
+                            curr_counter_item = None if pd.isna(curr_counter_item) else curr_counter_item
+                        else:
+                            continue  # Skip if counter column doesn't exist
+                            
+                        if prev_counter_item != curr_counter_item:
+                            transition_type = None
+                            search_action = None
+                            
+                            if curr_counter_item == 'tomato_salad' and previous_agent_item != 'tomato_salad':
+                                if previous_agent_item == 'plate' and prev_counter_item == 'tomato_cut':
+                                    search_action = 'pick_up_tomato_cut_from_counter'
+                                elif previous_agent_item == 'tomato_cut' and prev_counter_item == 'plate':
+                                    search_action = 'pick_up_plate_from_counter'
+                                # action is assembling salad on counter
+                                transition_type = 'salad_assembly'
+                                print(f"      Detected salad assembly at counter {counter_pos}")
+                            elif curr_counter_item == previous_agent_item and prev_counter_item == current_agent_item and curr_counter_item is not None and prev_counter_item is not None:
+                                # action is swapping items on counter (combined action tracking)
+                                transition_type = 'swap_at_counter'
+                                print(f"      Detected item swap at counter {counter_pos}")
+                            elif curr_counter_item == previous_agent_item and prev_counter_item is None and curr_counter_item is not None:
+                                # action is putting down item on counter
+                                transition_type = 'drop_at_counter'
+                                print(f"      Detected drop at counter {counter_pos}")
+                            elif prev_counter_item == current_agent_item and curr_counter_item is None and prev_counter_item is not None:
+                                # action is picking up item from counter
+                                transition_type = 'pick_up_from_counter'
+                                print(f"      Detected pick up from counter {counter_pos}")
+                                                        
+                            if transition_type:
+                                counter_transitions[counter_pos] = {
+                                    'type': transition_type,
+                                    'search_action': search_action,
+                                    'prev_item': prev_counter_item,
+                                    'curr_item': curr_counter_item
+                                }
+
+                # Get current action index and actions for this agent
                 current_action_idx = agent_states[agent_id]['current_action_idx']
                 agent_actions = agent_states[agent_id]['actions']
                 
-                # Process salad assembly action if detected
-                if is_salad_assembly:
-                    print(f"      Processing as salad assembly")
-                    # Find the action that matches this position
+                # Process counter transitions
+                for counter_pos, transition_info in counter_transitions.items():
+                    transition_type = transition_info['type']
+                    search_action = transition_info['search_action']
+                    
+                    if transition_type == 'salad_assembly' and not action_found:
+                        print(f"      Processing salad assembly action at counter {counter_pos}")
+                        # Find the action that matches this position and is related to counter operations
+                        matched_action = None
+                        for check_idx in range(current_action_idx, len(agent_actions)):
+                            action = agent_actions.iloc[check_idx]
+                            
+                            # Skip actions with NaN coordinates (actions without specific positions)
+                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                continue
+                                
+                            is_near = is_near_target(agent_tile_x, agent_tile_y, 
+                                                   action['target_tile_x'], action['target_tile_y'])
+                            
+                            # Look for any counter-related action (put_down or pick_up)
+                            if (is_near and action['action_type'].startswith(search_action) 
+                                and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]
+                                ):
+                                matched_action = action.copy()
+                                matched_action['matched_action_idx'] = check_idx
+                                print(f"      Matched to action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
+                                break
+                        
+                        if matched_action is not None:                        
+                            agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
+                                                    
+                            assembly_action = {
+                                'frame': sim_row['frame'],
+                                'agent_id': agent_id,
+                                'action_id': matched_action['action_id'],
+                                'action_number': matched_action['action_number'],
+                                'action_type': matched_action['action_type'],
+                                'target_tile_type': matched_action['target_tile_type'],
+                                'target_tile_x': matched_action['target_tile_x'],
+                                'target_tile_y': matched_action['target_tile_y'],
+                                'agent_tile_x': agent_tile_x,
+                                'agent_tile_y': agent_tile_y,
+                                'item_change_type': "drop",
+                                'previous_item': previous_agent_item,
+                                'current_item': None,
+                                'agent_x': sim_row['x'],
+                                'agent_y': sim_row['y'],
+                                'action_category_id': 7,
+                                'action_category_name': "assemble salad",
+                                'compound_action_part': 0  # Single assembly action
+                            }
+                            meaningful_actions.append(assembly_action)
+
+                            print(f"      Recorded salad assembly action: assemble salad at counter {counter_pos}")
+                            action_found = True
+                            break  # Process only one transition per frame
+                        else:
+                            print(f"      Could not match salad assembly action at counter {counter_pos}")
+                    
+                    elif transition_type == 'swap_at_counter' and not action_found:
+                        print(f"      Processing swap at counter {counter_pos}")
+
+                        # Find the action that matches this position and is related to counter operations
+                        matched_action = None
+                        for check_idx in range(current_action_idx, len(agent_actions)):
+                            action = agent_actions.iloc[check_idx]
+                            
+                            # Skip actions with NaN coordinates (actions without specific positions)
+                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                continue
+                                
+                            is_near = is_near_target(agent_tile_x, agent_tile_y, 
+                                                   action['target_tile_x'], action['target_tile_y'])
+                            
+                            # Look for any counter-related action (put_down or pick_up)
+                            if (is_near and action['action_type'].startswith(f'pick_up_{current_agent_item}_from_counter') 
+                                and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]
+                                ):
+                                matched_action = action.copy()
+                                matched_action['matched_action_idx'] = check_idx
+                                print(f"      Matched to action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
+                                break
+                        
+                        if matched_action is not None:                       
+                            agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
+                                        
+                            # 1. Put down the previous item (automatic action)
+                            put_down_category_id, put_down_category_name = get_action_category(
+                                'put_down_item_on_free_counter', "drop", previous_agent_item, None, matched_action['target_tile_type']
+                            )
+
+                            put_down_action = {
+                                'frame': sim_row['frame'],
+                                'agent_id': agent_id,
+                                'action_id': matched_action['action_id'],
+                                'action_number': matched_action['action_number'],
+                                'action_type': matched_action['action_type'],
+                                'target_tile_type': matched_action['target_tile_type'],
+                                'target_tile_x': matched_action['target_tile_x'],
+                                'target_tile_y': matched_action['target_tile_y'],
+                                'agent_tile_x': agent_tile_x,
+                                'agent_tile_y': agent_tile_y,
+                                'item_change_type': "drop",
+                                'previous_item': previous_agent_item,
+                                'current_item': None,
+                                'agent_x': sim_row['x'],
+                                'agent_y': sim_row['y'],
+                                'action_category_id': put_down_category_id,
+                                'action_category_name': put_down_category_name,
+                                'compound_action_part': 1  # First part of compound action
+                            }
+                            meaningful_actions.append(put_down_action)
+                            print(f"      Part 1 - Put down: {put_down_category_name}")
+
+                            # 2. Pick up the new item
+                            pick_up_category_id, pick_up_category_name = get_action_category(
+                                matched_action['action_type'], "pickup", None, current_agent_item, matched_action['target_tile_type']
+                            )
+
+                            pick_up_action = {
+                                'frame': sim_row['frame'],
+                                'agent_id': agent_id,
+                                'action_id': matched_action['action_id'],
+                                'action_number': matched_action['action_number'],
+                                'action_type': matched_action['action_type'],
+                                'target_tile_type': matched_action['target_tile_type'],
+                                'target_tile_x': matched_action['target_tile_x'],
+                                'target_tile_y': matched_action['target_tile_y'],
+                                'agent_tile_x': agent_tile_x,
+                                'agent_tile_y': agent_tile_y,
+                                'item_change_type': "pickup",
+                                'previous_item': None,
+                                'current_item': current_agent_item,
+                                'agent_x': sim_row['x'],
+                                'agent_y': sim_row['y'],
+                                'action_category_id': pick_up_category_id,
+                                'action_category_name': pick_up_category_name,
+                                'compound_action_part': 2  # Second part of compound action
+                            }
+                            meaningful_actions.append(pick_up_action)
+                            print(f"      Part 2 - Pick up: {pick_up_category_name}")
+                            action_found = True
+                            break  # Process only one transition per frame
+                        else:
+                            print(f"      Could not match swap on counter action at counter {counter_pos}")
+
+                    elif transition_type == 'drop_at_counter' and not action_found:
+                        print(f"      Processing drop at counter {counter_pos}")
+
+                        # Find the action that matches this position and is related to counter operations
+                        matched_action = None
+                        for check_idx in range(current_action_idx, len(agent_actions)):
+                            action = agent_actions.iloc[check_idx]
+                            
+                            # Skip actions with NaN coordinates (actions without specific positions)
+                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                continue
+                                
+                            is_near = is_near_target(agent_tile_x, agent_tile_y, 
+                                                   action['target_tile_x'], action['target_tile_y'])
+                            
+                            if (is_near and action['action_type'].startswith(f'put_down_item_on_free_counter') 
+                                and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]
+                                ):
+                                matched_action = action.copy()
+                                matched_action['matched_action_idx'] = check_idx
+                                print(f"      Matched to action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
+                                break
+                        
+                        if matched_action is not None:                       
+                            agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
+
+                            category_id, category_name = get_action_category(
+                                matched_action['action_type'], "drop", previous_agent_item, None, matched_action['target_tile_type']
+                            )
+
+                            action = {
+                                'frame': sim_row['frame'],
+                                'agent_id': agent_id,
+                                'action_id': matched_action['action_id'],
+                                'action_number': matched_action['action_number'],
+                                'action_type': matched_action['action_type'],
+                                'target_tile_type': matched_action['target_tile_type'],
+                                'target_tile_x': matched_action['target_tile_x'],
+                                'target_tile_y': matched_action['target_tile_y'],
+                                'agent_tile_x': agent_tile_x,
+                                'item_change_type': "drop",
+                                'previous_item': previous_agent_item,
+                                'current_item': None,
+                                'agent_x': sim_row['x'],
+                                'agent_y': sim_row['y'],
+                                'action_category_id': category_id,
+                                'action_category_name': category_name,
+                                'compound_action_part': 0  # Single action
+                            }
+                            meaningful_actions.append(action)
+                            print(f"      Drop: {category_name}")
+                            action_found = True
+                            break  # Process only one transition per frame
+                        
+                        else:
+                            print(f"      Could not match drop on counter action at counter {counter_pos}")
+
+                    elif transition_type == 'pick_up_from_counter' and not action_found:
+                        print(f"      Processing pick up from counter {counter_pos}")
+
+                        # Find the action that matches this position and is related to counter operations
+                        matched_action = None
+                        for check_idx in range(current_action_idx, len(agent_actions)):
+                            action = agent_actions.iloc[check_idx]
+                            
+                            # Skip actions with NaN coordinates (actions without specific positions)
+                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                                continue
+                                
+                            is_near = is_near_target(agent_tile_x, agent_tile_y, 
+                                                   action['target_tile_x'], action['target_tile_y'])
+
+                            if (is_near and action['action_type'].startswith(f'pick_up_{current_agent_item}_from_counter')
+                                and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]
+                                ):
+                                matched_action = action.copy()
+                                matched_action['matched_action_idx'] = check_idx
+                                print(f"      Matched to action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
+                                break
+                        
+                        if matched_action is not None:                       
+                            agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
+
+                            category_id, category_name = get_action_category(
+                                matched_action['action_type'], "pickup", previous_agent_item, None, matched_action['target_tile_type']
+                            )
+
+                            action = {
+                                'frame': sim_row['frame'],
+                                'agent_id': agent_id,
+                                'action_id': matched_action['action_id'],
+                                'action_number': matched_action['action_number'],
+                                'action_type': matched_action['action_type'],
+                                'target_tile_type': matched_action['target_tile_type'],
+                                'target_tile_x': matched_action['target_tile_x'],
+                                'target_tile_y': matched_action['target_tile_y'],
+                                'agent_tile_x': agent_tile_x,
+                                'item_change_type': "pickup",
+                                'previous_item': None,
+                                'current_item': current_agent_item,
+                                'agent_x': sim_row['x'],
+                                'agent_y': sim_row['y'],
+                                'action_category_id': category_id,
+                                'action_category_name': category_name,
+                                'compound_action_part': 0  # Single action
+                            }
+                            meaningful_actions.append(action)
+                            print(f"      Pick up: {category_name}")
+                            action_found = True
+                            break  # Process only one transition per frame
+                        
+                        else:
+                            print(f"      Could not match pick up on counter action at counter {counter_pos}")
+
+                # If no counter transitions were processed, check for other action types
+                if change_type == "change" and current_agent_item in ['plate', 'tomato'] and not action_found:
+                    print(f"      Checking for dispenser action (destructive): {previous_agent_item} -> {current_agent_item}")
+                    print(f"      Current action index: {current_action_idx}/{len(agent_actions)}")
+
                     matched_action = None
                     for check_idx in range(current_action_idx, len(agent_actions)):
                         action = agent_actions.iloc[check_idx]
-                        
-                        # Skip actions with NaN coordinates (e.g., do_nothing actions)
+
+                        # Skip actions with NaN coordinates for now
                         if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
                             continue
-                            
+                                
                         is_near = is_near_target(agent_tile_x, agent_tile_y, 
-                                               action['target_tile_x'], action['target_tile_y'])
-                        
-                        if is_near and action['target_tile_type'] == 'counter':
+                                                action['target_tile_x'], action['target_tile_y'])
+
+                        if is_near and (
+                            (action['action_type'] == 'pick_up_plate_from_dispenser' and current_agent_item == 'plate')
+                              or (action['action_type'] == 'pick_up_tomato_from_dispenser' and current_agent_item == 'tomato')
+                            ):
                             matched_action = action.copy()
                             matched_action['matched_action_idx'] = check_idx
-                            print(f"      Matched to action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
+                            print(f"      Matched to dispenser action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
                             break
-                    
+                            
                     if matched_action is not None:
-                        # This is a salad assembly action - the agent drops an item that combines with what's on the counter
-                        # The actual item change is drop (previous_item -> None), but semantically it's assembly
-                        # Use action category 7 for "assemble salad"
-                        assembly_category_id = 7
-                        assembly_category_name = "assemble salad"
-                        
+                        print(f"     Processing as destructive action at dispenser")
+                        # Update action index AFTER processing
                         agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
                         
-                        assembly_item_change_type = "drop"
-                        assembly_current_item = None  # Agent's hands are empty after dropping
-                        
-                        assembly_action = {
+                        # 1. Put down the previous item (destructive action)
+                        put_down_category_id, put_down_category_name = get_action_category(
+                            'destructive_dispenser', "drop", previous_agent_item, None, matched_action['target_tile_type']
+                        )
+
+                        put_down_action = {
                             'frame': sim_row['frame'],
                             'agent_id': agent_id,
                             'action_id': matched_action['action_id'],
@@ -554,464 +633,174 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                             'target_tile_y': matched_action['target_tile_y'],
                             'agent_tile_x': agent_tile_x,
                             'agent_tile_y': agent_tile_y,
-                            'item_change_type': assembly_item_change_type,
-                            'previous_item': previous_item,
-                            'current_item': assembly_current_item,
+                            'item_change_type': "drop",
+                            'previous_item': previous_agent_item,
+                            'current_item': None,
                             'agent_x': sim_row['x'],
                             'agent_y': sim_row['y'],
-                            'action_category_id': assembly_category_id,
-                            'action_category_name': assembly_category_name,
-                            'compound_action_part': 0  # Single assembly action
+                            'action_category_id': put_down_category_id,
+                            'action_category_name': put_down_category_name,
+                            'compound_action_part': 1  # First part of compound action
                         }
-                        meaningful_actions.append(assembly_action)
-                        print(f"      Assembly: {assembly_category_name}")
+                        meaningful_actions.append(put_down_action)
+                        print(f"      Part 1 - Put down: {put_down_category_name}")
                         
-                        # Update counter states after salad assembly - the result is tomato_salad
-                        counter_pos = (int(matched_action['target_tile_x']), int(matched_action['target_tile_y']))
-                        counter_states[counter_pos] = 'tomato_salad'
-                        print(f"      Updated counter {counter_pos} with tomato_salad after assembly")
+                        # 2. Pick up the new item
+                        pick_up_category_id, pick_up_category_name = get_action_category(
+                            matched_action['action_type'], "pickup", None, current_agent_item, matched_action['target_tile_type']
+                        )
+
+                        pick_up_action = {
+                            'frame': sim_row['frame'],
+                            'agent_id': agent_id,
+                            'action_id': matched_action['action_id'],
+                            'action_number': matched_action['action_number'],
+                            'action_type': matched_action['action_type'],
+                            'target_tile_type': matched_action['target_tile_type'],
+                            'target_tile_x': matched_action['target_tile_x'],
+                            'target_tile_y': matched_action['target_tile_y'],
+                            'agent_tile_x': agent_tile_x,
+                            'agent_tile_y': agent_tile_y,
+                            'item_change_type': "pickup",
+                            'previous_item': None,
+                            'current_item': current_agent_item,
+                            'agent_x': sim_row['x'],
+                            'agent_y': sim_row['y'],
+                            'action_category_id': pick_up_category_id,
+                            'action_category_name': pick_up_category_name,
+                            'compound_action_part': 2  # Second part of compound action
+                        }
+                        meaningful_actions.append(pick_up_action)
+                        print(f"      Part 2 - Pick up: {pick_up_category_name}")
+                        action_found = True
+
                     else:
-                        print(f"      Could not match salad assembly action")
-                
-                # Check if this is a compound action (item change at dispenser)
-                elif change_type == "change" and previous_item is not None and current_item is not None and not is_salad_assembly:
-                    
-                    print(f"      Checking for compound action or transformation: {previous_item} -> {current_item}")
-                    print(f"      Current action index: {current_action_idx}/{len(agent_actions)}")
-                    check_counter = True
-
-                    if current_item in ['plate', 'tomato']:
-                        # First try dispensers (traditional compound action)
-                        matched_action = None
-                        for check_idx in range(current_action_idx, len(agent_actions)):
-                            action = agent_actions.iloc[check_idx]
-                            
-                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
-                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                                continue
-                                
-                            is_near = is_near_target(agent_tile_x, agent_tile_y, 
-                                                   action['target_tile_x'], action['target_tile_y'])
-
-                            print(f"        Checking dispenser action [{check_idx}]: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}] - Near: {is_near}")
-
-                            # For traditional compound actions, match dispensers
-                            if is_near and action['target_tile_type'] == 'dispenser':
-                                # Verify that the dispenser is of the correct type for the current item
-                                dispenser_pos = (action['target_tile_x'], action['target_tile_y'])
-                                expected_dispenser_type = dispenser_info.get(dispenser_pos)
-                                
-                                # Check if dispenser type matches the current item being picked up
-                                if expected_dispenser_type == current_item:
-                                    matched_action = action.copy()
-                                    matched_action['matched_action_idx'] = check_idx
-                                    print(f"      Matched to dispenser action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}] - Dispenser type: {expected_dispenser_type}")
-                                    break
-                                else:
-                                    print(f"        Dispenser type mismatch: expected {expected_dispenser_type}, got {current_item} at ({action['target_tile_x']}, {action['target_tile_y']})")
-                            
-                        if matched_action is not None:
-                            check_counter = False
-                            print(f"      Processing as compound action at dispenser")
-                            # Update action index AFTER processing
-                            agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
-                            # Traditional compound action (put down old item + pick up new item)
-                            # 1. Put down the previous item (destructive action)
-                            put_down_category_id, put_down_category_name = get_action_category(
-                                "drop", previous_item, None, matched_action['target_tile_type']
-                            )
-
-                            put_down_action = {
-                                'frame': sim_row['frame'],
-                                'agent_id': agent_id,
-                                'action_id': matched_action['action_id'],
-                                'action_number': matched_action['action_number'],
-                                'action_type': matched_action['action_type'],
-                                'target_tile_type': matched_action['target_tile_type'],
-                                'target_tile_x': matched_action['target_tile_x'],
-                                'target_tile_y': matched_action['target_tile_y'],
-                                'agent_tile_x': agent_tile_x,
-                                'agent_tile_y': agent_tile_y,
-                                'item_change_type': "drop",
-                                'previous_item': previous_item,
-                                'current_item': None,
-                                'agent_x': sim_row['x'],
-                                'agent_y': sim_row['y'],
-                                'action_category_id': put_down_category_id,
-                                'action_category_name': put_down_category_name,
-                                'compound_action_part': 1  # First part of compound action
-                            }
-                            meaningful_actions.append(put_down_action)
-                            print(f"      Part 1 - Put down: {put_down_category_name}")
-                            
-                            # Update counter states if dropping on counter
-                            if matched_action['target_tile_type'] == 'counter':
-                                counter_pos = (int(matched_action['target_tile_x']), int(matched_action['target_tile_y']))
-                                counter_states[counter_pos] = previous_item
-                                print(f"      Updated counter {counter_pos} with {previous_item}")
-
-                            # 2. Pick up the new item
-                            pick_up_category_id, pick_up_category_name = get_action_category(
-                                "pickup", None, current_item, matched_action['target_tile_type']
-                            )
-
-                            pick_up_action = {
-                                'frame': sim_row['frame'],
-                                'agent_id': agent_id,
-                                'action_id': matched_action['action_id'],
-                                'action_number': matched_action['action_number'],
-                                'action_type': matched_action['action_type'],
-                                'target_tile_type': matched_action['target_tile_type'],
-                                'target_tile_x': matched_action['target_tile_x'],
-                                'target_tile_y': matched_action['target_tile_y'],
-                                'agent_tile_x': agent_tile_x,
-                                'agent_tile_y': agent_tile_y,
-                                'item_change_type': "pickup",
-                                'previous_item': None,
-                                'current_item': current_item,
-                                'agent_x': sim_row['x'],
-                                'agent_y': sim_row['y'],
-                                'action_category_id': pick_up_category_id,
-                                'action_category_name': pick_up_category_name,
-                                'compound_action_part': 2  # Second part of compound action
-                            }
-                            meaningful_actions.append(pick_up_action)
-                            print(f"      Part 2 - Pick up: {pick_up_category_name}")
-
-                        else:
-                            print(f"      No dispenser found - checking for counter-based transformation")
-
-                    if check_counter:
-                        # Look for counter actions (like putting down tomato and picking up plate from same counter)
-                        for check_idx in range(current_action_idx, len(agent_actions)):
-                            action = agent_actions.iloc[check_idx]
-                            
-                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
-                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                                continue
-                                
-                            is_near = is_near_target(agent_tile_x, agent_tile_y, 
-                                                   action['target_tile_x'], action['target_tile_y'])
-
-                            print(f"        Checking counter action [{check_idx}]: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}] - Near: {is_near}")
-
-                            if is_near and action['target_tile_type'] == 'counter':
-                                matched_action = action.copy()
-                                matched_action['matched_action_idx'] = check_idx
-                                print(f"      Matched to counter action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
-                                break
-                            
-                        if matched_action is not None:
-                            print(f"      Processing as compound action at counter")
-                            # Update action index AFTER processing
-                            agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
-                            
-                            # Store what was originally on the counter before the compound action
-                            counter_pos = (int(matched_action['target_tile_x']), int(matched_action['target_tile_y']))
-                            original_counter_item = counter_states.get(counter_pos, None)
-                            
-                            # Compound action at counter: put down old item + pick up new item
-                            # 1. Put down the previous item
-                            put_down_category_id, put_down_category_name = get_action_category(
-                                "drop", previous_item, None, matched_action['target_tile_type']
-                            )
-
-                            put_down_action = {
-                                'frame': sim_row['frame'],
-                                'agent_id': agent_id,
-                                'action_id': matched_action['action_id'],
-                                'action_number': matched_action['action_number'],
-                                'action_type': matched_action['action_type'],
-                                'target_tile_type': matched_action['target_tile_type'],
-                                'target_tile_x': matched_action['target_tile_x'],
-                                'target_tile_y': matched_action['target_tile_y'],
-                                'agent_tile_x': agent_tile_x,
-                                'agent_tile_y': agent_tile_y,
-                                'item_change_type': "drop",
-                                'previous_item': previous_item,
-                                'current_item': None,
-                                'agent_x': sim_row['x'],
-                                'agent_y': sim_row['y'],
-                                'action_category_id': put_down_category_id,
-                                'action_category_name': put_down_category_name,
-                                'compound_action_part': 1  # First part of compound action
-                            }
-                            meaningful_actions.append(put_down_action)
-                            print(f"      Counter Part 1 - Put down: {put_down_category_name}")
-                            
-                            # DON'T update counter state yet - we need to pick up what was originally there first
-                            
-                            # 2. Pick up the new item (what was originally on the counter)
-                            pick_up_category_id, pick_up_category_name = get_action_category(
-                                "pickup", None, current_item, matched_action['target_tile_type']
-                            )
-
-                            pick_up_action = {
-                                'frame': sim_row['frame'],
-                                'agent_id': agent_id,
-                                'action_id': matched_action['action_id'],
-                                'action_number': matched_action['action_number'],
-                                'action_type': matched_action['action_type'],
-                                'target_tile_type': matched_action['target_tile_type'],
-                                'target_tile_x': matched_action['target_tile_x'],
-                                'target_tile_y': matched_action['target_tile_y'],
-                                'agent_tile_x': agent_tile_x,
-                                'agent_tile_y': agent_tile_y,
-                                'item_change_type': "pickup",
-                                'previous_item': None,
-                                'current_item': current_item,
-                                'agent_x': sim_row['x'],
-                                'agent_y': sim_row['y'],
-                                'action_category_id': pick_up_category_id,
-                                'action_category_name': pick_up_category_name,
-                                'compound_action_part': 2  # Second part of compound action
-                            }
-                            meaningful_actions.append(pick_up_action)
-                            print(f"      Counter Part 2 - Pick up: {pick_up_category_name}")
-                            
-                            # NOW update counter state: what the agent put down replaces what was there
-                            counter_states[counter_pos] = previous_item
-                            print(f"      Updated counter {counter_pos} with {previous_item} (replacing {original_counter_item})")
-                        else:
-                            print(f"      Could not match transformation to any action")
+                        print(f"      No dispenser found - checking for counter-based transformation")
                 
                 # Handle cuttingboard mechanics separately
-                elif change_type == "drop" and previous_item == 'tomato' and current_item is None:
+                elif change_type == "drop" and previous_agent_item == 'tomato' and current_agent_item is None and not action_found:
                     print(f"      Checking if this is cuttingboard tomato drop")
-                    # Check if this is putting tomato on cuttingboard
-                    nearby_cuttingboards = find_nearby_tiles(agent_tile_x, agent_tile_y, agent_actions, ['cuttingboard'])
                     
-                    if nearby_cuttingboards:
-                        print(f"      Found nearby cuttingboard - verifying actual usage by looking ahead 72 frames")
-                        
-                        # Verify this is actually cuttingboard usage by looking ahead 72 frames
-                        is_actual_cuttingboard, future_frame, future_item = verify_cuttingboard_usage(
-                            simulation_df, agent_id, sim_row['frame'], agent_tile_x, agent_tile_y, agent_states, engine_tick_rate
+                    matched_action = None
+                    for check_idx in range(current_action_idx, len(agent_actions)):
+                        action = agent_actions.iloc[check_idx]
+
+                        # Skip actions with NaN coordinates for now
+                        if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                            continue
+                                
+                        is_near = is_near_target(agent_tile_x, agent_tile_y, 
+                                                action['target_tile_x'], action['target_tile_y'])
+
+                        if is_near and action['action_type'] == 'use_cutting_board':
+                            matched_action = action.copy()
+                            matched_action['matched_action_idx'] = check_idx
+                            print(f"      Matched to cutting_board action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
+                            break
+                    
+                    if matched_action is not None:                        
+                        print(f"      Processing as cuttingboard usage")
+                        # Update action index AFTER processing
+                        agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
+
+                        # Step 1: Put down tomato on cuttingboard
+                        put_down_category_id, put_down_category_name = get_action_category(
+                            matched_action['action_type'], "drop", previous_agent_item, None, matched_action['target_tile_type']
                         )
                         
-                        if is_actual_cuttingboard:
-                            print(f"      Confirmed cuttingboard usage - processing complete cuttingboard sequence")
-                            # This is confirmed cuttingboard usage - process all three steps at once
-                            matched_action = None
-                            for check_idx in range(current_action_idx, len(agent_actions)):
-                                action = agent_actions.iloc[check_idx]
-                                
-                                # Skip actions with NaN coordinates (e.g., do_nothing actions)
-                                if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                                    continue
-                                    
-                                is_near = is_near_target(agent_tile_x, agent_tile_y, 
-                                                       action['target_tile_x'], action['target_tile_y'])
-                                
-                                if is_near and action['target_tile_type'] == 'cuttingboard':
-                                    matched_action = action.copy()
-                                    matched_action['matched_action_idx'] = check_idx
-                                    print(f"      Matched to counter action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
-                                    break
-                            
-                            if matched_action is not None:
-                                # Step 1: Put down tomato on cuttingboard
-                                put_down_category_id, put_down_category_name = get_action_category(
-                                    "drop", previous_item, None, matched_action['target_tile_type']
-                                )
-                                
-                                put_down_action = {
-                                    'frame': sim_row['frame'],
-                                    'agent_id': agent_id,
-                                    'action_id': matched_action['action_id'],
-                                    'action_number': matched_action['action_number'],
-                                    'action_type': matched_action['action_type'],
-                                    'target_tile_type': matched_action['target_tile_type'],
-                                    'target_tile_x': matched_action['target_tile_x'],
-                                    'target_tile_y': matched_action['target_tile_y'],
-                                    'agent_tile_x': agent_tile_x,
-                                    'agent_tile_y': agent_tile_y,
-                                    'item_change_type': "drop",
-                                    'previous_item': previous_item,
-                                    'current_item': None,
-                                    'agent_x': sim_row['x'],
-                                    'agent_y': sim_row['y'],
-                                    'action_category_id': put_down_category_id,
-                                    'action_category_name': put_down_category_name,
-                                    'compound_action_part': 1  # First part of cuttingboard sequence
-                                }
-                                meaningful_actions.append(put_down_action)
-                                print(f"      Cuttingboard Step 1: {put_down_category_name}")
-                                
-                                # Step 2: Start cutting tomato (intermediate frame)
-                                start_cutting_action = {
-                                    'frame': sim_row['frame'],  # Use same frame as step 1 for logical grouping
-                                    'agent_id': agent_id,
-                                    'action_id': matched_action['action_id'],
-                                    'action_number': matched_action['action_number'],
-                                    'action_type': matched_action['action_type'],
-                                    'target_tile_type': matched_action['target_tile_type'],
-                                    'target_tile_x': matched_action['target_tile_x'],
-                                    'target_tile_y': matched_action['target_tile_y'],
-                                    'agent_tile_x': agent_tile_x,
-                                    'agent_tile_y': agent_tile_y,
-                                    'item_change_type': "cutting",  # Special type for cutting process
-                                    'previous_item': None,
-                                    'current_item': None,
-                                    'agent_x': sim_row['x'],
-                                    'agent_y': sim_row['y'],
-                                    'action_category_id': 3,  # start cutting tomato
-                                    'action_category_name': 'start cutting tomato',
-                                    'compound_action_part': 2  # Second part of cuttingboard sequence
-                                }
-                                meaningful_actions.append(start_cutting_action)
-                                print(f"      Cuttingboard Step 2: start cutting tomato")
-                                
-                                # Step 3: Pick up tomato_cut from cuttingboard (use future frame)
-                                pick_up_category_id, pick_up_category_name = get_action_category(
-                                    "pickup", None, future_item, matched_action['target_tile_type']
-                                )
-                                
-                                pick_up_action = {
-                                    'frame': future_frame,  # Use the future frame where pickup actually happens
-                                    'agent_id': agent_id,
-                                    'action_id': matched_action['action_id'],
-                                    'action_number': matched_action['action_number'],
-                                    'action_type': matched_action['action_type'],
-                                    'target_tile_type': matched_action['target_tile_type'],
-                                    'target_tile_x': matched_action['target_tile_x'],
-                                    'target_tile_y': matched_action['target_tile_y'],
-                                    'agent_tile_x': agent_tile_x,
-                                    'agent_tile_y': agent_tile_y,
-                                    'item_change_type': "pickup",
-                                    'previous_item': None,
-                                    'current_item': future_item,
-                                    'agent_x': sim_row['x'],
-                                    'agent_y': sim_row['y'],
-                                    'action_category_id': pick_up_category_id,
-                                    'action_category_name': pick_up_category_name,
-                                    'compound_action_part': 3  # Third part of cuttingboard sequence
-                                }
-                                meaningful_actions.append(pick_up_action)
-                                print(f"      Cuttingboard Step 3: {pick_up_category_name}")
-                                
-                                # Increment action index after processing complete sequence
-                                agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
-                                
-                                # Mark the future frame to skip processing the tomato_cut pickup later
-                                if agent_id not in agent_states:
-                                    agent_states[agent_id] = {}
-                                if 'skip_frames' not in agent_states[agent_id]:
-                                    agent_states[agent_id]['skip_frames'] = set()
-                                agent_states[agent_id]['skip_frames'].add(future_frame)
-                                
-                            else:
-                                print(f"      Could not match cuttingboard action")
-                        else:
-                            print(f"      Not actual cuttingboard usage - treating as regular counter drop")
-                            # This is just a regular drop on what appears to be a cuttingboard
-                            # but is actually being used as a counter - process as regular drop
-                            
-                            # Find the counter action that matches this drop
-                            matched_action = None
-                            for check_idx in range(current_action_idx, len(agent_actions)):
-                                action = agent_actions.iloc[check_idx]
-                                
-                                # Skip actions with NaN coordinates (e.g., do_nothing actions)
-                                if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                                    continue
-                                    
-                                is_near = is_near_target(agent_tile_x, agent_tile_y, 
-                                                       action['target_tile_x'], action['target_tile_y'])
-                                
-                                # Look for counter actions (the cuttingboard is being used as a counter)
-                                if is_near and action['target_tile_type'] == 'counter':
-                                    matched_action = action.copy()
-                                    matched_action['matched_action_idx'] = check_idx
-                                    print(f"      Matched to counter action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
-                                    break
-                            
-                            if matched_action is not None:
-                                # Get the action category for counter drop
-                                action_category_id, action_category_name = get_action_category(
-                                    "drop", previous_item, None, 'counter'
-                                )
-                                
-                                # Save this meaningful action
-                                meaningful_action = {
-                                    'frame': sim_row['frame'],
-                                    'agent_id': agent_id,
-                                    'action_id': matched_action['action_id'],
-                                    'action_number': matched_action['action_number'],
-                                    'action_type': matched_action['action_type'],
-                                    'target_tile_type': 'counter',  # Force counter type since it's not actual cuttingboard usage
-                                    'target_tile_x': matched_action['target_tile_x'],
-                                    'target_tile_y': matched_action['target_tile_y'],
-                                    'agent_tile_x': agent_tile_x,
-                                    'agent_tile_y': agent_tile_y,
-                                    'item_change_type': "drop",
-                                    'previous_item': previous_item,
-                                    'current_item': current_item,
-                                    'agent_x': sim_row['x'],
-                                    'agent_y': sim_row['y'],
-                                    'action_category_id': action_category_id,
-                                    'action_category_name': action_category_name,
-                                    'compound_action_part': 0  # Single action (not compound)
-                                }
-                                meaningful_actions.append(meaningful_action)
-                                print(f"      Category: {action_category_name}")
-                                
-                                # Update counter states - the tomato is now on this counter
-                                counter_pos = (int(matched_action['target_tile_x']), int(matched_action['target_tile_y']))
-                                counter_states[counter_pos] = previous_item
-                                print(f"      Updated counter {counter_pos} with {previous_item}")
-                                
-                                # Increment action index after processing
-                                agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
-                            else:
-                                print(f"      Could not match failed cuttingboard drop to any counter action")
-                    
-                    # Process as regular drop (either no cuttingboard nearby, or failed cuttingboard verification)
-                    if not (nearby_cuttingboards and len(meaningful_actions) > 0 and 
-                           meaningful_actions[-1]['compound_action_part'] == 3):  # Check if cuttingboard sequence was completed
-                        print(f"      Processing as regular drop action")
-                        matched_action = None
+                        put_down_action = {
+                            'frame': sim_row['frame'],
+                            'agent_id': agent_id,
+                            'action_id': matched_action['action_id'],
+                            'action_number': matched_action['action_number'],
+                            'action_type': matched_action['action_type'],
+                            'target_tile_type': matched_action['target_tile_type'],
+                            'target_tile_x': matched_action['target_tile_x'],
+                            'target_tile_y': matched_action['target_tile_y'],
+                            'agent_tile_x': agent_tile_x,
+                            'agent_tile_y': agent_tile_y,
+                            'item_change_type': "drop",
+                            'previous_item': previous_agent_item,
+                            'current_item': None,
+                            'agent_x': sim_row['x'],
+                            'agent_y': sim_row['y'],
+                            'action_category_id': put_down_category_id,
+                            'action_category_name': put_down_category_name,
+                            'compound_action_part': 1  # First part of cuttingboard sequence
+                        }
+                        meaningful_actions.append(put_down_action)
+                        print(f"      Cuttingboard Step 1: {put_down_category_name}")
                         
-                        # Start looking from current action index forward (cannot be previous actions)
-                        for check_idx in range(current_action_idx, len(agent_actions)):
-                            action = agent_actions.iloc[check_idx]
-                            
-                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
-                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                                continue
-                            
-                            # Check if agent is near the target tile of this action
-                            is_near = is_near_target(agent_tile_x, agent_tile_y, 
-                                                   action['target_tile_x'], action['target_tile_y'])
-                            
-                            if not is_near:
-                                continue
-                            
-                            print(f"        Checking action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
-                            
-                            # Check if the action type matches the item change
-                            action_matches = False
-                            
-                            # Agent dropped item, should be near delivery, counter, or cuttingboard
-                            action_matches = action['target_tile_type'] in ['delivery', 'counter', 'cuttingboard']
-                            
-                            print(f"        Action matches: {action_matches}")
-                            
-                            if action_matches:
-                                matched_action = action.copy()
-                                matched_action['matched_action_idx'] = check_idx
-                                print(f"      Matched to action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
-                                break
+                        # Step 2: Start cutting tomato (intermediate frame)                        
+                        start_cutting_category_id, start_cutting_category_name = get_action_category(
+                            matched_action['action_type'], "cutting", None, None, matched_action['target_tile_type']
+                        )
                         
-                        if matched_action is not None:
-                            # Get the action category
-                            action_category_id, action_category_name = get_action_category(
-                                change_type, previous_item, current_item, matched_action['target_tile_type']
+                        start_cutting_action = {
+                            'frame': sim_row['frame'],  # Use same frame as step 1 for logical grouping
+                            'agent_id': agent_id,
+                            'action_id': matched_action['action_id'],
+                            'action_number': matched_action['action_number'],
+                            'action_type': matched_action['action_type'],
+                            'target_tile_type': matched_action['target_tile_type'],
+                            'target_tile_x': matched_action['target_tile_x'],
+                            'target_tile_y': matched_action['target_tile_y'],
+                            'agent_tile_x': agent_tile_x,
+                            'agent_tile_y': agent_tile_y,
+                            'item_change_type': "cutting",  # Special type for cutting process
+                            'previous_item': None,
+                            'current_item': None,
+                            'agent_x': sim_row['x'],
+                            'agent_y': sim_row['y'],
+                            'action_category_id': start_cutting_category_id,
+                            'action_category_name': start_cutting_category_name,
+                            'compound_action_part': 2  # Second part of cuttingboard sequence
+                        }
+                        meaningful_actions.append(start_cutting_action)
+                        print(f"      Cuttingboard Step 2: {start_cutting_category_name}")
+                        
+                        # Step 3: Pick up tomato_cut from cuttingboard (use future frame)
+                        # Look for the None -> tomato_cut transition in frames between current and target
+                        # Get cutting speed for this agent
+                        agent_cutting_speed = cutting_speeds.get(agent_id, 1.0) if cutting_speeds else 1.0
+                        cutting_time = 3.0  # Base cutting time in seconds
+                        actual_cutting_time = cutting_time / agent_cutting_speed
+                        target_frame = int(sim_row['frame'] + (actual_cutting_time + 2.0) * engine_tick_rate)  # Add 2 second buffer
+                        search_frames = range(sim_row['frame'] + 1, target_frame)  # Look ahead up to target + small buffer
+
+                        for check_frame in search_frames:
+                            future_data = simulation_df[
+                                (simulation_df['frame'] == check_frame) & 
+                                (simulation_df['agent_id'] == agent_id)
+                            ]
+
+                            if not future_data.empty:
+                                future_row = future_data.iloc[0]
+
+                                # Check for NaN values before converting to int
+                                if pd.isna(future_row['tile_x']) or pd.isna(future_row['tile_y']):
+                                    print(f"      WARNING: Agent {agent_id} has NaN coordinates at frame {check_frame}, skipping cuttingboard verification")
+                                    continue
+
+                                future_tile_x = int(future_row['tile_x'])
+                                future_tile_y = int(future_row['tile_y'])
+                                future_item = future_row['item'] if pd.notna(future_row['item']) else None
+
+                                # Check if agent is still on the same tile and gets tomato_cut
+                                if future_tile_x == agent_tile_x and future_tile_y == agent_tile_y:
+                                    if future_item == 'tomato_cut':
+                                        print(f"      Verified cuttingboard usage: Agent {agent_id} at frame {check_frame} on tile ({agent_tile_x}, {agent_tile_y}) with tomato_cut")
+                                        future_frame = check_frame
+                                        agent_states[agent_id]['skip_frames'].add(future_frame)
+                                        break
+    
+                        if future_frame:
+                            pick_up_category_id, pick_up_category_name = get_action_category(
+                                matched_action['action_type'], "pickup", None, future_item, matched_action['target_tile_type']
                             )
                             
-                            # Save this meaningful action
-                            meaningful_action = {
-                                'frame': sim_row['frame'],
+                            pick_up_action = {
+                                'frame': future_frame,  # Use the future frame where pickup actually happens
                                 'agent_id': agent_id,
                                 'action_id': matched_action['action_id'],
                                 'action_number': matched_action['action_number'],
@@ -1021,229 +810,167 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
                                 'target_tile_y': matched_action['target_tile_y'],
                                 'agent_tile_x': agent_tile_x,
                                 'agent_tile_y': agent_tile_y,
-                                'item_change_type': change_type,
-                                'previous_item': previous_item,
-                                'current_item': current_item,
+                                'item_change_type': "pickup",
+                                'previous_item': None,
+                                'current_item': future_item,
                                 'agent_x': sim_row['x'],
                                 'agent_y': sim_row['y'],
-                                'action_category_id': action_category_id,
-                                'action_category_name': action_category_name,
-                                'compound_action_part': 0  # Single action (not compound)
+                                'action_category_id': pick_up_category_id,
+                                'action_category_name': pick_up_category_name,
+                                'compound_action_part': 3  # Third part of cuttingboard sequence
                             }
-                            meaningful_actions.append(meaningful_action)
-                            print(f"      Category: {action_category_name}")
+                            meaningful_actions.append(pick_up_action)
+                            print(f"      Cuttingboard Step 3: {pick_up_category_name}")
                             
-                            # Update counter states for drop/pickup actions on counters
-                            if change_type == "drop" and matched_action['target_tile_type'] == 'counter':
-                                counter_pos = (matched_action['target_tile_x'], matched_action['target_tile_y'])
-                                counter_states[counter_pos] = previous_item
-                                print(f"      Updated counter {counter_pos} with {previous_item}")
-                            elif change_type == "pickup" and matched_action['target_tile_type'] == 'counter':
-                                counter_pos = (matched_action['target_tile_x'], matched_action['target_tile_y'])
-                                if counter_pos in counter_states:
-                                    del counter_states[counter_pos]
-                                    print(f"      Removed item from counter {counter_pos}")
-                            
-                            # Only increment action index AFTER processing the action
-                            agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
+                            # Mark the future frame to skip processing the tomato_cut pickup later
+                            if agent_id not in agent_states:
+                                agent_states[agent_id] = {}
+                            if 'skip_frames' not in agent_states[agent_id]:
+                                agent_states[agent_id]['skip_frames'] = set()
+                            agent_states[agent_id]['skip_frames'].add(future_frame)
+                        
                         else:
-                            print(f"      Could not match tomato drop to any action")
+                            print(f"      No None -> tomato_cut transition found for agent {agent_id} between frames {sim_row['frame']} and {target_frame}")
+
+                        action_found = True
+                    else:
+                        print(f"      Could not match drop action - not a cuttingboard action")
+                
+                # Handle delivery mechanics
+                elif change_type == "drop" and previous_agent_item == 'tomato_salad' and current_agent_item is None and not action_found:
+                    print(f"      Checking if this is a delivery")
                     
-                elif change_type == "pickup" and previous_item is None and current_item == 'tomato_cut':
+                    matched_action = None
+                    for check_idx in range(current_action_idx, len(agent_actions)):
+                        action = agent_actions.iloc[check_idx]
+
+                        # Skip actions with NaN coordinates for now
+                        if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                            continue
+                                
+                        is_near = is_near_target(agent_tile_x, agent_tile_y, 
+                                                action['target_tile_x'], action['target_tile_y'])
+
+                        if is_near and action['action_type'] == 'use_delivery':
+                            matched_action = action.copy()
+                            matched_action['matched_action_idx'] = check_idx
+                            print(f"      Matched to delivery action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
+                            break
+                    
+                    if matched_action is not None:                        
+                        print(f"      Processing as cuttingboard usage")
+                        # Update action index AFTER processing
+                        agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
+
+                        category_id, category_name = get_action_category(
+                            matched_action['action_type'], "drop", previous_agent_item, None, matched_action['target_tile_type']
+                        )
+                        
+                        action = {
+                            'frame': sim_row['frame'],
+                            'agent_id': agent_id,
+                            'action_id': matched_action['action_id'],
+                            'action_number': matched_action['action_number'],
+                            'action_type': matched_action['action_type'],
+                            'target_tile_type': matched_action['target_tile_type'],
+                            'target_tile_x': matched_action['target_tile_x'],
+                            'target_tile_y': matched_action['target_tile_y'],
+                            'agent_tile_x': agent_tile_x,
+                            'agent_tile_y': agent_tile_y,
+                            'item_change_type': "drop",
+                            'previous_item': previous_agent_item,
+                            'current_item': None,
+                            'agent_x': sim_row['x'],
+                            'agent_y': sim_row['y'],
+                            'action_category_id': category_id,
+                            'action_category_name': category_name,
+                            'compound_action_part': 0 # Single action
+                        }
+                        meaningful_actions.append(action)
+                        print(f"      Delivery: {category_name}")
+                        action_found = True
+                    else:
+                        print(f"      Could not match drop action - not a delivery action")
+
+                elif change_type == "pickup" and previous_agent_item is None and current_agent_item == 'tomato_cut' and not action_found:
                     # Check if this pickup should be skipped (already processed as part of cuttingboard sequence)
                     if (agent_id in agent_states and 
                         'skip_frames' in agent_states[agent_id] and 
                         sim_row['frame'] in agent_states[agent_id]['skip_frames']):
-                        print(f"      Skipping tomato_cut pickup at frame {sim_row['frame']} - already processed as cuttingboard sequence")
+                        print(f"      Skipping tomato_cut pickup - already processed as part of cuttingboard sequence")
                         agent_states[agent_id]['skip_frames'].remove(sim_row['frame'])
-                        # Don't process this pickup - it was already handled in the cuttingboard sequence
+                        continue
                     else:
-                        # This is a regular tomato_cut pickup (from counter or other location)
-                        print(f"      Processing regular tomato_cut pickup")
-                        # Process as regular pickup action
-                        matched_action = None
-                        
-                        # Start looking from current action index forward (cannot be previous actions)
-                        for check_idx in range(current_action_idx, len(agent_actions)):
-                            action = agent_actions.iloc[check_idx]
-                            
-                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
-                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                                continue
-                            
-                            # Check if agent is near the target tile of this action
-                            is_near = is_near_target(agent_tile_x, agent_tile_y, 
-                                                   action['target_tile_x'], action['target_tile_y'])
-                            
-                            if not is_near:
-                                continue
-                            
-                            print(f"        Checking action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
-                            
-                            # Check if the action type matches the item change (pickup from counter or cuttingboard)
-                            action_matches = action['target_tile_type'] in ['counter', 'cuttingboard']
-                            
-                            print(f"        Action matches: {action_matches}")
-                            
-                            if action_matches:
-                                matched_action = action.copy()
-                                matched_action['matched_action_idx'] = check_idx
-                                print(f"      Matched to action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
-                                break
-                        
-                        if matched_action is not None:
-                            # Get the action category
-                            action_category_id, action_category_name = get_action_category(
-                                change_type, previous_item, current_item, matched_action['target_tile_type']
-                            )
-                            
-                            # Save this meaningful action
-                            meaningful_action = {
-                                'frame': sim_row['frame'],
-                                'agent_id': agent_id,
-                                'action_id': matched_action['action_id'],
-                                'action_number': matched_action['action_number'],
-                                'action_type': matched_action['action_type'],
-                                'target_tile_type': matched_action['target_tile_type'],
-                                'target_tile_x': matched_action['target_tile_x'],
-                                'target_tile_y': matched_action['target_tile_y'],
-                                'agent_tile_x': agent_tile_x,
-                                'agent_tile_y': agent_tile_y,
-                                'item_change_type': change_type,
-                                'previous_item': previous_item,
-                                'current_item': current_item,
-                                'agent_x': sim_row['x'],
-                                'agent_y': sim_row['y'],
-                                'action_category_id': action_category_id,
-                                'action_category_name': action_category_name,
-                                'compound_action_part': 0  # Single action (not compound)
-                            }
-                            meaningful_actions.append(meaningful_action)
-                            print(f"      Category: {action_category_name}")
-                            
-                            # Update counter states for pickup actions on counters
-                            if change_type == "pickup" and matched_action['target_tile_type'] == 'counter':
-                                counter_pos = (matched_action['target_tile_x'], matched_action['target_tile_y'])
-                                if counter_pos in counter_states:
-                                    del counter_states[counter_pos]
-                                    print(f"      Removed item from counter {counter_pos}")
-                            
-                            # Only increment action index AFTER processing the action
-                            agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
-                        else:
-                            print(f"      Could not match tomato_cut pickup to any action")
-                else:
-                    # Regular single action (pickup, drop, or transformation) - but skip if already handled as salad assembly or cutting
-                    if not is_salad_assembly:
-                        print(f"      Looking for regular action for {change_type}: {previous_item} -> {current_item}")
-                        print(f"      Current action index: {current_action_idx}/{len(agent_actions)}")
-                        matched_action = None
-                        
-                        # Start looking from current action index forward (cannot be previous actions)
-                        for check_idx in range(current_action_idx, len(agent_actions)):
-                            action = agent_actions.iloc[check_idx]
-                            
-                            # Skip actions with NaN coordinates (e.g., do_nothing actions)
-                            if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
-                                continue
-                            
-                            # Check if agent is near the target tile of this action
-                            is_near = is_near_target(agent_tile_x, agent_tile_y, 
-                                                   action['target_tile_x'], action['target_tile_y'])
-                            
-                            print(f"        Checking action [{check_idx}]: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}] - Near: {is_near}")
-                            
-                            if not is_near:
-                                continue
-                            
-                            # Check if the action type matches the item change
-                            action_matches = False
-                            
-                            if change_type == "pickup":
-                                # Agent picked up item, should be near a dispenser or counter
-                                action_matches = action['target_tile_type'] in ['dispenser', 'counter']
+                        print(f"      Could not process standalone tomato_cut pickup")
+                        continue
+                
+                # Handle dispenser pickups
+                elif change_type == "pickup" and previous_agent_item is None and current_agent_item in ['plate', 'tomato'] and not action_found:
+                    print(f"      Checking for dispenser pickup: {current_agent_item}")
+                    print(f"      Current action index: {current_action_idx}/{len(agent_actions)}")
+
+                    matched_action = None
+                    for check_idx in range(current_action_idx, len(agent_actions)):
+                        action = agent_actions.iloc[check_idx]
+
+                        # Skip actions with NaN coordinates for now
+                        if pd.isna(action['target_tile_x']) or pd.isna(action['target_tile_y']):
+                            continue
                                 
-                            elif change_type == "drop":
-                                # Agent dropped item - check which tile types are valid for this item
-                                if previous_item == 'tomato':
-                                    # Tomato can NOT be dropped on delivery
-                                    action_matches = action['target_tile_type'] in ['counter', 'cuttingboard', 'dispenser']
-                                elif previous_item in ['tomato_cut', 'plate']:
-                                    # tomato_cut and plate can NOT be dropped on cuttingboard nor delivery
-                                    action_matches = action['target_tile_type'] in ['counter', 'dispenser']
-                                elif previous_item == 'tomato_salad':
-                                    # tomato_salad can NOT be dropped on cuttingboard
-                                    action_matches = action['target_tile_type'] in ['delivery', 'counter', 'dispenser']
-                                else:
-                                    # For any other item, allow counter, delivery, dispenser
-                                    action_matches = action['target_tile_type'] in ['delivery', 'counter', 'dispenser', 'cuttingboard']
-                                
-                            elif change_type == "change":
-                                # Item transformation, should be near counter
-                                action_matches = action['target_tile_type'] in ['counter']
-                            
-                            print(f"        Action matches: {action_matches}")
-                            
-                            if action_matches:
-                                matched_action = action.copy()
-                                matched_action['matched_action_idx'] = check_idx
-                                print(f"      Matched to action {check_idx}: {action['action_type']} -> ({action['target_tile_x']}, {action['target_tile_y']}) [{action['target_tile_type']}]")
-                                break
+                        is_near = is_near_target(agent_tile_x, agent_tile_y, 
+                                                action['target_tile_x'], action['target_tile_y'])
+
+                        if is_near and (
+                            (action['action_type'] == 'pick_up_plate_from_dispenser' and current_agent_item == 'plate')
+                              or (action['action_type'] == 'pick_up_tomato_from_dispenser' and current_agent_item == 'tomato')
+                            ):
+                            matched_action = action.copy()
+                            matched_action['matched_action_idx'] = check_idx
+                            print(f"      Matched to dispenser pickup action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
+                            break
+                    
+                    if matched_action is not None:
+                        print(f"     Processing as dispenser pickup")
+                        # Update action index AFTER processing
+                        agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
+
+                        category_id, category_name = get_action_category(
+                            matched_action['action_type'], "pickup", None, current_agent_item, matched_action['target_tile_type']
+                        )
+
+                        action = {
+                            'frame': sim_row['frame'],
+                            'agent_id': agent_id,
+                            'action_id': matched_action['action_id'],
+                            'action_number': matched_action['action_number'],
+                            'action_type': matched_action['action_type'],
+                            'target_tile_type': matched_action['target_tile_type'],
+                            'target_tile_x': matched_action['target_tile_x'],
+                            'target_tile_y': matched_action['target_tile_y'],
+                            'agent_tile_x': agent_tile_x,
+                            'agent_tile_y': agent_tile_y,
+                            'item_change_type': "pickup",
+                            'previous_item': None,
+                            'current_item': current_agent_item,
+                            'agent_x': sim_row['x'],
+                            'agent_y': sim_row['y'],
+                            'action_category_id': category_id,
+                            'action_category_name': category_name,
+                            'compound_action_part': 0  # Single action
+                        }
+                        meaningful_actions.append(action)
+                        print(f"      Dispenser Pickup: {category_name}")
+                        action_found = True
+
+                    else:
+                        print(f"      Could not match dispenser pick up action")
+                        continue
+
+                elif not action_found:
+                    print(f"      Could not match {change_type} action: {previous_agent_item} -> {current_agent_item}")
                         
-                        if matched_action is not None:
-                            # Get the action category
-                            action_category_id, action_category_name = get_action_category(
-                                change_type, previous_item, current_item, matched_action['target_tile_type']
-                            )
-                            
-                            # Save this meaningful action
-                            meaningful_action = {
-                                'frame': sim_row['frame'],
-                                'agent_id': agent_id,
-                                'action_id': matched_action['action_id'],
-                                'action_number': matched_action['action_number'],
-                                'action_type': matched_action['action_type'],
-                                'target_tile_type': matched_action['target_tile_type'],
-                                'target_tile_x': matched_action['target_tile_x'],
-                                'target_tile_y': matched_action['target_tile_y'],
-                                'agent_tile_x': agent_tile_x,
-                                'agent_tile_y': agent_tile_y,
-                                'item_change_type': change_type,
-                                'previous_item': previous_item,
-                                'current_item': current_item,
-                                'agent_x': sim_row['x'],
-                                'agent_y': sim_row['y'],
-                                'action_category_id': action_category_id,
-                                'action_category_name': action_category_name,
-                                'compound_action_part': 0  # Single action (not compound)
-                            }
-                            meaningful_actions.append(meaningful_action)
-                            print(f"      Category: {action_category_name}")
-                            
-                            # Update counter states for drop/pickup actions on counters
-                            if change_type == "drop" and matched_action['target_tile_type'] == 'counter':
-                                counter_pos = (matched_action['target_tile_x'], matched_action['target_tile_y'])
-                                counter_states[counter_pos] = previous_item
-                                print(f"      Updated counter {counter_pos} with {previous_item}")
-                            elif change_type == "pickup" and matched_action['target_tile_type'] == 'counter':
-                                counter_pos = (matched_action['target_tile_x'], matched_action['target_tile_y'])
-                                if counter_pos in counter_states:
-                                    del counter_states[counter_pos]
-                                    print(f"      Removed item from counter {counter_pos}")
-                            
-                            # Only increment action index AFTER processing the action
-                            agent_states[agent_id]['current_action_idx'] = matched_action['matched_action_idx'] + 1
-                        else:
-                            print(f"      Could not match item change to any action")
-            
-            # No longer need to check for cuttingboard step 2 separately - it's handled in the complete sequence
-            
-            # Check if item change was not processed
-            elif item_changed:
-                print(f"      WARNING: Item change not processed: {change_type} {previous_item} -> {current_item}")
-            
             # Update the previous item for this agent
-            agent_states[agent_id]['previous_item'] = current_item
+            agent_states[agent_id]['previous_agent_item'] = current_agent_item
     
     # Convert to DataFrame
     meaningful_df = pd.DataFrame(meaningful_actions)
@@ -1270,9 +997,9 @@ def analyze_meaningful_actions(actions_df, simulation_df, map_nr, output_dir=Non
 
 
 # Legacy function for backward compatibility when running as standalone script
-def analyze_meaningful_actions_from_files(actions_csv_path, simulation_csv_path, map_nr, output_dir=None):
+def analyze_meaningful_actions_from_files(actions_csv_path, simulation_csv_path, counter_csv_path, map_nr, output_dir=None, cutting_speeds=None):
     """Analyze meaningful actions from CSV file paths (for backward compatibility)"""
-    return analyze_meaningful_actions(actions_csv_path, simulation_csv_path, map_nr, output_dir)
+    return analyze_meaningful_actions(actions_csv_path, simulation_csv_path, counter_csv_path, map_nr, output_dir, cutting_speeds=cutting_speeds)
 
 
 if __name__ == "__main__":
@@ -1282,18 +1009,31 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Analyze meaningful actions from simulation data')
     parser.add_argument('--actions_csv', required=True, help='Path to actions.csv file')
     parser.add_argument('--simulation_csv', required=True, help='Path to simulation.csv file')
+    parser.add_argument('--counter_csv', required=True, help='Path to counter.csv file')
     parser.add_argument('--map', required=True, help='Map number or name')
     parser.add_argument('--output_dir', required=True, help='Output directory for results')
     parser.add_argument('--engine_tick_rate', type=int, default=24, help='Engine tick rate (FPS)')
+    parser.add_argument('--cutting_speeds', type=str, help='JSON string of cutting speeds for each agent (optional)')
     
     args = parser.parse_args()
+    
+    # Parse cutting speeds if provided
+    cutting_speeds = None
+    if args.cutting_speeds:
+        import json
+        try:
+            cutting_speeds = json.loads(args.cutting_speeds)
+        except json.JSONDecodeError:
+            print("Warning: Invalid JSON for cutting_speeds, using defaults")
+            cutting_speeds = None
     
     # Run analysis
     actions_csv = Path(args.actions_csv)
     simulation_csv = Path(args.simulation_csv)
+    counter_csv = Path(args.counter_csv)
     map_nr = args.map
     output_dir = Path(args.output_dir)
     engine_tick_rate = args.engine_tick_rate
 
-    result = analyze_meaningful_actions(actions_csv, simulation_csv, map_nr, output_dir, engine_tick_rate=engine_tick_rate)
+    result = analyze_meaningful_actions(actions_csv, simulation_csv, counter_csv, map_nr, output_dir, engine_tick_rate=engine_tick_rate, cutting_speeds=cutting_speeds)
     print("\nAnalysis complete!")

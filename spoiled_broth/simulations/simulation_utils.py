@@ -166,4 +166,4 @@ def main_simulation_pipeline(map_nr: str, num_agents: int,
         timestamp=timestamp
     )
     
-    return output_paths
+    return output_paths, walking_speeds, cutting_speeds

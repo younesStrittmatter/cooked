@@ -27,6 +27,7 @@ class Agent(agent.Agent):
         self.score = 0
         self.current_action = None
         self.is_busy = False  # Initially no action is in progress
+        self.is_cutting = False  # Flag to indicate if the agent is currently cutting
         self.is_simulation = False  # Flag to indicate if this agent is in a simulation environment
         hair_n = random.randint(0, 8)
         mustache_n = random.randint(0, 8)

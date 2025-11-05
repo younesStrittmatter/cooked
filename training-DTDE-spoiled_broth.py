@@ -70,7 +70,7 @@ else:
 # Hyperparameters
 NUM_ENVS = 1
 INNER_SECONDS = 180 # In seconds
-NUM_EPOCHS = 5000
+NUM_EPOCHS = 15000
 TRAIN_BATCH_SIZE = 200 # (Train batch size should be aprox equal to inner_seconds)
 NUM_MINIBATCHES = 10
 SHOW_EVERY_N_EPOCHS = 1

@@ -12,7 +12,7 @@ import math
 from pathlib import Path
 
 
-def generate_agent_position_files(simulation_df, output_dir, agent_initialization_period=0.0):
+def generate_agent_position_files(simulation_df, output_dir, agent_initialization_period=0.0, walking_speeds=None, cutting_speeds=None):
     """
     Generate position CSV files for each agent from simulation data.
     
@@ -27,6 +27,8 @@ def generate_agent_position_files(simulation_df, output_dir, agent_initializatio
         simulation_df: DataFrame with simulation data or path to CSV file
         output_dir: Directory to save the position files
         agent_initialization_period: Duration of agent initialization period in seconds (default 15.0)
+        walking_speeds: Dictionary of walking speeds for each agent (optional)
+        cutting_speeds: Dictionary of cutting speeds for each agent (optional)
         
     Returns:
         Dictionary with paths to generated position files {agent_id: filepath}
@@ -117,8 +119,8 @@ def generate_agent_position_files(simulation_df, output_dir, agent_initializatio
             'tile_x': agent_data['tile_x'],
             'tile_y': agent_data['tile_y'],
             'distance_walked': agent_data['distance_walked'],
-            'walking_speed': 1.0,
-            'cutting_speed': 1.0,
+            'walking_speed': walking_speeds.get(agent_id, 1.0) if walking_speeds else 1.0,
+            'cutting_speed': cutting_speeds.get(agent_id, 1.0) if cutting_speeds else 1.0,
             'start_pos': start_pos,
             'item': agent_data['item'],
             'score': agent_data['score'],

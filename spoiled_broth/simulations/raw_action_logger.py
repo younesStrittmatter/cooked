@@ -152,10 +152,21 @@ class RawActionLogger:
                     self.action_id_counters[agent_id] += 1
                 
                 action_id = self.action_id_counters[agent_id]
+
+                # Function to extract the tile type automatically
+                def get_tile_type(action: str) -> str:
+                    # List of possible tile keywords
+                    tile_keywords = [
+                        "dispenser", "cutting_board", "delivery", "counter"
+                    ]
+                    for keyword in tile_keywords:
+                        if keyword in action:
+                            return keyword
+                    return "unknown"  # default if nothing matches
                 
                 # For RL actions, we log the high-level action name
-                action_type = 'rl_action'
-                tile_type = action_name
+                action_type = action_name
+                tile_type = get_tile_type(action_name)
                 
                 # Calculate target coordinates for the action
                 x_tile, y_tile = self._calculate_rl_action_coordinates(agent_id, action_name, game)

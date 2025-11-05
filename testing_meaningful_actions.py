@@ -30,6 +30,7 @@ def test_meaningful_actions(path=None):
     # Input files
     actions_csv = data_dir / "actions.csv"
     simulation_csv = data_dir / "simulation.csv"
+    counter_csv = data_dir / "counters.csv"
     
     # Output directory (same as input for this test)
     output_dir = data_dir
@@ -44,6 +45,7 @@ def test_meaningful_actions(path=None):
     print(f"Data directory: {data_dir}")
     print(f"Actions CSV: {actions_csv}")
     print(f"Simulation CSV: {simulation_csv}")
+    print(f"Counter CSV: {counter_csv}")
     print(f"Output directory: {output_dir}")
     print(f"Map: {map_name}")
     print(f"Engine tick rate: {engine_tick_rate} FPS")
@@ -57,7 +59,11 @@ def test_meaningful_actions(path=None):
     if not simulation_csv.exists():
         print(f"ERROR: Simulation CSV file not found: {simulation_csv}")
         return False
-    
+
+    if not counter_csv.exists():
+        print(f"ERROR: Counter CSV file not found: {counter_csv}")
+        return False
+
     print(f"✓ Input files exist")
     
     # Load and inspect the data
@@ -93,7 +99,12 @@ def test_meaningful_actions(path=None):
         # Check items in simulation
         items = simulation_df['item'].dropna().unique()
         print(f"Items found in simulation: {sorted(items)}")
-        
+
+        # Load counter data
+        counter_df = pd.read_csv(counter_csv)
+        print(f"\nCounter data shape: {counter_df.shape}")
+        print(f"Counter columns: {list(counter_df.columns)}")
+
     except Exception as e:
         print(f"ERROR loading data: {e}")
         return False
@@ -107,9 +118,11 @@ def test_meaningful_actions(path=None):
         result_df = analyze_meaningful_actions(
             actions_df=actions_df,
             simulation_df=simulation_df,
+            counter_df=counter_df,
             map_nr=map_name,
             output_dir=output_dir,
-            engine_tick_rate=engine_tick_rate
+            engine_tick_rate=engine_tick_rate,
+            cutting_speeds={'ai_rl_1': 1.0, 'ai_rl_2': 1.0}  # Example cutting speeds
         )
         
         print("\n" + "="*60)

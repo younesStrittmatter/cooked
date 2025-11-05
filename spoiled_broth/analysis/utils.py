@@ -49,14 +49,12 @@ class DataProcessor:
             r"'([^']+)':\s*\(\s*([-\d\.eE+]+),\s*([-\d\.eE+]+)\)"
         )
     
-    def setup_directories(self, experiment_type: str, intent_version: str, 
-                         map_name: str, cluster: str = 'cuenca') -> Dict[str, str]:
+    def setup_directories(self, experiment_type: str, map_name: str, cluster: str = 'cuenca') -> Dict[str, str]:
         """
         Set up directory structure for analysis.
         
         Args:
             experiment_type: Type of experiment ('classic', 'competition', 'pretrained')
-            intent_version: Version identifier
             map_name: Map name identifier  
             cluster: Cluster type ('brigit', 'cuenca', 'local')
             
@@ -67,36 +65,28 @@ class DataProcessor:
             raise ValueError(f"Invalid cluster '{cluster}'. Choose from {list(self.config.cluster_paths.keys())}")
         
         local_path = self.config.cluster_paths[cluster]
-        
-        if intent_version:
-            raw_dir = f"{local_path}/data/samuel_lozano/cooked/{experiment_type}/{intent_version}/map_{map_name}"
-        else:
-            raw_dir = f"{local_path}/data/samuel_lozano/cooked/{experiment_type}/map_{map_name}"
+        raw_dir = f"{local_path}/data/samuel_lozano/cooked/{experiment_type}/map_{map_name}"
         
         paths = {
             'raw_dir': raw_dir,
-            'competitive_dir': f"{raw_dir}/competitive",
-            'cooperative_dir': f"{raw_dir}/cooperative",
             'output_path': f"{raw_dir}/training_results.csv",
             'figures_dir': f"{raw_dir}/training_figures/",
             'smoothed_figures_dir': f"{raw_dir}/training_figures/smoothed_{self.config.smoothing_factor}/"
         }
         
         # Create directories
-        base_dirs = [paths['competitive_dir'], paths['cooperative_dir']]
+        base_dirs = [paths['raw_dir']]
         for dir_path in base_dirs + [paths['figures_dir'], paths['smoothed_figures_dir']]:
             os.makedirs(dir_path, exist_ok=True)
         
         return paths
     
-    def parse_training_folder(self, folder_path: str, game_flag: int, 
-                            num_agents: int = 1) -> Optional[pd.DataFrame]:
+    def parse_training_folder(self, folder_path: str, num_agents: int = 1) -> Optional[pd.DataFrame]:
         """
         Parse a single training folder and extract data.
         
         Args:
             folder_path: Path to training folder
-            game_flag: Game type flag (0=competitive, 1=cooperative)
             num_agents: Number of agents (1 for classic, 2 for competition)
             
         Returns:
@@ -140,21 +130,20 @@ class DataProcessor:
         
         # Add metadata columns
         df.insert(0, "timestamp", date_time_str)
-        df.insert(1, "game_type", game_flag)
         
         # Add agent parameters
         for i, (name, alpha, beta) in enumerate(matches, 1):
-            df.insert(1 + i, f"alpha_{i}", float(alpha))
-            df.insert(2 + i, f"beta_{i}", float(beta))
+            df.insert(0 + i, f"alpha_{i}", float(alpha))
+            df.insert(1 + i, f"beta_{i}", float(beta))
         
-        df.insert(len(matches) * 2 + 2, "lr", lr)
+        df.insert(len(matches) * 2 + 1, "lr", lr)
         
         return df
     
     def load_experiment_data(self, paths: Dict[str, str], 
                            num_agents: int = 1) -> pd.DataFrame:
         """
-        Load all experiment data from competitive and cooperative directories.
+        Load all experiment data from the raw directory.
         
         Args:
             paths: Dictionary containing directory paths
@@ -165,24 +154,16 @@ class DataProcessor:
         """
         all_dfs = []
         
-        base_dirs = {
-            "Competitive": paths['competitive_dir'],
-            "Cooperative": paths['cooperative_dir']
-        }
-        print("Loading experiment data from directories:", base_dirs.items())
+        raw_dir = paths['raw_dir']
+        print("Loading experiment data from directory:", raw_dir)
 
-        for game_type, base_dir in base_dirs.items():
-            if not os.path.exists(base_dir):
-                continue
-                
-            game_flag = 1 if "Cooperative" in game_type else 0
-            
-            for folder in os.listdir(base_dir):
-                folder_path = os.path.join(base_dir, folder)
+        if os.path.exists(raw_dir):                        
+            for folder in os.listdir(raw_dir):
+                folder_path = os.path.join(raw_dir, folder)
                 if not os.path.isdir(folder_path):
                     continue
                 
-                df = self.parse_training_folder(folder_path, game_flag, num_agents)
+                df = self.parse_training_folder(folder_path, num_agents)
                 if df is not None:
                     all_dfs.append(df)
         
@@ -213,7 +194,6 @@ class DataProcessor:
         # Set data types
         dtype_dict = {
             "timestamp": str,
-            "game_type": int,
         }
         
         for i in range(1, num_agents + 1):
@@ -232,19 +212,14 @@ class DataProcessor:
         if num_agents == 1:
             df["attitude_key"] = df.apply(lambda row: f"{row['alpha_1']}_{row['beta_1']}", axis=1)
             df["pure_reward_total"] = df["pure_reward_ai_rl_1"]
-            df["total_deliveries"] = np.where(
-                df["game_type"] == 1,
-                df["delivered_ai_rl_1"],
-                df["delivered_ai_rl_1"]
-            )
+            df["total_deliveries"] = df["deliver_ai_rl_1"]
         else:  # num_agents == 2
             df["attitude_key"] = df.apply(
                 lambda row: f"{row['alpha_1']}_{row['beta_1']}_{row['alpha_2']}_{row['beta_2']}", 
                 axis=1
             )
             df["pure_reward_total"] = df["pure_reward_ai_rl_1"] + df["pure_reward_ai_rl_2"]
-            # For classic experiments, total deliveries is always the sum of both agents
-            df["total_deliveries"] = df["delivered_ai_rl_1"] + df["delivered_ai_rl_2"]
+            df["total_deliveries"] = df["deliver_ai_rl_1"] + df["deliver_ai_rl_2"]
         
         return df
 
@@ -253,89 +228,92 @@ class MetricDefinitions:
     """Defines metrics and their visual properties for different experiment types."""
     
     @staticmethod
-    def get_classic_metrics() -> Dict:
-        """Get metric definitions for classic experiments."""
+    def get_base_classic_metrics() -> Dict:
+        """Get base metric definitions for classic experiments (without agent suffix)."""
         return {
-            'rewarded_metrics_1': [
-                "delivered_ai_rl_1",
-                "cut_ai_rl_1", 
-                "salad_ai_rl_1",
+            'rewarded_metrics': [
+                "deliver",
+                "cut",
+                "salad",
+                "plate",
+                "raw_food",
+                "counter"
             ],
-            'movement_metrics_1': [
-                "do_nothing_ai_rl_1",
-                "floor_actions_ai_rl_1",
-                "wall_actions_ai_rl_1",
-                "useless_counter_actions_ai_rl_1",
-                "useful_counter_actions_ai_rl_1",
-                "useless_food_dispenser_actions_ai_rl_1",
-                "useful_food_dispenser_actions_ai_rl_1",
-                "useless_cutting_board_actions_ai_rl_1",
-                "useful_cutting_board_actions_ai_rl_1",
-                "useless_plate_dispenser_actions_ai_rl_1",
-                "useful_plate_dispenser_actions_ai_rl_1",
-                "useless_delivery_actions_ai_rl_1",
-                "useful_delivery_actions_ai_rl_1",
+            'movement_metrics': [
+                "do_nothing",
+                "useless_floor",
+                "useless_wall",
+                "useless_counter",
+                "useful_counter",
+                "salad_assembly",
+                "destructive_food_dispenser",
+                "useful_food_dispenser",
+                "useless_cutting_board",
+                "useful_cutting_board",
+                "destructive_plate_dispenser",
+                "useful_plate_dispenser",
+                "useless_delivery",
+                "useful_delivery",
+                "inaccessible_tile"
+            ]
+        }
+    
+    @staticmethod
+    def get_classic_metrics() -> Dict:
+        """Get metric definitions for classic experiments (for backward compatibility)."""
+        base_metrics = MetricDefinitions.get_base_classic_metrics()
+        return {
+            'rewarded_metrics_1': [f"{metric}_ai_rl_1" for metric in base_metrics['rewarded_metrics']],
+            'movement_metrics_1': [f"{metric}_ai_rl_1" for metric in base_metrics['movement_metrics']]
+        }
+    
+    @staticmethod
+    def get_agent_metrics(base_metrics: List[str], agent_num: int) -> List[str]:
+        """Generate agent-specific metrics from base metric names."""
+        return [f"{metric}_ai_rl_{agent_num}" for metric in base_metrics]
+    
+    @staticmethod
+    def get_base_competition_metrics() -> Dict:
+        """Get base metric definitions for competition experiments (without agent suffix)."""
+        return {
+            'result_events': [
+                "deliver_own",
+                "deliver_other", 
+                "salad_own",
+                "salad_other",
+                "cut_own",
+                "cut_other",
+            ],
+            'action_types': [
+                "do_nothing",
+                "floor_actions",
+                "wall_actions",
+                "useless_counter_actions",
+                "useful_counter_actions",
+                "useless_own_food_dispenser_actions",
+                "useful_own_food_dispenser_actions",
+                "useless_other_food_dispenser_actions",
+                "useful_other_food_dispenser_actions",
+                "useless_cutting_board_actions",
+                "useful_own_cutting_board_actions",
+                "useful_other_cutting_board_actions",
+                "useless_plate_dispenser_actions",
+                "useful_plate_dispenser_actions",
+                "useless_delivery_actions",
+                "useful_own_delivery_actions",
+                "useful_other_delivery_actions",
             ]
         }
     
     @staticmethod
     def get_competition_metrics() -> Dict:
-        """Get metric definitions for competition experiments."""
+        """Get metric definitions for competition experiments (for backward compatibility)."""
+        base_metrics = MetricDefinitions.get_base_competition_metrics()
         return {
-            'result_events_1': [
-                "delivered_own_ai_rl_1",
-                "delivered_other_ai_rl_1",
-                "salad_own_ai_rl_1",
-                "salad_other_ai_rl_1",
-                "cut_own_ai_rl_1",
-                "cut_other_ai_rl_1",
-            ],
-            'result_events_2': [
-                "delivered_own_ai_rl_2",
-                "delivered_other_ai_rl_2",
-                "salad_own_ai_rl_2",
-                "salad_other_ai_rl_2",
-                "cut_own_ai_rl_2",
-                "cut_other_ai_rl_2",
-            ],
-            'action_types_1': [
-                "do_nothing_ai_rl_1",
-                "floor_actions_ai_rl_1",
-                "wall_actions_ai_rl_1",
-                "useless_counter_actions_ai_rl_1",
-                "useful_counter_actions_ai_rl_1",
-                "useless_own_food_dispenser_actions_ai_rl_1",
-                "useful_own_food_dispenser_actions_ai_rl_1",
-                "useless_other_food_dispenser_actions_ai_rl_1",
-                "useful_other_food_dispenser_actions_ai_rl_1",
-                "useless_cutting_board_actions_ai_rl_1",
-                "useful_own_cutting_board_actions_ai_rl_1",
-                "useful_other_cutting_board_actions_ai_rl_1",
-                "useless_plate_dispenser_actions_ai_rl_1",
-                "useful_plate_dispenser_actions_ai_rl_1",
-                "useless_delivery_actions_ai_rl_1",
-                "useful_own_delivery_actions_ai_rl_1",
-                "useful_other_delivery_actions_ai_rl_1",
-            ],
-            'action_types_2': [
-                "do_nothing_ai_rl_2",
-                "floor_actions_ai_rl_2", 
-                "wall_actions_ai_rl_2",
-                "useless_counter_actions_ai_rl_2",
-                "useful_counter_actions_ai_rl_2",
-                "useless_own_food_dispenser_actions_ai_rl_2",
-                "useful_own_food_dispenser_actions_ai_rl_2",
-                "useless_other_food_dispenser_actions_ai_rl_2",
-                "useful_other_food_dispenser_actions_ai_rl_2",
-                "useless_cutting_board_actions_ai_rl_2",
-                "useful_own_cutting_board_actions_ai_rl_2",
-                "useful_other_cutting_board_actions_ai_rl_2",
-                "useless_plate_dispenser_actions_ai_rl_2",
-                "useful_plate_dispenser_actions_ai_rl_2",
-                "useless_delivery_actions_ai_rl_2",
-                "useful_own_delivery_actions_ai_rl_2",
-                "useful_other_delivery_actions_ai_rl_2",
-            ]
+            'result_events_1': [f"{metric}_ai_rl_1" for metric in base_metrics['result_events']],
+            'result_events_2': [f"{metric}_ai_rl_2" for metric in base_metrics['result_events']],
+            'action_types_1': [f"{metric}_ai_rl_1" for metric in base_metrics['action_types']],
+            'action_types_2': [f"{metric}_ai_rl_2" for metric in base_metrics['action_types']]
         }
     
     @staticmethod
@@ -343,10 +321,30 @@ class MetricDefinitions:
         """Get human-readable labels for metrics."""
         return {
             # Classic metrics
-            "delivered": "Delivered",
+            "deliver": "Delivered",
             "cut": "Cut", 
             "salad": "Salad",
+            "plate": "Plate",
+            "raw_food": "Raw Food",
+            "counter": "Counter",
             "do_nothing": "No action",
+            "useless_floor": "Useless Floor",
+            "useless_wall": "Useless Wall",
+            "useless_counter": "Useless Counter",
+            "useful_counter": "Useful Counter",
+            "salad_assembly": "Salad Assembly",
+            "destructive_food_dispenser": "Destructive Food Dispenser",
+            "useful_food_dispenser": "Useful Food Dispenser",
+            "useless_cutting_board": "Useless Cutting Board",
+            "useful_cutting_board": "Useful Cutting Board",
+            "destructive_plate_dispenser": "Destructive Plate Dispenser",
+            "useful_plate_dispenser": "Useful Plate Dispenser",
+            "useless_delivery": "Useless Delivery",
+            "useful_delivery": "Useful Delivery",
+            "inaccessible_tile": "Inaccessible Tile",
+            
+            # Legacy classic metrics for compatibility
+            "delivered": "Delivered",
             "floor_actions": "Floor",
             "wall_actions": "Wall",
             "useless_counter_actions": "Useless Counter",
@@ -361,6 +359,8 @@ class MetricDefinitions:
             "useful_delivery_actions": "Useful Delivery",
             
             # Competition metrics
+            "deliver_own": "Delivered Own",
+            "deliver_other": "Delivered Other",
             "delivered_own": "Delivered Own",
             "delivered_other": "Delivered Other",
             "salad_own": "Salad Own",
@@ -382,10 +382,30 @@ class MetricDefinitions:
         """Get color scheme for metrics."""
         return {
             # Classic colors
-            "delivered": "#27AE60",
+            "deliver": "#27AE60",
             "cut": "#2980B9",
             "salad": "#E67E22",
+            "plate": "#F39C12",
+            "raw_food": "#8E44AD",
+            "counter": "#34495E",
             "do_nothing": "#000000",
+            "useless_floor": "#9B59B6",
+            "useless_wall": "#59351F",
+            "useless_counter": "#D5D8DC",
+            "useful_counter": "#7B7D7D",
+            "salad_assembly": "#A569BD",
+            "destructive_food_dispenser": "#E74C3C",
+            "useful_food_dispenser": "#C0392B",
+            "useless_cutting_board": "#AED6F1",
+            "useful_cutting_board": "#2980B9",
+            "destructive_plate_dispenser": "#FF6B35",
+            "useful_plate_dispenser": "#E67E22",
+            "useless_delivery": "#A9DFBF",
+            "useful_delivery": "#27AE60",
+            "inaccessible_tile": "#95A5A6",
+            
+            # Legacy classic colors for compatibility
+            "delivered": "#27AE60",
             "floor_actions": "#9B59B6",
             "wall_actions": "#59351F",
             "useless_counter_actions": "#D5D8DC",
@@ -400,6 +420,8 @@ class MetricDefinitions:
             "useful_delivery_actions": "#27AE60",
             
             # Competition colors
+            "deliver_own": "#A9DFBF",
+            "deliver_other": "#27AE60",
             "delivered_own": "#A9DFBF",
             "delivered_other": "#27AE60",
             "salad_own": "#F5CBA7",
@@ -453,7 +475,6 @@ class PlotGenerator:
         """
         unique_attitudes = df["attitude_key"].unique()
         unique_lr = df["lr"].unique()
-        unique_game_type = df["game_type"].unique()
         
         if by_attitude:
             for attitude in unique_attitudes:
@@ -461,17 +482,14 @@ class PlotGenerator:
                 
                 plt.figure(figsize=(10, 6))
                 
-                for game_type in unique_game_type:
-                    game_type_filtered = subset[subset["game_type"] == game_type]
-                    
-                    for lr in unique_lr:
-                        lr_filtered = game_type_filtered[game_type_filtered["lr"] == lr]
-                        grouped = lr_filtered.groupby("epoch")[metric_col].mean().reset_index()
-                        label = f"Game Type {game_type}, LR {lr}"
-                        plt.plot(grouped["epoch"], grouped[metric_col], label=label)
+                for lr in unique_lr:
+                    lr_filtered = subset[subset["lr"] == lr]
+                    grouped = lr_filtered.groupby("episode")[metric_col].mean().reset_index()
+                    label = f"LR {lr}"
+                    plt.plot(grouped["episode"], grouped[metric_col], label=label)
                 
-                plt.title(f"{metric_name} vs Epoch\nAttitude {attitude}")
-                plt.xlabel("Epoch")
+                plt.title(f"{metric_name} vs Episode\nAttitude {attitude}")
+                plt.xlabel("Episode")
                 plt.ylabel(metric_name)
                 plt.legend()
                 plt.tight_layout()
@@ -483,23 +501,14 @@ class PlotGenerator:
         else:
             plt.figure(figsize=(10, 6))
             
-            for game_type in unique_game_type:
-                game_type_filtered = df[df["game_type"] == game_type]
+            for lr in unique_lr:
+                lr_filtered = df[df["lr"] == lr]
+                grouped = lr_filtered.groupby("episode")[metric_col].mean().reset_index()
                 
-                for lr in unique_lr:
-                    lr_filtered = game_type_filtered[game_type_filtered["lr"] == lr]
-                    grouped = lr_filtered.groupby("epoch")[metric_col].mean().reset_index()
-                    
-                    if game_type == 0:
-                        label = "Competitive"
-                        color = "red"
-                    else:
-                        label = "Cooperative"
-                        color = "blue"
-                    
-                    plt.plot(grouped["epoch"], grouped[metric_col], label=label, color=color)
+                label = f"LR {lr}"
+                plt.plot(grouped["episode"], grouped[metric_col], label=label)
             
-            plt.xlabel("Epochs", fontsize=20)
+            plt.xlabel("Episodes", fontsize=20)
             plt.ylabel(f"Mean {metric_name.lower()}", fontsize=20)
             plt.legend(fontsize=20)
             plt.xticks(fontsize=18)
@@ -516,7 +525,6 @@ class PlotGenerator:
         N = self.config.smoothing_factor
         unique_attitudes = df["attitude_key"].unique()
         unique_lr = df["lr"].unique()
-        unique_game_type = df["game_type"].unique()
         
         if by_attitude:
             for attitude in unique_attitudes:
@@ -524,21 +532,18 @@ class PlotGenerator:
                 
                 plt.figure(figsize=(10, 6))
                 
-                for game_type in unique_game_type:
-                    game_type_filtered = subset[subset["game_type"] == game_type]
+                for lr in unique_lr:
+                    lr_filtered = subset[subset["lr"] == lr]
+                    lr_filtered = lr_filtered.copy()
+                    lr_filtered["episode_block"] = (lr_filtered["episode"] // N)
+                    block_means = lr_filtered.groupby("episode_block")[metric_col].mean()
+                    middle_episodes = lr_filtered.groupby("episode_block")["episode"].median()
                     
-                    for lr in unique_lr:
-                        lr_filtered = game_type_filtered[game_type_filtered["lr"] == lr]
-                        lr_filtered = lr_filtered.copy()
-                        lr_filtered["epoch_block"] = (lr_filtered["epoch"] // N)
-                        block_means = lr_filtered.groupby("epoch_block")[metric_col].mean()
-                        middle_epochs = lr_filtered.groupby("epoch_block")["epoch"].median()
-                        
-                        label = f"Game Type {game_type}, LR {lr}"
-                        plt.plot(middle_epochs, block_means, label=label)
+                    label = f"LR {lr}"
+                    plt.plot(middle_episodes, block_means, label=label)
                 
-                plt.title(f"{metric_name} vs Epoch\nAttitude {attitude}")
-                plt.xlabel("Epoch")
+                plt.title(f"{metric_name} vs Episode\nAttitude {attitude}")
+                plt.xlabel("Episode")
                 plt.ylabel(metric_name)
                 plt.legend()
                 plt.tight_layout()
@@ -550,26 +555,17 @@ class PlotGenerator:
         else:
             plt.figure(figsize=(10, 6))
             
-            for game_type in unique_game_type:
-                game_type_filtered = df[df["game_type"] == game_type]
+            for lr in unique_lr:
+                lr_filtered = df[df["lr"] == lr]
+                lr_filtered = lr_filtered.copy()
+                lr_filtered["episode_block"] = (lr_filtered["episode"] // N)
+                block_means = lr_filtered.groupby("episode_block")[metric_col].mean()
+                middle_episodes = lr_filtered.groupby("episode_block")["episode"].median()
                 
-                for lr in unique_lr:
-                    lr_filtered = game_type_filtered[game_type_filtered["lr"] == lr]
-                    lr_filtered = lr_filtered.copy()
-                    lr_filtered["epoch_block"] = (lr_filtered["epoch"] // N)
-                    block_means = lr_filtered.groupby("epoch_block")[metric_col].mean()
-                    middle_epochs = lr_filtered.groupby("epoch_block")["epoch"].median()
-                    
-                    if game_type == 0:
-                        label = "Competitive"
-                        color = "red"
-                    else:
-                        label = "Cooperative" 
-                        color = "blue"
-                    
-                    plt.plot(middle_epochs, block_means, label=label, color=color)
+                label = f"LR {lr}"
+                plt.plot(middle_episodes, block_means, label=label)
             
-            plt.xlabel("Epochs", fontsize=20)
+            plt.xlabel("Episodes", fontsize=20)
             plt.ylabel(f"Mean {metric_name.lower()}", fontsize=20)
             plt.legend(fontsize=20)
             plt.xticks(fontsize=18)
@@ -584,44 +580,42 @@ class PlotGenerator:
                           agent_num: int, smoothed: bool = False):
         """Plot individual agent metrics."""
         N = self.config.smoothing_factor if smoothed else 1
-        unique_game_type = df["game_type"].unique()
         unique_lr = df["lr"].unique()
         
-        for game_type in unique_game_type:
-            for lr in unique_lr:
-                filtered_subset = df[(df["game_type"] == game_type) & (df["lr"] == lr)]
+        for lr in unique_lr:
+            filtered_subset = df[df["lr"] == lr]
+            
+            if smoothed:
+                filtered_subset = filtered_subset.copy()
+                filtered_subset["episode_block"] = (filtered_subset["episode"] // N)
+            
+            plt.figure(figsize=(12, 6))
+            
+            for metric in metrics:
+                label, color = self._get_metric_info(metric)
                 
                 if smoothed:
-                    filtered_subset = filtered_subset.copy()
-                    filtered_subset["epoch_block"] = (filtered_subset["epoch"] // N)
-                
-                plt.figure(figsize=(12, 6))
-                
-                for metric in metrics:
-                    label, color = self._get_metric_info(metric)
-                    
-                    if smoothed:
-                        block_means = filtered_subset.groupby("epoch_block")[metric].mean()
-                        middle_epochs = filtered_subset.groupby("epoch_block")["epoch"].median()
-                        plt.plot(middle_epochs, block_means, label=label, color=color)
-                    else:
-                        grouped = filtered_subset.groupby("epoch")[metric].mean().reset_index()
-                        plt.plot(grouped["epoch"], grouped[metric], label=label, color=color)
-                
-                title = f"Metrics per Epoch - Game Type {game_type}, LR {lr}"
-                if smoothed:
-                    title += f" (Smoothed {N})"
-                
-                plt.title(title)
-                plt.xlabel("Epoch")
-                plt.ylabel("Mean value")
-                plt.legend()
-                plt.tight_layout()
-                
-                suffix = f"_smoothed_{N}" if smoothed else ""
-                filename = f"metrics_agent{agent_num}_g{game_type}_lr{str(lr).replace('.', 'p')}{suffix}.png"
-                plt.savefig(os.path.join(figures_dir, filename))
-                plt.close()
+                    block_means = filtered_subset.groupby("episode_block")[metric].mean()
+                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                    plt.plot(middle_episodes, block_means, label=label, color=color)
+                else:
+                    grouped = filtered_subset.groupby("episode")[metric].mean().reset_index()
+                    plt.plot(grouped["episode"], grouped[metric], label=label, color=color)
+            
+            title = f"Metrics per Episode - LR {lr}"
+            if smoothed:
+                title += f" (Smoothed {N})"
+            
+            plt.title(title)
+            plt.xlabel("Episode")
+            plt.ylabel("Mean value")
+            plt.legend()
+            plt.tight_layout()
+            
+            suffix = f"_smoothed_{N}" if smoothed else ""
+            filename = f"metrics_agent{agent_num}_lr{str(lr).replace('.', 'p')}{suffix}.png"
+            plt.savefig(os.path.join(figures_dir, filename))
+            plt.close()
 
 
 def setup_argument_parser(experiment_type: str) -> argparse.ArgumentParser:
@@ -637,12 +631,6 @@ def setup_argument_parser(experiment_type: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=f'Analysis script for {experiment_type} experiments',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    
-    parser.add_argument(
-        'intent_version',
-        type=str,
-        help='Intent version identifier (e.g., v3.1)'
     )
     
     parser.add_argument(
@@ -677,14 +665,13 @@ def setup_argument_parser(experiment_type: str) -> argparse.ArgumentParser:
     return parser
 
 
-def main_analysis_pipeline(experiment_type: str, intent_version: str, map_name: str,
+def main_analysis_pipeline(experiment_type: str, map_name: str,
                           cluster: str = 'cuenca', smoothing_factor: int = 15) -> Dict:
     """
     Main analysis pipeline that can be used by all experiment types.
     
     Args:
         experiment_type: Type of experiment
-        intent_version: Version identifier
         map_name: Map name
         cluster: Cluster type
         smoothing_factor: Smoothing factor for plots
@@ -700,7 +687,7 @@ def main_analysis_pipeline(experiment_type: str, intent_version: str, map_name: 
     plotter = PlotGenerator(config)
     
     # Set up directories and load data
-    paths = processor.setup_directories(experiment_type, intent_version, map_name, cluster)
+    paths = processor.setup_directories(experiment_type, map_name, cluster)
     
     # Determine number of agents based on experiment type
     # Classic experiments are actually 2-agent experiments

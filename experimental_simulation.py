@@ -101,7 +101,7 @@ def main():
     
     try:
         # Run main simulation pipeline
-        output_paths = main_simulation_pipeline(
+        output_paths, walking_speeds, cutting_speeds = main_simulation_pipeline(
             map_nr=args.map_nr,
             num_agents=args.num_agents,
             game_version=args.game_version,
@@ -141,14 +141,17 @@ def main():
                 # Read the generated CSV files
                 actions_df = pd.read_csv(output_paths['action_csv'])
                 simulation_df = pd.read_csv(output_paths['state_csv'])
+                counters_df = pd.read_csv(output_paths['counter_csv']) 
                 
                 # Analyze meaningful actions using the new modular function
                 meaningful_df = analyze_meaningful_actions(
                     actions_df, 
                     simulation_df, 
+                    counters_df,
                     args.map_nr, 
                     output_paths['simulation_dir'],
-                    engine_tick_rate=args.tick_rate
+                    engine_tick_rate=args.tick_rate,
+                    cutting_speeds=cutting_speeds
                 )
                 
                 if not meaningful_df.empty:
@@ -186,7 +189,9 @@ def main():
                 position_files = generate_agent_position_files(
                     simulation_df, 
                     output_paths['simulation_dir'],
-                    agent_initialization_period=args.agent_initialization_period
+                    agent_initialization_period=args.agent_initialization_period,
+                    walking_speeds=walking_speeds,
+                    cutting_speeds=cutting_speeds
                 )
                 
                 print(f"\nAgent position files generated:")
@@ -211,7 +216,9 @@ def main():
                     map_name=args.map_nr,
                     simulation_id=output_paths['simulation_dir'].name,
                     engine_tick_rate=args.tick_rate,
-                    agent_initialization_period=args.agent_initialization_period
+                    agent_initialization_period=args.agent_initialization_period,
+                    walking_speeds=walking_speeds,
+                    cutting_speeds=cutting_speeds
                 )
                 
                 print(f"\nAgent action files generated:")

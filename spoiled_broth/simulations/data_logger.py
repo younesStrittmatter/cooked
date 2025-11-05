@@ -27,9 +27,11 @@ class DataLogger:
         
         self.state_csv_path = self.simulation_dir / f"simulation.csv"
         self.action_csv_path = self.simulation_dir / f"actions.csv"
+        self.counter_csv_path = self.simulation_dir / f"counters.csv"
         self.config_path = self.simulation_dir / "config.txt"
         
         self._initialize_state_logger()
+        self._initialize_counter_logger_placeholder()
         self._create_config_file()
     
     def _initialize_state_logger(self):
@@ -37,6 +39,11 @@ class DataLogger:
         with open(self.state_csv_path, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(["agent_id", "frame", "second", "x", "y", "tile_x", "tile_y", "item", "score"])
+    
+    def _initialize_counter_logger_placeholder(self):
+        """Create placeholder for counter logger - will be initialized with actual counter positions during first call."""
+        self._counter_logger_initialized = False
+        self._counter_positions = []
     
     def _create_config_file(self):
         """Create a configuration file with all simulation parameters."""
@@ -90,6 +97,10 @@ class DataLogger:
             f"TILE_SIZE: {self.simulation_config.get('TILE_SIZE', 16)}",
             f"LOCAL_PATH: {self.simulation_config.get('LOCAL_PATH', 'unknown')}",
             "",
+            "[AGENT_SPEEDS]",
+            f"WALKING_SPEEDS: {self.simulation_config.get('WALKING_SPEEDS', {})}",
+            f"CUTTING_SPEEDS: {self.simulation_config.get('CUTTING_SPEEDS', {})}",
+            "",
             "[VIDEO_SETTINGS]",
             f"ENABLE_VIDEO: {self.simulation_config.get('ENABLE_VIDEO', 'unknown')}",
             f"VIDEO_FPS: {self.simulation_config.get('VIDEO_FPS', 'unknown')}",
@@ -101,12 +112,22 @@ class DataLogger:
             "[OUTPUT_FILES]",
             f"STATE_CSV: {self.state_csv_path.name}",
             f"ACTION_CSV: {self.action_csv_path.name}",
+            f"COUNTER_CSV: {self.counter_csv_path.name}",
             f"VIDEO_FILE: {self.simulation_config.get('video_filename', 'N/A' if not self.simulation_config.get('ENABLE_VIDEO') else 'offline_recording_{}.mp4'.format(self.timestamp))}",
             "",
             "[PATHS]",
             f"SIMULATION_DIR: {self.simulation_dir}",
             f"CHECKPOINT_DIR: {self.simulation_config.get('CHECKPOINT_DIR', 'unknown')}",
             f"MAP_FILE: {self.simulation_config.get('MAP_FILE', 'unknown')}",
+            "",
+            "[DATA_LOGGING_DETAILS]",
+            f"# STATE_CSV: Contains agent positions, items, and scores for each frame",
+            f"# ACTION_CSV: Contains agent actions and their outcomes (generated separately)",
+            f"# COUNTER_CSV: Contains items on each counter for each frame during simulation",
+            f"# - Columns: frame, second, counter_X_Y_1, counter_X_Y_2, ..., counter_X_Y_N",
+            f"# - X_Y represents the tile coordinates (1-indexed) of each counter",
+            f"# - Values are item names (e.g., 'tomato', 'plate', 'tomato_cut') or empty string if no item",
+            f"# - Counters are detected automatically from the map at simulation start",
             "",
             "[INITIALIZATION_DETAILS]",
             f"# Agent initialization period: {init_period} seconds ({init_frames} frames)",
@@ -129,6 +150,83 @@ class DataLogger:
         except Exception as e:
             print(f"Warning: Could not create config file: {e}")
     
+    def _initialize_counter_logger(self, game: Any):
+        """Initialize the counter logger CSV file with counter positions from the game."""
+        # Import Counter class to check isinstance
+        from spoiled_broth.world.tiles import Counter
+        
+        # Find all counter positions in the game
+        self._counter_positions = []
+        grid = getattr(game, 'grid', None)
+        if grid is not None:
+            for x in range(grid.width):
+                for y in range(grid.height):
+                    tile = grid.tiles[x][y]
+                    if isinstance(tile, Counter):
+                        # Store counter position (1-indexed for consistency)
+                        counter_pos = (x + 1, y + 1)
+                        self._counter_positions.append(counter_pos)
+        
+        # Sort counter positions for consistent ordering
+        self._counter_positions.sort()
+        
+        # Create CSV header
+        header = ["frame", "second"]
+        for x, y in self._counter_positions:
+            header.append(f"counter_{x}_{y}")
+        
+        # Write header to CSV
+        with open(self.counter_csv_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+        
+        self._counter_logger_initialized = True
+        print(f"Counter logger initialized with {len(self._counter_positions)} counters at positions: {self._counter_positions}")
+        
+        # If no counters found, add a note to the config
+        if len(self._counter_positions) == 0:
+            print(f"Warning: No counters found in map - counter CSV will only contain frame and time columns")
+    
+    def log_counters(self, frame: int, game: Any, tick_rate: int):
+        """
+        Log current state of all counters.
+        
+        Args:
+            frame: Current frame number
+            game: Game instance
+            tick_rate: Engine tick rate for time calculation
+        """
+        # Initialize counter logger on first call
+        if not self._counter_logger_initialized:
+            self._initialize_counter_logger(game)
+        
+        # Import Counter class to check isinstance
+        from spoiled_broth.world.tiles import Counter
+        
+        # Collect counter items
+        counter_data = [frame, frame / tick_rate]  # Start with frame and time
+        
+        grid = getattr(game, 'grid', None)
+        if grid is not None:
+            # Create a mapping of positions to items for quick lookup
+            position_to_item = {}
+            for x in range(grid.width):
+                for y in range(grid.height):
+                    tile = grid.tiles[x][y]
+                    if isinstance(tile, Counter):
+                        # Use 1-indexed coordinates for consistency
+                        pos = (x + 1, y + 1)
+                        item = getattr(tile, 'item', None)
+                        position_to_item[pos] = item if item is not None else ''
+            
+            # Add items in the same order as headers
+            for pos in self._counter_positions:
+                counter_data.append(position_to_item.get(pos, ''))
+        
+        # Write to CSV
+        with open(self.counter_csv_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(counter_data)
     def update_config_with_runtime_info(self, game: Any):
         """
         Update the config file with runtime information detected during simulation.

@@ -13,7 +13,7 @@ import math
 from pathlib import Path
 
 
-def generate_agent_action_files(meaningful_actions_df, positions_dir, output_dir, map_name=None, simulation_id=None, engine_tick_rate=24, agent_initialization_period=0.0):
+def generate_agent_action_files(meaningful_actions_df, positions_dir, output_dir, map_name=None, simulation_id=None, engine_tick_rate=24, agent_initialization_period=0.0, walking_speeds=None, cutting_speeds=None):
     """
     Generate action CSV files for each agent from meaningful_actions.csv and position data.
     
@@ -42,6 +42,8 @@ def generate_agent_action_files(meaningful_actions_df, positions_dir, output_dir
         simulation_id: Simulation ID (optional, will use directory name if not provided)
         engine_tick_rate: Engine tick rate from simulation config (default 24)
         agent_initialization_period: Duration of agent initialization period in seconds (default 15.0)
+        walking_speeds: Dictionary of walking speeds for each agent (optional)
+        cutting_speeds: Dictionary of cutting speeds for each agent (optional)
         
     Returns:
         Dictionary with paths to generated action files {agent_id: filepath}
@@ -648,8 +650,8 @@ def generate_agent_action_files(meaningful_actions_df, positions_dir, output_dir
             'overall_score': overall_score,
             'player_score_change': player_score_change,
             'player_score': current_player_score,
-            'walking_speed': 1.0,
-            'cutting_speed': 1.0,
+            'walking_speed': walking_speeds.get(agent_id, 1.0) if walking_speeds else 1.0,
+            'cutting_speed': cutting_speeds.get(agent_id, 1.0) if cutting_speeds else 1.0,
             'start_pos': tracking['start_pos'],
             
             # New item tracking columns

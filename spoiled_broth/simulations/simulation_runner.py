@@ -92,7 +92,9 @@ class SimulationRunner:
                 'MAP_FILE': str(paths['map_txt_path']),
                 'AGENT_INITIALIZATION_PERIOD': self.config.agent_initialization_period,
                 'TOTAL_SIMULATION_TIME': self.config.total_simulation_time,
-                'TOTAL_FRAMES': self.config.total_frames
+                'TOTAL_FRAMES': self.config.total_frames,
+                'WALKING_SPEEDS': self.config.walking_speeds,
+                'CUTTING_SPEEDS': self.config.cutting_speeds
             }
             
             data_logger = DataLogger(paths['saving_path'], checkpoint_number, timestamp, simulation_config)
@@ -180,11 +182,16 @@ class SimulationRunner:
             if agent_obj is not None:
                 controller.agent = agent_obj
         
-        # Ensure agents have the configured speed (exactly like old code)
+        # Ensure agents have the configured individual speeds
         for agent_id, obj in list(game.gameObjects.items()):
             if agent_id.startswith('ai_rl_') and obj is not None:
                 try:
-                    obj.speed = self.config.agent_speed_px_per_sec
+                    # Use individual walking speed if available, otherwise use global default
+                    if self.config.walking_speeds and agent_id in self.config.walking_speeds:
+                        walking_speed = self.config.walking_speeds[agent_id]
+                        obj.speed = walking_speed * self.config.agent_speed_px_per_sec
+                    else:
+                        obj.speed = self.config.agent_speed_px_per_sec
                 except Exception:
                     pass
         
@@ -277,6 +284,7 @@ class SimulationRunner:
             'config_file': data_logger.config_path,
             'state_csv': data_logger.state_csv_path,
             'action_csv': data_logger.simulation_dir / "actions.csv",
+            'counter_csv': data_logger.counter_csv_path,
             'video_file': data_logger.simulation_dir / f"offline_recording_{timestamp}.mp4" if self.config.enable_video else None
         }
     
@@ -315,6 +323,9 @@ class SimulationRunner:
             
             # Log state
             data_logger.log_state(frame_idx, game, self.config.engine_tick_rate)
+            
+            # Log counter state
+            data_logger.log_counters(frame_idx, game, self.config.engine_tick_rate)
             
             # Record video
             if video_recorder:

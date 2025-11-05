@@ -6,10 +6,10 @@ This script analyzes training results from single-agent experiments,
 generating comprehensive visualizations and statistics.
 
 Usage:
-nohup python analysis_classic.py <intent_version> <map_name> [options] > analysis_classic.log 2>&1 &
+nohup python analysis_classic.py <map_name> [options] > analysis_classic.log 2>&1 &
  
 Example:
-nohup python analysis_classic.py v3.1 baseline_division_of_labor > analysis_classic.log 2>&1 &
+nohup python analysis_classic.py baseline_division_of_labor > analysis_classic.log 2>&1 &
 """
 
 import sys
@@ -37,65 +37,273 @@ def generate_classic_plots(analysis_results):
     # Get classic-specific metrics
     metrics = MetricDefinitions.get_classic_metrics()
     
-    # Add agent 2 metrics for classic experiments (since it's actually 2-agent)
-    rewarded_metrics_2 = [
-        "delivered_ai_rl_2",
-        "cut_ai_rl_2",
-        "salad_ai_rl_2",
+    # Define base metric names (without agent suffix)
+    base_rewarded_metrics = [
+        "deliver",
+        "cut",
+        "salad",
+        "plate",
+        "raw_food",
+        "counter"
     ]
     
-    movement_metrics_2 = [
-        "do_nothing_ai_rl_2",
-        "floor_actions_ai_rl_2",
-        "wall_actions_ai_rl_2",
-        "useless_counter_actions_ai_rl_2",
-        "useful_counter_actions_ai_rl_2",
-        "useless_food_dispenser_actions_ai_rl_2",
-        "useful_food_dispenser_actions_ai_rl_2",
-        "useless_cutting_board_actions_ai_rl_2",
-        "useful_cutting_board_actions_ai_rl_2",
-        "useless_plate_dispenser_actions_ai_rl_2",
-        "useful_plate_dispenser_actions_ai_rl_2",
-        "useless_delivery_actions_ai_rl_2",
-        "useful_delivery_actions_ai_rl_2",
+    base_movement_metrics = [
+        "do_nothing",
+        "useless_floor",
+        "useless_wall",
+        "useless_counter",
+        "useful_counter",
+        "salad_assembly",
+        "destructive_food_dispenser",
+        "useful_food_dispenser",
+        "useless_cutting_board",
+        "useful_cutting_board",
+        "destructive_plate_dispenser",
+        "useful_plate_dispenser",
+        "useless_delivery",
+        "useful_delivery",
+        "inaccessible_tile"
     ]
+    
+    # Generate agent-specific metrics dynamically
+    def get_agent_metrics(base_metrics, agent_num):
+        return [f"{metric}_ai_rl_{agent_num}" for metric in base_metrics]
+    
+    rewarded_metrics_1 = get_agent_metrics(base_rewarded_metrics, 1)
+    rewarded_metrics_2 = get_agent_metrics(base_rewarded_metrics, 2)
+    movement_metrics_1 = get_agent_metrics(base_movement_metrics, 1)
+    movement_metrics_2 = get_agent_metrics(base_movement_metrics, 2)
     
     # Basic plots
     plotter.plot_basic_metrics(df, paths['figures_dir'], "total_deliveries", "Score (deliveries)")
     plotter.plot_basic_metrics(df, paths['figures_dir'], "pure_reward_total", "Pure Reward")
     
-    # Individual agent plots for both agents
-    plotter.plot_basic_metrics(df, paths['figures_dir'], "pure_reward_ai_rl_1", "Pure Reward Agent 1")
-    plotter.plot_basic_metrics(df, paths['figures_dir'], "pure_reward_ai_rl_2", "Pure Reward Agent 2")
-    plotter.plot_basic_metrics(df, paths['figures_dir'], "modified_reward_ai_rl_1", "Modified Reward Agent 1")
-    plotter.plot_basic_metrics(df, paths['figures_dir'], "modified_reward_ai_rl_2", "Modified Reward Agent 2")
-    
     # Agent-specific metrics plots for both agents
-    plotter.plot_agent_metrics(df, paths['figures_dir'], metrics['rewarded_metrics_1'], 1)
+    plotter.plot_agent_metrics(df, paths['figures_dir'], rewarded_metrics_1, 1)
     plotter.plot_agent_metrics(df, paths['figures_dir'], rewarded_metrics_2, 2)
     
     # Smoothed plots
     plotter.plot_smoothed_metrics(df, paths['smoothed_figures_dir'], "total_deliveries", "Score", by_attitude=False)
     plotter.plot_smoothed_metrics(df, paths['smoothed_figures_dir'], "pure_reward_total", "Pure Reward", by_attitude=False)
-    plotter.plot_smoothed_metrics(df, paths['smoothed_figures_dir'], "pure_reward_ai_rl_1", "Pure Reward Agent 1")
-    plotter.plot_smoothed_metrics(df, paths['smoothed_figures_dir'], "pure_reward_ai_rl_2", "Pure Reward Agent 2")
-    plotter.plot_smoothed_metrics(df, paths['smoothed_figures_dir'], "modified_reward_ai_rl_1", "Modified Reward Agent 1")
-    plotter.plot_smoothed_metrics(df, paths['smoothed_figures_dir'], "modified_reward_ai_rl_2", "Modified Reward Agent 2")
-    
+
     # Smoothed agent metrics for both agents - rewarded metrics
-    plotter.plot_agent_metrics(df, paths['smoothed_figures_dir'], metrics['rewarded_metrics_1'], 1, smoothed=True)
+    plotter.plot_agent_metrics(df, paths['smoothed_figures_dir'], rewarded_metrics_1, 1, smoothed=True)
     plotter.plot_agent_metrics(df, paths['smoothed_figures_dir'], rewarded_metrics_2, 2, smoothed=True)
     
     # Smoothed agent metrics for both agents - movement metrics
-    plotter.plot_agent_metrics(df, paths['smoothed_figures_dir'], metrics['movement_metrics_1'], 1, smoothed=True)
+    plotter.plot_agent_metrics(df, paths['smoothed_figures_dir'], movement_metrics_1, 1, smoothed=True)
     plotter.plot_agent_metrics(df, paths['smoothed_figures_dir'], movement_metrics_2, 2, smoothed=True)
     
     # Generate combined plots (use smoothing factor from config)
     smoothing_factor = analysis_results.get('config').smoothing_factor if analysis_results.get('config') else 15
-    generate_combined_plots(df, paths, metrics['rewarded_metrics_1'], rewarded_metrics_2, 
-                           metrics['movement_metrics_1'], movement_metrics_2, smoothing_factor)
+    generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2, 
+                           movement_metrics_1, movement_metrics_2, smoothing_factor)
+    
+    # Generate meaningful actions combined plots (excluding counter)
+    generate_meaningful_actions_combined(df, paths, base_rewarded_metrics, base_movement_metrics, smoothing_factor)
+    
+    # Combined reward plots for both agents
+    generate_combined_reward_plots(df, paths, smoothing_factor)
+    
+    # Combined delivery and cut plots for both agents  
+    generate_combined_delivery_cut_plots(df, paths, smoothing_factor)
     
     print(f"Classic analysis completed. Figures saved to {paths['figures_dir']}")
+
+
+def generate_combined_reward_plots(df, paths, smoothing_factor=15):
+    """Generate combined reward plots showing both agents together."""
+    N = smoothing_factor
+    unique_lr = df["lr"].unique()
+    
+    for lr in unique_lr:
+        lr_filtered = df[df["lr"] == lr]
+        lr_filtered = lr_filtered.copy()
+        lr_filtered["episode_block"] = (lr_filtered["episode"] // N)
+        
+        # Combined pure rewards plot
+        plt.figure(figsize=(10, 6))
+        
+        # Agent 1 pure reward
+        block_means_1 = lr_filtered.groupby("episode_block")["pure_reward_ai_rl_1"].mean()
+        middle_episodes = lr_filtered.groupby("episode_block")["episode"].median()
+        plt.plot(middle_episodes, block_means_1, label="Agent 1", color="#2980B9", linewidth=2)
+        
+        # Agent 2 pure reward
+        block_means_2 = lr_filtered.groupby("episode_block")["pure_reward_ai_rl_2"].mean()
+        plt.plot(middle_episodes, block_means_2, label="Agent 2", color="#E74C3C", linewidth=2)
+        
+        plt.title(f"Pure Rewards - LR {lr} (Smoothed {N})", fontsize=16)
+        plt.xlabel("Episodes", fontsize=14)
+        plt.ylabel("Pure Reward", fontsize=14)
+        plt.legend(fontsize=12)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        filename = f"pure_rewards_combined_lr{str(lr).replace('.', 'p')}_smoothed_{N}.png"
+        plt.savefig(os.path.join(paths['smoothed_figures_dir'], filename))
+        plt.close()
+        
+        # Combined modified rewards plot
+        plt.figure(figsize=(10, 6))
+        
+        # Agent 1 modified reward
+        block_means_1 = lr_filtered.groupby("episode_block")["modified_reward_ai_rl_1"].mean()
+        plt.plot(middle_episodes, block_means_1, label="Agent 1", color="#2980B9", linewidth=2)
+        
+        # Agent 2 modified reward
+        block_means_2 = lr_filtered.groupby("episode_block")["modified_reward_ai_rl_2"].mean()
+        plt.plot(middle_episodes, block_means_2, label="Agent 2", color="#E74C3C", linewidth=2)
+        
+        plt.title(f"Modified Rewards - LR {lr} (Smoothed {N})", fontsize=16)
+        plt.xlabel("Episodes", fontsize=14)
+        plt.ylabel("Modified Reward", fontsize=14)
+        plt.legend(fontsize=12)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        filename = f"modified_rewards_combined_lr{str(lr).replace('.', 'p')}_smoothed_{N}.png"
+        plt.savefig(os.path.join(paths['smoothed_figures_dir'], filename))
+        plt.close()
+    
+    print("Combined reward plots generated successfully.")
+
+
+def generate_combined_delivery_cut_plots(df, paths, smoothing_factor=15):
+    """Generate combined delivery and cut plots for both agents."""
+    N = smoothing_factor
+    unique_lr = df["lr"].unique()
+    
+    for lr in unique_lr:
+        lr_filtered = df[df["lr"] == lr]
+        lr_filtered = lr_filtered.copy()
+        lr_filtered["episode_block"] = (lr_filtered["episode"] // N)
+        middle_episodes = lr_filtered.groupby("episode_block")["episode"].median()
+        
+        # Combined deliveries and cuts plot
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+        
+        # Agent 1 subplot
+        deliver_means_1 = lr_filtered.groupby("episode_block")["deliver_ai_rl_1"].mean()
+        cut_means_1 = lr_filtered.groupby("episode_block")["cut_ai_rl_1"].mean()
+        
+        ax1.plot(middle_episodes, deliver_means_1, label="Deliveries", color="#27AE60", linewidth=2)
+        ax1.plot(middle_episodes, cut_means_1, label="Cuts", color="#2980B9", linewidth=2)
+        ax1.set_title(f"Agent 1 - Deliveries and Cuts - LR {lr}", fontsize=14)
+        ax1.set_ylabel("Count", fontsize=12)
+        ax1.legend(fontsize=12)
+        ax1.grid(True, alpha=0.3)
+        
+        # Agent 2 subplot
+        deliver_means_2 = lr_filtered.groupby("episode_block")["deliver_ai_rl_2"].mean()
+        cut_means_2 = lr_filtered.groupby("episode_block")["cut_ai_rl_2"].mean()
+        
+        ax2.plot(middle_episodes, deliver_means_2, label="Deliveries", color="#27AE60", linewidth=2)
+        ax2.plot(middle_episodes, cut_means_2, label="Cuts", color="#2980B9", linewidth=2)
+        ax2.set_title(f"Agent 2 - Deliveries and Cuts - LR {lr}", fontsize=14)
+        ax2.set_xlabel("Episodes", fontsize=12)
+        ax2.set_ylabel("Count", fontsize=12)
+        ax2.legend(fontsize=12)
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        filename = f"delivery_cut_combined_lr{str(lr).replace('.', 'p')}_smoothed_{N}.png"
+        plt.savefig(os.path.join(paths['smoothed_figures_dir'], filename))
+        plt.close()
+    
+    print("Combined delivery and cut plots generated successfully.")
+
+
+def generate_meaningful_actions_combined(df, paths, base_rewarded_metrics, base_movement_metrics, smoothing_factor=15):
+    """Generate meaningful actions combined plots for both agents (deliver, cut, salad, plate, raw_food only)."""
+    N = smoothing_factor
+    unique_attitudes = df["attitude_key"].unique()
+    unique_lr = df["lr"].unique()
+    
+    # Define meaningful actions: deliver, cut, salad, plate, raw_food
+    meaningful_actions = ["deliver", "cut", "salad", "plate", "raw_food"]
+    
+    metric_labels = MetricDefinitions.get_metric_labels()
+    metric_colors = MetricDefinitions.get_metric_colors()
+    
+    def get_metric_info(metric):
+        """Get label and color for a metric."""
+        label = metric_labels.get(metric, metric.replace('_', ' ').title())
+        color = metric_colors.get(metric, "#000000")
+        return label, color
+    
+    # Combined meaningful actions plots by attitude
+    for attitude in unique_attitudes:
+        subset = df[df["attitude_key"] == attitude]
+        att_parts = attitude.split('_')
+        att1_title = f"{att_parts[0]}_{att_parts[1]}"
+        att2_title = f"{att_parts[2]}_{att_parts[3]}"
+        
+        for lr in unique_lr:
+            filtered_subset = subset[subset["lr"] == lr]
+            
+            if len(filtered_subset) == 0:
+                continue
+                
+            filtered_subset = filtered_subset.copy()
+            filtered_subset["episode_block"] = (filtered_subset["episode"] // N)
+            
+            # Create combined plot for meaningful actions
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 12))
+            
+            # Agent 1 metrics
+            for metric in meaningful_actions:
+                metric_col_1 = f"{metric}_ai_rl_1"
+                if metric_col_1 in filtered_subset.columns:
+                    label, color = get_metric_info(metric)
+                    block_means = filtered_subset.groupby("episode_block")[metric_col_1].mean()
+                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                    ax1.plot(middle_episodes, block_means, label=label, color=color, linewidth=1.5)
+            
+            ax1.set_title(f"Agent 1 - Meaningful Actions - Attitude {att1_title}", fontsize=14)
+            ax1.set_ylabel("Number of times the action was taken", fontsize=12)
+            ax1.legend(
+                fontsize=10,
+                loc='center left',
+                bbox_to_anchor=(1.02, 0.5),
+                frameon=True,
+                framealpha=0.9,
+                edgecolor='black'
+            )
+            ax1.grid(True, alpha=0.3)
+            
+            # Agent 2 metrics
+            for metric in meaningful_actions:
+                metric_col_2 = f"{metric}_ai_rl_2"
+                if metric_col_2 in filtered_subset.columns:
+                    label, color = get_metric_info(metric)
+                    block_means = filtered_subset.groupby("episode_block")[metric_col_2].mean()
+                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                    ax2.plot(middle_episodes, block_means, label=label, color=color, linewidth=1.5)
+            
+            ax2.set_title(f"Agent 2 - Meaningful Actions - Attitude {att2_title}", fontsize=14)
+            ax2.set_xlabel("Episodes", fontsize=12)
+            ax2.set_ylabel("Number of times the action was taken", fontsize=12)
+            ax2.legend(
+                fontsize=10,
+                loc='center left',
+                bbox_to_anchor=(1.02, 0.5),
+                frameon=True,
+                framealpha=0.9,
+                edgecolor='black'
+            )
+            ax2.grid(True, alpha=0.3)
+            
+            plt.tight_layout(rect=[0, 0, 0.85, 1])
+            
+            sanitized_attitude = attitude.replace('.', 'p')
+            filename_combined = f"meaningful_actions_combined_lr{str(lr).replace('.', 'p')}_attitude_{sanitized_attitude}_smoothed_{N}.png"
+            filepath_combined = os.path.join(paths['smoothed_figures_dir'], filename_combined)
+            plt.savefig(filepath_combined, dpi=300, bbox_inches='tight')
+            plt.close()
+    
+    print("Meaningful actions combined plots generated successfully.")
 
 
 def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2, 
@@ -105,7 +313,6 @@ def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2,
     
     N = smoothing_factor  # smoothing factor
     unique_attitudes = df["attitude_key"].unique()
-    unique_game_type = df["game_type"].unique()
     unique_lr = df["lr"].unique()
     
     metric_labels = MetricDefinitions.get_metric_labels()
@@ -125,96 +332,95 @@ def generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2,
         att1_title = f"{att_parts[0]}_{att_parts[1]}"
         att2_title = f"{att_parts[2]}_{att_parts[3]}"
         
-        for game_type in unique_game_type:
-            for lr in unique_lr:
-                filtered_subset = subset[(subset["game_type"] == game_type) & (subset["lr"] == lr)]
+        for lr in unique_lr:
+            filtered_subset = subset[subset["lr"] == lr]
+            
+            if len(filtered_subset) == 0:
+                continue
                 
-                if len(filtered_subset) == 0:
-                    continue
-                    
-                filtered_subset = filtered_subset.copy()
-                filtered_subset["episode_block"] = (filtered_subset["episode"] // N)
-                
-                # Create combined plot for rewarded metrics
-                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-                
-                # Agent 1 metrics
-                for metric in rewarded_metrics_1:
-                    label, color = get_metric_info(metric)
-                    block_means = filtered_subset.groupby("episode_block")[metric].mean()
-                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
-                    ax1.plot(middle_episodes, block_means, label=label, color=color)
-                
-                ax1.set_title(f"Agent 1 - Attitude {att1_title}")
-                ax1.set_ylabel("Number of times the action was taken", fontsize=18)
-                ax1.legend(fontsize=20, loc='upper left', frameon=True, framealpha=0.9, edgecolor='black')
-                
-                # Agent 2 metrics
-                for metric in rewarded_metrics_2:
-                    label, color = get_metric_info(metric)
-                    block_means = filtered_subset.groupby("episode_block")[metric].mean()
-                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
-                    ax2.plot(middle_episodes, block_means, label=label, color=color)
-                
-                ax2.set_title(f"Agent 2 - Attitude {att2_title}")
-                ax2.set_xlabel("Episodes", fontsize=20)
-                ax2.set_ylabel("Number of times the action was taken", fontsize=18)
-                ax2.legend(fontsize=20, loc='upper left', frameon=True, framealpha=0.9, edgecolor='black')
-                
-                plt.tight_layout()
-                
-                sanitized_attitude = attitude.replace('.', 'p')
-                filename_combined = f"rewarded_metrics_combined_avg_g{game_type}_lr{str(lr).replace('.', 'p')}_attitude_{sanitized_attitude}_smoothed_{N}.png"
-                filepath_combined = os.path.join(paths['smoothed_figures_dir'], filename_combined)
-                plt.savefig(filepath_combined)
-                plt.close()
-                
-                # Create combined plot for movement metrics
-                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-                
-                # Agent 1 metrics
-                for metric in movement_metrics_1:
-                    label, color = get_metric_info(metric)
-                    block_means = filtered_subset.groupby("episode_block")[metric].mean()
-                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
-                    ax1.plot(middle_episodes, block_means, label=label, color=color)
-                
-                ax1.set_title(f"Agent 1 - Attitude {att1_title}")
-                ax1.set_ylabel("Number of times the action was taken", fontsize=18)
-                ax1.legend(
-                    fontsize=16,
-                    loc='center left',
-                    bbox_to_anchor=(1.02, 0.5),
-                    frameon=True,
-                    framealpha=0.9,
-                    edgecolor='black'
-                )
-                
-                # Agent 2 metrics
-                for metric in movement_metrics_2:
-                    label, color = get_metric_info(metric)
-                    block_means = filtered_subset.groupby("episode_block")[metric].mean()
-                    middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
-                    ax2.plot(middle_episodes, block_means, label=label, color=color)
-                
-                ax2.set_title(f"Agent 2 - Attitude {att2_title}")
-                ax2.set_xlabel("Episodes", fontsize=20)
-                ax2.set_ylabel("Number of times the action was taken", fontsize=18)
-                ax2.legend(
-                    fontsize=16,
-                    loc='center left',
-                    bbox_to_anchor=(1.02, 0.5),
-                    frameon=True,
-                    framealpha=0.9,
-                    edgecolor='black'
-                )
-                
-                plt.tight_layout(rect=[0, 0, 0.99, 1])
-                
-                filename_combined = f"action_types_combined_avg_g{game_type}_lr{str(lr).replace('.', 'p')}_attitude_{sanitized_attitude}_smoothed_{N}.png"
-                filepath_combined = os.path.join(paths['smoothed_figures_dir'], filename_combined)
-                plt.savefig(filepath_combined)
-                plt.close()
+            filtered_subset = filtered_subset.copy()
+            filtered_subset["episode_block"] = (filtered_subset["episode"] // N)
+            
+            # Create combined plot for rewarded metrics
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+            
+            # Agent 1 metrics
+            for metric in rewarded_metrics_1:
+                label, color = get_metric_info(metric)
+                block_means = filtered_subset.groupby("episode_block")[metric].mean()
+                middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                ax1.plot(middle_episodes, block_means, label=label, color=color)
+            
+            ax1.set_title(f"Agent 1 - Attitude {att1_title}")
+            ax1.set_ylabel("Number of times the action was taken", fontsize=18)
+            ax1.legend(fontsize=20, loc='upper left', frameon=True, framealpha=0.9, edgecolor='black')
+            
+            # Agent 2 metrics
+            for metric in rewarded_metrics_2:
+                label, color = get_metric_info(metric)
+                block_means = filtered_subset.groupby("episode_block")[metric].mean()
+                middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                ax2.plot(middle_episodes, block_means, label=label, color=color)
+            
+            ax2.set_title(f"Agent 2 - Attitude {att2_title}")
+            ax2.set_xlabel("Episodes", fontsize=20)
+            ax2.set_ylabel("Number of times the action was taken", fontsize=18)
+            ax2.legend(fontsize=20, loc='upper left', frameon=True, framealpha=0.9, edgecolor='black')
+            
+            plt.tight_layout()
+            
+            sanitized_attitude = attitude.replace('.', 'p')
+            filename_combined = f"rewarded_metrics_combined_avg_lr{str(lr).replace('.', 'p')}_attitude_{sanitized_attitude}_smoothed_{N}.png"
+            filepath_combined = os.path.join(paths['smoothed_figures_dir'], filename_combined)
+            plt.savefig(filepath_combined)
+            plt.close()
+            
+            # Create combined plot for movement metrics
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+            
+            # Agent 1 metrics
+            for metric in movement_metrics_1:
+                label, color = get_metric_info(metric)
+                block_means = filtered_subset.groupby("episode_block")[metric].mean()
+                middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                ax1.plot(middle_episodes, block_means, label=label, color=color)
+            
+            ax1.set_title(f"Agent 1 - Attitude {att1_title}")
+            ax1.set_ylabel("Number of times the action was taken", fontsize=18)
+            ax1.legend(
+                fontsize=16,
+                loc='center left',
+                bbox_to_anchor=(1.02, 0.5),
+                frameon=True,
+                framealpha=0.9,
+                edgecolor='black'
+            )
+            
+            # Agent 2 metrics
+            for metric in movement_metrics_2:
+                label, color = get_metric_info(metric)
+                block_means = filtered_subset.groupby("episode_block")[metric].mean()
+                middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
+                ax2.plot(middle_episodes, block_means, label=label, color=color)
+            
+            ax2.set_title(f"Agent 2 - Attitude {att2_title}")
+            ax2.set_xlabel("Episodes", fontsize=20)
+            ax2.set_ylabel("Number of times the action was taken", fontsize=18)
+            ax2.legend(
+                fontsize=16,
+                loc='center left',
+                bbox_to_anchor=(1.02, 0.5),
+                frameon=True,
+                framealpha=0.9,
+                edgecolor='black'
+            )
+            
+            plt.tight_layout(rect=[0, 0, 0.99, 1])
+            
+            filename_combined = f"action_types_combined_avg_lr{str(lr).replace('.', 'p')}_attitude_{sanitized_attitude}_smoothed_{N}.png"
+            filepath_combined = os.path.join(paths['smoothed_figures_dir'], filename_combined)
+            plt.savefig(filepath_combined)
+            plt.close()
     
     print("Combined plots generated successfully.")
 
@@ -225,7 +431,6 @@ def main():
     args = parser.parse_args()
 
     print(f"Starting classic experiment analysis...")
-    print(f"Intent version: {args.intent_version}")
     print(f"Map: {args.map_name}")
     print(f"Cluster: {args.cluster}")
     print(f"Smoothing factor: {args.smoothing_factor}")
@@ -234,7 +439,6 @@ def main():
         # Run main analysis pipeline
         analysis_results = main_analysis_pipeline(
             experiment_type='classic',
-            intent_version=args.intent_version,
             map_name=args.map_name,
             cluster=args.cluster,
             smoothing_factor=args.smoothing_factor

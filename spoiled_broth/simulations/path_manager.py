@@ -18,42 +18,42 @@ class PathManager:
     def __init__(self, config: SimulationConfig):
         self.config = config
 
-    def _find_last_epoch_in_training_stats(self, training_path: Path) -> Optional[int]:
+    def _find_last_episode_in_training_stats(self, training_path: Path) -> Optional[int]:
         """
-        Find the last epoch number in the training_stats folder.
+        Find the last episode number in the training_stats folder.
         
         Args:
             training_path: Path to the training folder
             training_id: Training identifier
             
         Returns:
-            Last epoch number as string, or None if not found
+            Last episode number as string, or None if not found
         """
         training_stats_path = training_path / "training_stats.csv"
         
         if not training_stats_path.exists():
             return None
     
-        max_epoch = -1
+        max_episode = -1
 
         try:
             with open(training_stats_path, mode='r', newline='', encoding='utf-8') as file:
                 reader = csv.DictReader(file)
 
-                if 'epoch' not in reader.fieldnames:
-                    print(f"Warning: 'epoch' column not found in {training_stats_path}")
+                if 'episode' not in reader.fieldnames:
+                    print(f"Warning: 'episode' column not found in {training_stats_path}")
                     return None
 
                 for row in reader:
                     try:
-                        epoch_value = int(row['epoch'])
-                        if epoch_value > max_epoch:
-                            max_epoch = epoch_value
+                        episode_value = int(row['episode'])
+                        if episode_value > max_episode:
+                            max_episode = episode_value
                     except ValueError:
                         continue
                     
-            if max_epoch >= 0:
-                return max_epoch
+            if max_episode >= 0:
+                return max_episode
 
         except Exception as e:
             print(f"Warning: Could not read or process training_stats file {training_stats_path}: {e}")
@@ -87,15 +87,15 @@ class PathManager:
         training_path = base_path / f"Training_{training_id}"
         checkpoint_dir = training_path / f"checkpoint_{checkpoint_number}"
         
-        # Handle "final" checkpoint by finding the last epoch
+        # Handle "final" checkpoint by finding the last episode
         checkpoint_number_for_folder = checkpoint_number
         if checkpoint_number.lower() == "final":            
-            last_epoch = self._find_last_epoch_in_training_stats(training_path)
-            if last_epoch is not None:
-                checkpoint_number_for_folder = str(last_epoch + 1)
-                print(f"Found last epoch {checkpoint_number_for_folder} for final checkpoint")
+            last_episode = self._find_last_episode_in_training_stats(training_path)
+            if last_episode is not None:
+                checkpoint_number_for_folder = str(last_episode + 1)
+                print(f"Found last episode {checkpoint_number_for_folder} for final checkpoint")
             else:
-                print(f"Warning: Could not find last epoch in training_stats, using 'final' for folder name")
+                print(f"Warning: Could not find last episode in training_stats, using 'final' for folder name")
                 checkpoint_number_for_folder = "final"
         
         # Validate checkpoint_number (only if it's not "final")
