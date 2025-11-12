@@ -11,7 +11,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
 ##### Cluster config ##################
-NUM_GPUS = 0.3
+NUM_GPUS = 0.2
 NUM_CPUS = 10
 CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
 
@@ -38,25 +38,7 @@ with open(input_path, "r") as f:
     walking_speed_1, cutting_speed_1 = [round(float(x), 4) for x in lines[1].strip().split()]
     if NUM_AGENTS == 2:
         alpha_2, beta_2 = [round(float(x), 4) for x in lines[2].strip().split()]
-        walking_speed_2, cutting_speed_2 = [round(float(x), 4) for x in lines[3].strip().split()]
-
-if NUM_AGENTS == 1:
-    reward_weights = {"ai_rl_1": (alpha_1, beta_1)}
-    walking_speeds = {"ai_rl_1": walking_speed_1}
-    cutting_speeds = {"ai_rl_1": cutting_speed_1}
-else:
-    reward_weights = {
-        "ai_rl_1": (alpha_1, beta_1),
-        "ai_rl_2": (alpha_2, beta_2),
-    }
-    walking_speeds = {
-        "ai_rl_1": walking_speed_1,
-        "ai_rl_2": walking_speed_2,
-    }
-    cutting_speeds = {
-        "ai_rl_1": cutting_speed_1,
-        "ai_rl_2": cutting_speed_2,
-    }
+        walking_speed_2, cutting_speed_2 = [round(float(x), 4) for x in lines[3].strip().split()]    
 
 if CLUSTER == 'brigit':
     local = '/mnt/lustre/home/samuloza'
@@ -70,7 +52,7 @@ else:
 # Hyperparameters
 NUM_ENVS = 1
 INNER_SECONDS = 180 # In seconds
-NUM_EPOCHS = 15000
+NUM_EPOCHS = 7500
 TRAIN_BATCH_SIZE = 200 # (Train batch size should be aprox equal to inner_seconds)
 NUM_MINIBATCHES = 10
 SHOW_EVERY_N_EPOCHS = 1
@@ -81,16 +63,14 @@ PAYOFF_MATRIX = [1,1,-2]
 MLP_LAYERS = [512, 512, 256]
 
 # Game characteristics
-PENALTIES = {
+PENALTIES_CFG = {
     "busy": 0.01, # Penalty per second spent busy
     "useless_action": 2.0, # Penalty for useless actions
     "destructive_action": 10.0, # Penalty for destructive actions
-    "inaccessible_tile": 0.5, # Penalty for trying to access an inaccessible tile
+    "inaccessible_tile": 5.0, # Penalty for trying to access an inaccessible tile
 }
 
-WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next step
-
-REWARDS = {
+REWARDS_CFG = {
     "raw_food": 0.2,
     "plate": 0.2,
     "counter": 0.5,
@@ -99,10 +79,37 @@ REWARDS = {
     "deliver": 10.0,
 }
 
+# Dynamic rewards configuration - exponential decay [rewards_cfg = original_rewards_cfg * exp(-decay_rate * (episode - decay_start_episode))]
+DYNAMIC_REWARDS_CFG = {
+    "enabled": True,  # Set to False to disable dynamic rewards
+    "decay_rate": 0.005,  # Decay rate for exponential function (higher = faster decay)
+    "min_reward_multiplier": 0.0,  # Minimum multiplier (e.g., 0.1 = 10% of initial reward)
+    "decay_start_episode": 1000,  # Episode to start applying decay (0 = from beginning)
+    "affected_rewards": ["raw_food", "plate", "counter", "cut", "salad"],  # Which reward types to apply decay to
+}
+
+WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next step
+
+# Path definitions
 if NUM_AGENTS == 1:
     save_dir = f'{local}/data/samuel_lozano/cooked/pretraining/{GAME_VERSION}/map_{MAP_NR}'
+    reward_weights = {"ai_rl_1": (alpha_1, beta_1)}
+    walking_speeds = {"ai_rl_1": walking_speed_1}
+    cutting_speeds = {"ai_rl_1": cutting_speed_1}
 else: 
     save_dir = f'{local}/data/samuel_lozano/cooked/{GAME_VERSION}/map_{MAP_NR}'
+    reward_weights = {
+        "ai_rl_1": (alpha_1, beta_1),
+        "ai_rl_2": (alpha_2, beta_2),
+    }
+    walking_speeds = {
+        "ai_rl_1": walking_speed_1,
+        "ai_rl_2": walking_speed_2,
+    }
+    cutting_speeds = {
+        "ai_rl_1": cutting_speed_1,
+        "ai_rl_2": cutting_speed_2,
+    }
 
 os.makedirs(save_dir, exist_ok=True)
 
@@ -151,8 +158,9 @@ config = {
     "WALKING_SPEEDS": walking_speeds,
     "CUTTING_SPEEDS": cutting_speeds,
     "INITIAL_SEED": SEED,
-    "PENALTIES": PENALTIES,
-    "REWARDS": REWARDS,
+    "PENALTIES_CFG": PENALTIES_CFG,
+    "REWARDS_CFG": REWARDS_CFG,
+    "DYNAMIC_REWARDS_CFG": DYNAMIC_REWARDS_CFG,
     "WAIT_FOR_COMPLETION": WAIT_FOR_ACTION_COMPLETION,
     "SAVE_DIR": save_dir,
     "CHECKPOINT_ID_USED": pretrained_policies,  # Add pretrained policies configuration

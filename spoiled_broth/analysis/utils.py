@@ -676,11 +676,20 @@ def setup_argument_parser(experiment_type: str) -> argparse.ArgumentParser:
         help='Output format for figures'
     )
     
+    parser.add_argument(
+        '--individual-trainings',
+        type=str,
+        choices=['yes', 'no', 'Yes', 'No', 'YES', 'NO'],
+        default='no',
+        help='Generate individual figures for each training ID (yes/no)'
+    )
+    
     return parser
 
 
 def main_analysis_pipeline(experiment_type: str, map_name: str,
-                          cluster: str = 'cuenca', smoothing_factor: int = 15) -> Dict:
+                          cluster: str = 'cuenca', smoothing_factor: int = 15, 
+                          num_agents: Optional[int] = None) -> Dict:
     """
     Main analysis pipeline that can be used by all experiment types.
     
@@ -689,6 +698,7 @@ def main_analysis_pipeline(experiment_type: str, map_name: str,
         map_name: Map name
         cluster: Cluster type
         smoothing_factor: Smoothing factor for plots
+        num_agents: Number of agents (default: 2 for classic/competition, 1 for pretrained)
         
     Returns:
         Dictionary containing processed data and paths
@@ -704,8 +714,9 @@ def main_analysis_pipeline(experiment_type: str, map_name: str,
     paths = processor.setup_directories(experiment_type, map_name, cluster)
     
     # Determine number of agents based on experiment type
-    # Classic experiments are actually 2-agent experiments
-    num_agents = 2
+    if num_agents is None:
+        # Pretrained experiments have 1 agent, others have 2
+        num_agents = 1 if 'pretrain' in experiment_type.lower() else 2
     
     # Load and process data
     raw_df = processor.load_experiment_data(paths, num_agents)

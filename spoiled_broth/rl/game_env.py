@@ -10,6 +10,7 @@ from spoiled_broth.rl.action_space import get_rl_action_space, convert_action_to
 from spoiled_broth.rl.observation_space import game_to_obs_vector
 from spoiled_broth.rl.classify_action_type import get_action_type_and_agent_events, get_action_type_list, ACTION_TYPE_INACCESSIBLE
 from spoiled_broth.rl.reward_analysis import get_rewards
+from spoiled_broth.rl.dynamic_rewards import calculate_dynamic_rewards
 from spoiled_broth.game import SpoiledBroth, random_game_state
 
 INTENT_TIME = 0.1
@@ -102,8 +103,9 @@ class GameEnv(ParallelEnv):
         distance_map=None,
         walking_speeds=None,
         cutting_speeds=None,
-        penalties=None,
-        rewards=None
+        penalties_cfg=None,
+        rewards_cfg=None,
+        dynamic_rewards_cfg=None
     ):
         super().__init__()
         self.map_nr = map_nr
@@ -122,13 +124,13 @@ class GameEnv(ParallelEnv):
         self.cutting_speeds = cutting_speeds
         	
         # Initialize penalties and rewards
-        default_penalties = {
+        default_penalties_cfg = {
             "busy": 0.01,
             "useless_action": 0.2,
             "destructive_action": 1.0,
             "inaccessible_tile": 0.5,
         }
-        default_rewards = {
+        default_rewards_cfg = {
             "raw_food": 0.2,
             "plate": 0.2,
             "counter": 0.5,
@@ -136,8 +138,10 @@ class GameEnv(ParallelEnv):
             "salad": 5.0,
             "deliver": 10.0,
         }
-        self.penalties = penalties if penalties is not None else default_penalties
-        self.rewards = rewards if rewards is not None else default_rewards
+        self.penalties_cfg = penalties_cfg if penalties_cfg is not None else default_penalties_cfg
+        self.rewards_cfg = rewards_cfg if rewards_cfg is not None else default_rewards_cfg
+        self.initial_rewards_cfg = self.rewards_cfg.copy()  # Store initial rewards for dynamic updates
+        self.dynamic_rewards_cfg = dynamic_rewards_cfg
         self.wait_for_action_completion = wait_for_completion
 
         self.clickable_indices = None  # Initialize clickable indices storage
@@ -227,7 +231,7 @@ class GameEnv(ParallelEnv):
         }
 
         self.observations = {agent: np.zeros((obs_size,), dtype=np.float32) for agent in self.agents}
-        self.rewards = {agent: 0 for agent in self.agents}
+        self.modified_rewards = {agent: 0.0 for agent in self.agents}
         self.dones = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
         self._last_score = 0
@@ -256,6 +260,9 @@ class GameEnv(ParallelEnv):
 
         self._elapsed_time = 0.0
 
+        # Update rewards dynamically if configured
+        self._update_dynamic_rewards()
+
         # Store last (unnormalized) observation for each agent
         self._last_obs_raw = {}
         for agent in self.agents:
@@ -282,12 +289,32 @@ class GameEnv(ParallelEnv):
         self.total_actions_inaccessible = {agent_id: 0 for agent_id in self.agents}
 
         self.observations = {agent: self.observe(agent) for agent in self.agents}
-        self.rewards = {agent: 0 for agent in self.agents}
+        self.modified_rewards = {agent: 0.0 for agent in self.agents}
         self.dones = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
         self._last_score = 0
 
         return self.observations, self.infos
+
+    def _update_dynamic_rewards(self):
+        """Update rewards configuration based on dynamic rewards settings and current episode."""
+        if self.dynamic_rewards_cfg is not None and self.dynamic_rewards_cfg.get("enabled", False):
+            self.rewards_cfg = calculate_dynamic_rewards(
+                self.episode_count,
+                self.initial_rewards_cfg,
+                self.dynamic_rewards_cfg
+            )
+            
+            # Log reward changes periodically
+            if self.episode_count % 1000 == 0:  # Log every 1000 episodes
+                affected_rewards = self.dynamic_rewards_cfg.get("affected_rewards", [])
+                if affected_rewards:
+                    print(f"[Episode {self.episode_count}] Dynamic rewards updated:")
+                    for reward_type in affected_rewards:
+                        if reward_type in self.rewards_cfg:
+                            initial_val = self.initial_rewards_cfg[reward_type]
+                            current_val = self.rewards_cfg[reward_type]
+                            print(f"  {reward_type}: {initial_val:.3f} -> {current_val:.3f} (ratio: {current_val/initial_val:.3f})")
 
     def observe(self, agent):
         obs_vector = game_to_obs_vector(self.game, agent, game_mode=self.game_mode, distance_map=self.distance_map)
@@ -340,7 +367,7 @@ class GameEnv(ParallelEnv):
                     if tile_index is None:
                         # Still no valid tile found (non-counter action or no counters exist)
                         self.total_actions_not_performed[agent_id] += 1
-                        agent_penalties[agent_id] += self.penalties["inaccessible_tile"]
+                        agent_penalties[agent_id] += self.penalties_cfg["inaccessible_tile"]
                         busy_times[agent_id] = 0.1
                         continue
                 else:
@@ -367,27 +394,27 @@ class GameEnv(ParallelEnv):
                 if action_type == self.ACTION_TYPE_INACCESSIBLE:
                     self.total_actions_inaccessible[agent_id] += 1
                     self.total_action_types[agent_id][action_type] += 1
-                    agent_penalties[agent_id] += self.penalties["inaccessible_tile"]
+                    agent_penalties[agent_id] += self.penalties_cfg["inaccessible_tile"]
                     continue
                 elif action_type.startswith("useless_"):
-                    agent_penalties[agent_id] += self.penalties["useless_action"]
+                    agent_penalties[agent_id] += self.penalties_cfg["useless_action"]
                 elif action_type.startswith("destructive_"):
                     # Get the penalty for the destroyed item based on what the agent is carrying
                     destroyed_item_penalty = 0.0
                     if hasattr(agent, 'item') and agent.item:
                         # Map agent's item to corresponding reward value
                         if agent.item in ["tomato", "pumpkin"]:
-                            destroyed_item_penalty = self.rewards["raw_food"]
+                            destroyed_item_penalty = self.rewards_cfg["raw_food"]
                         elif agent.item == "plate":
-                            destroyed_item_penalty = self.rewards["plate"]
+                            destroyed_item_penalty = self.rewards_cfg["plate"]
                         elif agent.item in ["tomato_cut", "pumpkin_cut"]:
-                            destroyed_item_penalty = self.rewards["cut"]
+                            destroyed_item_penalty = self.rewards_cfg["cut"]
                         elif agent.item in ["tomato_salad", "pumpkin_salad"]:
-                            destroyed_item_penalty = self.rewards["salad"]
-                    
+                            destroyed_item_penalty = self.rewards_cfg["salad"]
+
                     # Apply both the base destructive penalty and the destroyed item penalty
-                    agent_penalties[agent_id] += self.penalties["destructive_action"] + destroyed_item_penalty
-                agent_penalties[agent_id] += self.penalties["busy"] * busy_time
+                    agent_penalties[agent_id] += self.penalties_cfg["destructive_action"] + destroyed_item_penalty
+                agent_penalties[agent_id] += self.penalties_cfg["busy"] * busy_time
                 validated_actions[agent_id] = {"type": "click", "target": tile_index}
                 action_info[agent_id] = {
                     "action_type": action_type,
@@ -427,7 +454,7 @@ class GameEnv(ParallelEnv):
                 agent.busy_until = None
 
         # Compute rewards
-        self.cumulated_pure_rewards, self.cumulated_modified_rewards = get_rewards(self, agent_events, agent_penalties, self.rewards)
+        self.cumulated_pure_rewards, self.cumulated_modified_rewards = get_rewards(self, agent_events, agent_penalties, self.rewards_cfg)
 
         # Check for episode termination
         should_truncate = self._elapsed_time >= self._max_seconds_per_episode
@@ -477,7 +504,7 @@ class GameEnv(ParallelEnv):
             self.episode_count += 1
             self.write_csv = False
 
-        return self.observations, self.rewards, terminations, truncations, self.infos
+        return self.observations, self.modified_rewards, terminations, truncations, self.infos
 
     def render(self):
         print(f"[Game Render] Agents: {self.agents}")

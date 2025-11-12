@@ -56,8 +56,9 @@ def make_train_rllib(config):
             "distance_map": distance_map_path,
             "walking_speeds": config.get("WALKING_SPEEDS", None),
             "cutting_speeds": config.get("CUTTING_SPEEDS", None),
-            "penalties": config.get("PENALTIES", None),
-            "rewards": config.get("REWARDS", None),
+            "penalties_cfg": config.get("PENALTIES_CFG", None),
+            "rewards_cfg": config.get("REWARDS_CFG", None),
+            "dynamic_rewards_cfg": config.get("DYNAMIC_REWARDS_CFG", None),
         }
         policies[f"policy_{agent_id}"] = (
             None,  # Use default PPO policy
@@ -135,8 +136,9 @@ def make_train_rllib(config):
                 "distance_map": distance_map_path,
                 "walking_speeds": config.get("WALKING_SPEEDS", None),
                 "cutting_speeds": config.get("CUTTING_SPEEDS", None),
-                "penalties": config.get("PENALTIES", None),
-                "rewards": config.get("REWARDS", None),
+                "penalties_cfg": config.get("PENALTIES_CFG", None),
+                "rewards_cfg": config.get("REWARDS_CFG", None),
+                "dynamic_rewards_cfg": config.get("DYNAMIC_REWARDS_CFG", None),
             },
             clip_actions=True,
         )

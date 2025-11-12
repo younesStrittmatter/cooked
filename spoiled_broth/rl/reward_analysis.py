@@ -1,23 +1,21 @@
 # ---- Reward analysis module ---- #
-def get_rewards(self, agent_events, agent_penalties, REWARDS):
+def get_rewards(self, agent_events, agent_penalties, rewards_cfg):
     """
     Calculate pure and modified rewards based on the game mode.
     """
     if self.game_mode == "classic":
-        return get_rewards_classic(self, agent_events, agent_penalties, REWARDS)
+        return get_rewards_classic(self, agent_events, agent_penalties, rewards_cfg)
     elif self.game_mode == "competition":
-        return get_rewards_competition(self, agent_events, agent_penalties, REWARDS)
+        return get_rewards_competition(self, agent_events, agent_penalties, rewards_cfg)
     else:
         raise ValueError(f"Unknown game mode: {self.game_mode}")
 
 
 # ---- Classic mode without ownership awareness ---- #
-def get_rewards_classic(self, agent_events, agent_penalties, REWARDS):
+def get_rewards_classic(self, agent_events, agent_penalties, rewards_cfg):
     """
     Calculate pure and modified rewards for classic mode.
-    """
-    # Get reward from delivering items
-    rewards_cfg = REWARDS
+    """    
     event_rewards = {agent_id: 0.0 for agent_id in self.agents}
     deliver_rewards = {agent_id: 0.0 for agent_id in self.agents}
     for agent_id in self.agents:
@@ -45,15 +43,13 @@ def get_rewards_classic(self, agent_events, agent_penalties, REWARDS):
         )  # in case there is only one agent
 
         # Modified rewards: include penalties
-        self.rewards[agent_id] = alpha * (reward - agent_penalties[agent_id]) + beta * avg_other_reward
-        self.cumulated_modified_rewards[agent_id] += self.rewards[agent_id]
+        self.modified_rewards[agent_id] = alpha * (reward - agent_penalties[agent_id]) + beta * avg_other_reward
+        self.cumulated_modified_rewards[agent_id] += self.modified_rewards[agent_id]
 
     return self.cumulated_pure_rewards, self.cumulated_modified_rewards
 
 # ---- Competition mode with ownership awareness ---- #
-def get_rewards_competition(self, agent_events, agent_penalties, REWARDS):
-    # Get reward from delivering items
-    rewards_cfg = REWARDS
+def get_rewards_competition(self, agent_events, agent_penalties, rewards_cfg):
     pure_rewards = {agent_id: 0.0 for agent_id in self.agents}
     for agent_id in self.agents:
         # Pure rewards: only positive events, no IDLE or useless penalties
@@ -96,7 +92,7 @@ def get_rewards_competition(self, agent_events, agent_penalties, REWARDS):
         else:
             avg_other_reward = 0.0  # in case there is only one agent
         # Modified rewards: include penalties
-        self.rewards[agent_id] = alpha * (pure_rewards[agent_id] - agent_penalties[agent_id]) + beta * avg_other_reward
-        self.cumulated_modified_rewards[agent_id] += self.rewards[agent_id]
+        self.modified_rewards[agent_id] = alpha * (pure_rewards[agent_id] - agent_penalties[agent_id]) + beta * avg_other_reward
+        self.cumulated_modified_rewards[agent_id] += self.modified_rewards[agent_id]
 
     return self.cumulated_pure_rewards, self.cumulated_modified_rewards

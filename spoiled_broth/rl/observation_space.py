@@ -81,14 +81,37 @@ def game_to_obs_vector_classic(game, agent_id, distance_map):
     all_agent_ids = [aid for aid in game.gameObjects if aid.startswith('ai_rl_')]
     if agent_id not in all_agent_ids:
         raise ValueError(f"agent_id {agent_id} not found in gameObjects")
-    other_agent_id = [aid for aid in all_agent_ids if aid != agent_id][0]
+    
+    # Handle single agent case
+    other_agent_ids = [aid for aid in all_agent_ids if aid != agent_id]
+    has_other_agent = len(other_agent_ids) > 0
+    
     agent = game.gameObjects[agent_id]
-    other_agent = game.gameObjects[other_agent_id]
     agent_pos = (agent.slot_x, agent.slot_y)
-    other_pos = (other_agent.slot_x, other_agent.slot_y)
-
-    # Midpoint position (rounded to nearest int)
-    midpoint = (int(round((agent.slot_x + other_agent.slot_x) / 2)), int(round((agent.slot_y + other_agent.slot_y) / 2)))
+    
+    if has_other_agent:
+        other_agent_id = other_agent_ids[0]
+        other_agent = game.gameObjects[other_agent_id]
+        other_pos = (other_agent.slot_x, other_agent.slot_y)
+        # Midpoint position (rounded to nearest int)
+        midpoint = (int(round((agent.slot_x + other_agent.slot_x) / 2)), int(round((agent.slot_y + other_agent.slot_y) / 2)))
+    else:
+        other_agent = None
+        other_pos = None  # No other agent
+        # For single agent, calculate midpoint as closest accessible tile position
+        all_tiles = []
+        for tile_type in tile_types:
+            indices = get_tile_indices_by_type(game, tile_type)
+            accessible = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
+            all_tiles.extend(accessible)
+        
+        if all_tiles:
+            # Find the closest tile to agent
+            closest_tile = min(all_tiles, key=lambda t: get_distance(distance_map, agent_pos, (t[1], t[2])))
+            midpoint = (closest_tile[1], closest_tile[2])
+        else:
+            # Fallback to agent position if no accessible tiles
+            midpoint = (agent.slot_x, agent.slot_y)
     obs_vector = []
 
     # --- Add times to tile types ---
@@ -155,15 +178,21 @@ def game_to_obs_vector_classic(game, agent_id, distance_map):
             obs_vector.append(1) # Fallback for midpoint time
 
     # Distance to other agent - both Euclidean and pathfinding distances
-    # 1. Euclidean distance (straight-line distance)
-    euclidean_dist = math.sqrt((agent_pos[0] - other_pos[0])**2 + (agent_pos[1] - other_pos[1])**2)
-    euclidean_time = (euclidean_dist / agent_walking_speed) / normalization_factor
-    obs_vector.append(euclidean_time)
-    
-    # 2. Pathfinding distance (using distance map for accessibility)
-    pathfinding_dist = get_distance(distance_map, agent_pos, other_pos)
-    pathfinding_time = (pathfinding_dist / agent_walking_speed) / normalization_factor if pathfinding_dist is not None else 1
-    obs_vector.append(pathfinding_time)
+    # For single agent case, use default values
+    if has_other_agent:
+        # 1. Euclidean distance (straight-line distance)
+        euclidean_dist = math.sqrt((agent_pos[0] - other_pos[0])**2 + (agent_pos[1] - other_pos[1])**2)
+        euclidean_time = (euclidean_dist / agent_walking_speed) / normalization_factor
+        obs_vector.append(euclidean_time)
+        
+        # 2. Pathfinding distance (using distance map for accessibility)
+        pathfinding_dist = get_distance(distance_map, agent_pos, other_pos)
+        pathfinding_time = (pathfinding_dist / agent_walking_speed) / normalization_factor if pathfinding_dist is not None else 1
+        obs_vector.append(pathfinding_time)
+    else:
+        # Single agent case: append default values for other agent distances
+        obs_vector.append(1.0)  # No other agent, use max distance
+        obs_vector.append(1.0)  # No other agent, use max distance
 
     # One-hot agent inventory
     agent_inventory = np.zeros(len(item_names), dtype=np.float32)
@@ -173,11 +202,16 @@ def game_to_obs_vector_classic(game, agent_id, distance_map):
     obs_vector.extend(agent_inventory.tolist())
 
     # One-hot other agent inventory
-    other_inventory = np.zeros(len(item_names), dtype=np.float32)
-    item_other = getattr(other_agent, 'item', None)
-    if item_other in item_names:
-        other_inventory[item_names.index(item_other)] = 1.0
-    obs_vector.extend(other_inventory.tolist())
+    if has_other_agent:
+        other_inventory = np.zeros(len(item_names), dtype=np.float32)
+        item_other = getattr(other_agent, 'item', None)
+        if item_other in item_names:
+            other_inventory[item_names.index(item_other)] = 1.0
+        obs_vector.extend(other_inventory.tolist())
+    else:
+        # Single agent case: append zeros for other agent inventory
+        other_inventory = np.zeros(len(item_names), dtype=np.float32)
+        obs_vector.extend(other_inventory.tolist())
     return np.array(obs_vector, dtype=np.float32)
 
 # ---- Competition mode with ownership awareness ---- #
@@ -202,12 +236,36 @@ def game_to_obs_vector_competition(game, agent_id, distance_map):
     all_agent_ids = [aid for aid in game.gameObjects if aid.startswith('ai_rl_')]
     if agent_id not in all_agent_ids:
         raise ValueError(f"agent_id {agent_id} not found in gameObjects")
-    other_agent_id = [aid for aid in all_agent_ids if aid != agent_id][0]
+    
+    # Handle single agent case
+    other_agent_ids = [aid for aid in all_agent_ids if aid != agent_id]
+    has_other_agent = len(other_agent_ids) > 0
+    
     agent = game.gameObjects[agent_id]
-    other_agent = game.gameObjects[other_agent_id]
     agent_pos = (agent.slot_x, agent.slot_y)
-    other_pos = (other_agent.slot_x, other_agent.slot_y)
-    midpoint = (int(round((agent.slot_x + other_agent.slot_x) / 2)), int(round((agent.slot_y + other_agent.slot_y) / 2)))
+    
+    if has_other_agent:
+        other_agent_id = other_agent_ids[0]
+        other_agent = game.gameObjects[other_agent_id]
+        other_pos = (other_agent.slot_x, other_agent.slot_y)
+        midpoint = (int(round((agent.slot_x + other_agent.slot_x) / 2)), int(round((agent.slot_y + other_agent.slot_y) / 2)))
+    else:
+        other_agent = None
+        other_pos = None  # No other agent
+        # For single agent, calculate midpoint as closest accessible tile position
+        all_tiles = []
+        for tile_type in tile_types:
+            indices = get_tile_indices_by_type(game, tile_type)
+            accessible = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
+            all_tiles.extend(accessible)
+        
+        if all_tiles:
+            # Find the closest tile to agent
+            closest_tile = min(all_tiles, key=lambda t: get_distance(distance_map, agent_pos, (t[1], t[2])))
+            midpoint = (closest_tile[1], closest_tile[2])
+        else:
+            # Fallback to agent position if no accessible tiles
+            midpoint = (agent.slot_x, agent.slot_y)
     obs_vector = []
 
     # --- Add distances to tile types ---
@@ -271,15 +329,20 @@ def game_to_obs_vector_competition(game, agent_id, distance_map):
             obs_vector.append(1) # Fallback for midpoint time
 
     # Distance to other agent - both Euclidean and pathfinding distances
-    # 1. Euclidean distance (straight-line distance)
-    euclidean_dist = math.sqrt((agent_pos[0] - other_pos[0])**2 + (agent_pos[1] - other_pos[1])**2)
-    euclidean_time = (euclidean_dist / agent_walking_speed) / normalization_factor
-    obs_vector.append(euclidean_time)
-    
-    # 2. Pathfinding distance (using distance map for accessibility)
-    pathfinding_dist = get_distance(distance_map, agent_pos, other_pos)
-    pathfinding_time = (pathfinding_dist / agent_walking_speed) / normalization_factor if pathfinding_dist is not None else 1
-    obs_vector.append(pathfinding_time)
+    if has_other_agent:
+        # 1. Euclidean distance (straight-line distance)
+        euclidean_dist = math.sqrt((agent_pos[0] - other_pos[0])**2 + (agent_pos[1] - other_pos[1])**2)
+        euclidean_time = (euclidean_dist / agent_walking_speed) / normalization_factor
+        obs_vector.append(euclidean_time)
+        
+        # 2. Pathfinding distance (using distance map for accessibility)
+        pathfinding_dist = get_distance(distance_map, agent_pos, other_pos)
+        pathfinding_time = (pathfinding_dist / agent_walking_speed) / normalization_factor if pathfinding_dist is not None else 1
+        obs_vector.append(pathfinding_time)
+    else:
+        # Single agent case: always use 1.0 (normalized max distance) for other agent distances
+        obs_vector.append(1.0)
+        obs_vector.append(1.0)
 
     # One-hot agent inventory
     agent_inventory = np.zeros(len(item_names), dtype=np.float32)
@@ -289,11 +352,16 @@ def game_to_obs_vector_competition(game, agent_id, distance_map):
     obs_vector.extend(agent_inventory.tolist())
 
     # One-hot other agent inventory
-    other_inventory = np.zeros(len(item_names), dtype=np.float32)
-    item_other = getattr(other_agent, 'item', None)
-    if item_other in item_names:
-        other_inventory[item_names.index(item_other)] = 1.0
-    obs_vector.extend(other_inventory.tolist())
+    if has_other_agent:
+        other_inventory = np.zeros(len(item_names), dtype=np.float32)
+        item_other = getattr(other_agent, 'item', None)
+        if item_other in item_names:
+            other_inventory[item_names.index(item_other)] = 1.0
+        obs_vector.extend(other_inventory.tolist())
+    else:
+        # Single agent case: append zeros for other agent inventory
+        other_inventory = np.zeros(len(item_names), dtype=np.float32)
+        obs_vector.extend(other_inventory.tolist())
     return np.array(obs_vector, dtype=np.float32)
 
 # Wrapper to select observation vector function based on game_mode.
