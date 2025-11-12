@@ -80,6 +80,25 @@ PAYOFF_MATRIX = [1,1,-2]
 # Neural network architecture
 MLP_LAYERS = [512, 512, 256]
 
+# Game characteristics
+PENALTIES = {
+    "busy": 0.01, # Penalty per second spent busy
+    "useless_action": 2.0, # Penalty for useless actions
+    "destructive_action": 10.0, # Penalty for destructive actions
+    "inaccessible_tile": 0.5, # Penalty for trying to access an inaccessible tile
+}
+
+WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next step
+
+REWARDS = {
+    "raw_food": 0.2,
+    "plate": 0.2,
+    "counter": 0.5,
+    "cut": 2.0,
+    "salad": 5.0,
+    "deliver": 10.0,
+}
+
 if NUM_AGENTS == 1:
     save_dir = f'{local}/data/samuel_lozano/cooked/pretraining/{GAME_VERSION}/map_{MAP_NR}'
 else: 
@@ -132,7 +151,9 @@ config = {
     "WALKING_SPEEDS": walking_speeds,
     "CUTTING_SPEEDS": cutting_speeds,
     "INITIAL_SEED": SEED,
-    "WAIT_FOR_COMPLETION": True,
+    "PENALTIES": PENALTIES,
+    "REWARDS": REWARDS,
+    "WAIT_FOR_COMPLETION": WAIT_FOR_ACTION_COMPLETION,
     "SAVE_DIR": save_dir,
     "CHECKPOINT_ID_USED": pretrained_policies,  # Add pretrained policies configuration
     "PRETRAINED": PRETRAINING if PRETRAINING else "No",

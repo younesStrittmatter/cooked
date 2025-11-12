@@ -122,7 +122,21 @@ class DataProcessor:
         filtered_lines = [header] + [line for line in lines[1:] if not line.startswith("episode,env")]
         
         df = pd.read_csv(StringIO("".join(filtered_lines)))
-        df.iloc[:, 0] = range(1, len(df) + 1)
+        # Check if 'episode' column exists and use it, otherwise use line numbers
+        if 'episode' in df.columns:
+            # Use the existing episode column as x-axis
+            pass  # Keep the original episode values
+        else:
+            print(f"Warning: 'episode' column not found in {folder_path}. Using line numbers as episode values.")
+            # If no episode column exists, create one with line numbers
+            if df.shape[1] > 0:
+                df.iloc[:, 0] = range(1, len(df) + 1)
+                # Rename the first column to 'episode' if it's not already named
+                if df.columns[0] != 'episode':
+                    df.rename(columns={df.columns[0]: 'episode'}, inplace=True)
+            else:
+                # If dataframe is empty or has no columns, create an episode column
+                df['episode'] = range(1, len(df) + 1)
         
         # Extract folder timestamp
         folder_name = os.path.basename(folder_path)

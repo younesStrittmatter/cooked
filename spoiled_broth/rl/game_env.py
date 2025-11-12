@@ -15,21 +15,6 @@ from spoiled_broth.game import SpoiledBroth, random_game_state
 INTENT_TIME = 0.1
 MOVE_TIME = 0.1
 
-BUSY_PENALTY = 0.01  # Penalty for being busy
-USELESS_ACTION_PENALTY = 2.0  # Penalty for performing a useless action
-DESTRUCTIVE_ACTION_PENALTY = 10.0  # Harsh penalty for performing a destructive action
-INACCESSIBLE_TILE_PENALTY = 0.5  # Penalty for trying to access unreachable tiles
-WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next step
-
-REWARDS = {
-    "raw_food": 0.0,
-    "plate": 0.0,
-    "counter": 0.0,
-    "cut": 0.0,
-    "salad": 0.0,
-    "deliver": 10.0,
-}
-
 ACTIONS_OBSERVATION_MAPPING_CLASSIC = {
     0: 0, 1: 1, 2: 2, 3: 3, # Two dispensers, cutting board, delivery
     4: 4, 5: 5, # Free counter (closest and midpoint)
@@ -116,7 +101,9 @@ class GameEnv(ParallelEnv):
         start_epoch=0,
         distance_map=None,
         walking_speeds=None,
-        cutting_speeds=None
+        cutting_speeds=None,
+        penalties=None,
+        rewards=None
     ):
         super().__init__()
         self.map_nr = map_nr
@@ -133,6 +120,25 @@ class GameEnv(ParallelEnv):
         self.payoff_matrix = payoff_matrix
         self.walking_speeds = walking_speeds
         self.cutting_speeds = cutting_speeds
+        	
+        # Initialize penalties and rewards
+        default_penalties = {
+            "busy": 0.01,
+            "useless_action": 0.2,
+            "destructive_action": 1.0,
+            "inaccessible_tile": 0.5,
+        }
+        default_rewards = {
+            "raw_food": 0.2,
+            "plate": 0.2,
+            "counter": 0.5,
+            "cut": 2.0,
+            "salad": 5.0,
+            "deliver": 10.0,
+        }
+        self.penalties = penalties if penalties is not None else default_penalties
+        self.rewards = rewards if rewards is not None else default_rewards
+        self.wait_for_action_completion = wait_for_completion
 
         self.clickable_indices = None  # Initialize clickable indices storage
         self.distance_map = None
@@ -334,7 +340,7 @@ class GameEnv(ParallelEnv):
                     if tile_index is None:
                         # Still no valid tile found (non-counter action or no counters exist)
                         self.total_actions_not_performed[agent_id] += 1
-                        agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
+                        agent_penalties[agent_id] += self.penalties["inaccessible_tile"]
                         busy_times[agent_id] = 0.1
                         continue
                 else:
@@ -361,27 +367,27 @@ class GameEnv(ParallelEnv):
                 if action_type == self.ACTION_TYPE_INACCESSIBLE:
                     self.total_actions_inaccessible[agent_id] += 1
                     self.total_action_types[agent_id][action_type] += 1
-                    agent_penalties[agent_id] += INACCESSIBLE_TILE_PENALTY
+                    agent_penalties[agent_id] += self.penalties["inaccessible_tile"]
                     continue
                 elif action_type.startswith("useless_"):
-                    agent_penalties[agent_id] += USELESS_ACTION_PENALTY
+                    agent_penalties[agent_id] += self.penalties["useless_action"]
                 elif action_type.startswith("destructive_"):
                     # Get the penalty for the destroyed item based on what the agent is carrying
                     destroyed_item_penalty = 0.0
                     if hasattr(agent, 'item') and agent.item:
                         # Map agent's item to corresponding reward value
                         if agent.item in ["tomato", "pumpkin"]:
-                            destroyed_item_penalty = REWARDS["raw_food"]
+                            destroyed_item_penalty = self.rewards["raw_food"]
                         elif agent.item == "plate":
-                            destroyed_item_penalty = REWARDS["plate"]
+                            destroyed_item_penalty = self.rewards["plate"]
                         elif agent.item in ["tomato_cut", "pumpkin_cut"]:
-                            destroyed_item_penalty = REWARDS["cut"]
+                            destroyed_item_penalty = self.rewards["cut"]
                         elif agent.item in ["tomato_salad", "pumpkin_salad"]:
-                            destroyed_item_penalty = REWARDS["salad"]
+                            destroyed_item_penalty = self.rewards["salad"]
                     
                     # Apply both the base destructive penalty and the destroyed item penalty
-                    agent_penalties[agent_id] += DESTRUCTIVE_ACTION_PENALTY + destroyed_item_penalty
-                agent_penalties[agent_id] += BUSY_PENALTY * busy_time
+                    agent_penalties[agent_id] += self.penalties["destructive_action"] + destroyed_item_penalty
+                agent_penalties[agent_id] += self.penalties["busy"] * busy_time
                 validated_actions[agent_id] = {"type": "click", "target": tile_index}
                 action_info[agent_id] = {
                     "action_type": action_type,
@@ -421,7 +427,7 @@ class GameEnv(ParallelEnv):
                 agent.busy_until = None
 
         # Compute rewards
-        self.cumulated_pure_rewards, self.cumulated_modified_rewards = get_rewards(self, agent_events, agent_penalties, REWARDS)
+        self.cumulated_pure_rewards, self.cumulated_modified_rewards = get_rewards(self, agent_events, agent_penalties, self.rewards)
 
         # Check for episode termination
         should_truncate = self._elapsed_time >= self._max_seconds_per_episode

@@ -163,7 +163,7 @@ class CheckpointDeliveryAnalyzer:
                         'training_dir': training_dir
                     }
                     
-                    print(f"    Found {len(final_deliveries)} simulations, real epoch: {real_checkpoint_num}")
+                    print(f"    Found {len(final_deliveries)} simulations, real episode: {real_checkpoint_num}")
                 else:
                     print(f"    No valid simulations found")
     
@@ -179,8 +179,8 @@ class CheckpointDeliveryAnalyzer:
         else:
             return 0
     
-    def get_final_epoch_from_training_stats(self, training_dir):
-        """Get the final epoch number from training_stats.csv."""
+    def get_final_episode_from_training_stats(self, training_dir):
+        """Get the final episode number from training_stats.csv."""
         training_stats_file = training_dir / "training_stats.csv"
         
         if training_stats_file.exists():
@@ -188,12 +188,12 @@ class CheckpointDeliveryAnalyzer:
                 # Read the training stats file
                 stats_df = pd.read_csv(training_stats_file)
                 
-                # Get the last epoch number and add 1
-                if 'epoch' in stats_df.columns and len(stats_df) > 0:
-                    final_epoch = stats_df['epoch'].iloc[-1] + 1
-                    return final_epoch
+                # Get the last episode number and add 1
+                if 'episode' in stats_df.columns and len(stats_df) > 0:
+                    final_episode = stats_df['episode'].iloc[-1] + 1
+                    return final_episode
                 else:
-                    print(f"Warning: No 'epoch' column found in {training_stats_file}")
+                    print(f"Warning: No 'episode' column found in {training_stats_file}")
                     return None
                     
             except Exception as e:
@@ -206,9 +206,9 @@ class CheckpointDeliveryAnalyzer:
     def get_real_checkpoint_number(self, checkpoint_name, training_dir):
         """Get the real checkpoint number, reading from training_stats.csv for 'final'."""
         if checkpoint_name == "final":
-            final_epoch = self.get_final_epoch_from_training_stats(training_dir)
-            if final_epoch is not None:
-                return final_epoch
+            final_episode = self.get_final_episode_from_training_stats(training_dir)
+            if final_episode is not None:
+                return final_episode
             else:
                 # Fallback to original logic if we can't read the stats
                 return float('inf')
@@ -365,7 +365,7 @@ class CheckpointDeliveryAnalyzer:
         sim_counts = sim_counts.sort_values('real_checkpoint_numeric')
         
         plt.bar(range(len(sim_counts)), sim_counts['n_simulations'])
-        plt.xlabel('Checkpoint (Epoch)')
+        plt.xlabel('Checkpoint (Episode)')
         plt.ylabel('Total Number of Simulations')
         plt.title('Number of Simulations per Checkpoint')
         plt.xticks(range(len(sim_counts)), sim_counts['real_checkpoint_numeric'], rotation=45)
@@ -432,9 +432,9 @@ class CheckpointDeliveryAnalyzer:
         plt.plot(trend_x, trend_y, color='grey', linewidth=2, linestyle='--', 
                 alpha=0.8, label='Overall Trend', marker='s', markersize=4)
         
-        plt.xlabel('Epoch Number', fontsize=12)
+        plt.xlabel('Episode Number', fontsize=12)
         plt.ylabel('Mean Final Deliveries', fontsize=12)
-        plt.title(f'Delivery Performance vs Training Epoch\nMap: {self.map_nr}', 
+        plt.title(f'Delivery Performance vs Training Episode\nMap: {self.map_nr}', 
                  fontsize=14)
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True, alpha=0.3)
@@ -488,7 +488,7 @@ class CheckpointDeliveryAnalyzer:
                 else:
                     checkpoint_num = real_checkpoint_num
                 
-                print(f"  Checkpoint {checkpoint_name} (epoch {checkpoint_num}): {len(simulations)} simulations")
+                print(f"  Checkpoint {checkpoint_name} (episode {checkpoint_num}): {len(simulations)} simulations")
                 sim_count_by_training[training_id][checkpoint_name] = len(simulations)
                 
                 for sim in simulations:
@@ -546,7 +546,7 @@ class CheckpointDeliveryAnalyzer:
             
             print(f"Debug: Individual trajectories plotted: {trajectories_plotted}")
             
-            plt.xlabel('Checkpoint (Epoch)')
+            plt.xlabel('Checkpoint (Episode)')
             plt.ylabel('Final Deliveries')
             plt.title('Individual Simulation Trajectories\n(Thin lines = individual, thick lines = mean)')
             plt.legend()
@@ -561,7 +561,7 @@ class CheckpointDeliveryAnalyzer:
                            color=color_map[training_id], alpha=0.6, s=20, 
                            label=f'Training {training_id}')
             
-            plt.xlabel('Checkpoint (Epoch)')
+            plt.xlabel('Checkpoint (Episode)')
             plt.ylabel('Final Deliveries')
             plt.title('All Data Points\n(Scatter plot for verification)')
             plt.legend()
@@ -588,7 +588,7 @@ class CheckpointDeliveryAnalyzer:
                        label=f'Training {training_id}', 
                        color=color_map[training_id], alpha=0.7)
             
-            plt.xlabel('Checkpoint (Epoch)')
+            plt.xlabel('Checkpoint (Episode)')
             plt.ylabel('Number of Simulations')
             plt.title('Simulation Count per Checkpoint')
             plt.xticks(x_pos + width * (len(training_ids) - 1) / 2, checkpoint_numbers, rotation=45)

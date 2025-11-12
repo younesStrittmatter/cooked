@@ -81,7 +81,7 @@ class SimulationAnalyzer:
             return "final"
             
         try:
-            # Read the CSV and get the last epoch number
+            # Read the CSV and get the last episode number
             import pandas as pd
             df = pd.read_csv(training_stats_path)
             
@@ -89,9 +89,9 @@ class SimulationAnalyzer:
                 print("Warning: training_stats.csv is empty")
                 return "final"
                 
-            # Get the first column (epoch) from the last row and add 1
-            last_epoch = df.iloc[-1, 0]  # First column of last row
-            resolved_checkpoint = str(int(last_epoch) + 1)
+            # Get the first column (episode) from the last row and add 1
+            last_episode = df.iloc[-1, 0]  # First column of last row
+            resolved_checkpoint = str(int(last_episode) + 1)
             
             print(f"Resolved checkpoint_number 'final' to '{resolved_checkpoint}' based on training_stats.csv")
             return resolved_checkpoint
