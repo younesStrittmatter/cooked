@@ -347,9 +347,7 @@ def analyze_meaningful_actions(actions_df, simulation_df, counter_df, map_nr, ou
                                                    action['target_tile_x'], action['target_tile_y'])
                             
                             # Look for any counter-related action (put_down or pick_up)
-                            if (is_near and action['action_type'].startswith(search_action) 
-                                and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]
-                                ):
+                            if (is_near and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]):
                                 matched_action = action.copy()
                                 matched_action['matched_action_idx'] = check_idx
                                 print(f"      Matched to action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
@@ -402,9 +400,7 @@ def analyze_meaningful_actions(actions_df, simulation_df, counter_df, map_nr, ou
                                                    action['target_tile_x'], action['target_tile_y'])
                             
                             # Look for any counter-related action (put_down or pick_up)
-                            if (is_near and action['action_type'].startswith(f'pick_up_{current_agent_item}_from_counter') 
-                                and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]
-                                ):
+                            if (is_near and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]):
                                 matched_action = action.copy()
                                 matched_action['matched_action_idx'] = check_idx
                                 print(f"      Matched to action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
@@ -488,9 +484,7 @@ def analyze_meaningful_actions(actions_df, simulation_df, counter_df, map_nr, ou
                             is_near = is_near_target(agent_tile_x, agent_tile_y, 
                                                    action['target_tile_x'], action['target_tile_y'])
                             
-                            if (is_near and action['action_type'].startswith(f'put_down_item_on_free_counter') 
-                                and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]
-                                ):
+                            if (is_near and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]):
                                 matched_action = action.copy()
                                 matched_action['matched_action_idx'] = check_idx
                                 print(f"      Matched to action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")
@@ -545,9 +539,7 @@ def analyze_meaningful_actions(actions_df, simulation_df, counter_df, map_nr, ou
                             is_near = is_near_target(agent_tile_x, agent_tile_y, 
                                                    action['target_tile_x'], action['target_tile_y'])
 
-                            if (is_near and action['action_type'].startswith(f'pick_up_{current_agent_item}_from_counter')
-                                and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]
-                                ):
+                            if (is_near and action['target_tile_x'] == counter_pos[0] and action['target_tile_y'] == counter_pos[1]):
                                 matched_action = action.copy()
                                 matched_action['matched_action_idx'] = check_idx
                                 print(f"      Matched to action {check_idx}: {action['target_tile_type']} -> ({action['target_tile_x']}, {action['target_tile_y']})")

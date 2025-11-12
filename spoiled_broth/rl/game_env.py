@@ -16,17 +16,17 @@ INTENT_TIME = 0.1
 MOVE_TIME = 0.1
 
 BUSY_PENALTY = 0.01  # Penalty for being busy
-USELESS_ACTION_PENALTY = 0.2  # Penalty for performing a useless action
-DESTRUCTIVE_ACTION_PENALTY = 1.0  # Harsh penalty for performing a destructive action
+USELESS_ACTION_PENALTY = 2.0  # Penalty for performing a useless action
+DESTRUCTIVE_ACTION_PENALTY = 10.0  # Harsh penalty for performing a destructive action
 INACCESSIBLE_TILE_PENALTY = 0.5  # Penalty for trying to access unreachable tiles
 WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next step
 
 REWARDS = {
-    "raw_food": 0.2,
-    "plate": 0.2,
-    "counter": 0.5,
-    "cut": 2.0,
-    "salad": 5.0,
+    "raw_food": 0.0,
+    "plate": 0.0,
+    "counter": 0.0,
+    "cut": 0.0,
+    "salad": 0.0,
     "deliver": 10.0,
 }
 

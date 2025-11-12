@@ -177,4 +177,5 @@ brigit*
 cuenca*
 *.out
 *.log
+*.txt
 logs*

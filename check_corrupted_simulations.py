@@ -9,12 +9,12 @@ the entire simulation folder is deleted as it indicates a corrupted/failed simul
 At the end, it provides a summary of remaining simulations per training and checkpoint.
 
 Folder structure:
-/data/samuel_lozano/cooked/classic/v3.1/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/simulation_{simulation_id}/
+/data/samuel_lozano/cooked/classic/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/simulation_{simulation_id}/
 
 Usage:
-nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor --max-num-simulations 100 > check_corrupted_simulations.log 2>&1 &
+nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor --max-num-simulations 100 > check_corrupted_simulations_baseline.log 2>&1 &
 
-nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor > check_corrupted_simulations.log 2>&1 &
+nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor > check_corrupted_simulations_baseline.log 2>&1 &
 
 Author: Samuel Lozano
 """
@@ -47,7 +47,7 @@ class CorruptedSimulationCleaner:
         self.max_num_simulations = max_num_simulations
 
         # Base simulation directory
-        self.simulations_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/classic/v3.1/map_{map_nr}/simulations")
+        self.simulations_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/classic/map_{map_nr}/simulations")
 
         # Statistics tracking
         self.total_simulations_found = 0

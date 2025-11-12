@@ -34,8 +34,7 @@ class SimulationAnalyzer:
     """Main class for analyzing simulation data."""
     
     def __init__(self, base_dir="/data", map_nr=None, training_id=None, 
-                 checkpoint_number=None, game_version="classic", intent_version="v3.1", 
-                 cooperative=1):
+                 checkpoint_number=None, game_version="classic"):
         """
         Initialize the analyzer with specific parameters.
         
@@ -45,16 +44,12 @@ class SimulationAnalyzer:
             training_id: Training ID (e.g., "2025-09-13_13-27-52")
             checkpoint_number: Checkpoint number (e.g., "final", "50", etc.)
             game_version: Game version ("classic" or "competition")
-            intent_version: Intent version (e.g., "v3.1")
-            cooperative: 1 for cooperative, 0 for competitive
         """
         self.base_dir = Path(base_dir)
         self.map_nr = map_nr
         self.training_id = training_id
         self.checkpoint_number = checkpoint_number
         self.game_version = game_version
-        self.intent_version = intent_version
-        self.cooperative = "cooperative" if cooperative == 1 else "competitive"
         
         # Construct the specific simulation directory path
         if all([map_nr, training_id, checkpoint_number]):
@@ -129,9 +124,7 @@ class SimulationAnalyzer:
                 metadata = {
                     'training_id': f"Training_{self.training_id}",
                     'map': self.map_nr,
-                    'cooperative': self.cooperative == 'cooperative',
                     'game_type': self.game_version,
-                    'version': self.intent_version,
                     'checkpoint': self.checkpoint_number,
                     'simulation_timestamp': path_obj.name.replace('simulation_', '')
                 }
@@ -787,8 +780,6 @@ class SimulationAnalyzer:
         summary.append(f"Training ID: {self.training_id}")
         summary.append(f"Checkpoint: {self.checkpoint_number}")
         summary.append(f"Game version: {self.game_version}")
-        summary.append(f"Intent version: {self.intent_version}")
-        summary.append(f"Mode: {self.cooperative}")
         summary.append(f"Analysis path: {self.simulation_base_path}\n")
         
         summary.append(f"Total simulations analyzed: {len(self.simulation_data)}\n")
@@ -904,8 +895,6 @@ class SimulationAnalyzer:
         print(f"Training ID: {self.training_id}")
         print(f"Checkpoint: {self.checkpoint_number}")
         print(f"Game version: {self.game_version}")
-        print(f"Intent version: {self.intent_version}")
-        print(f"Mode: {self.cooperative}")
         print(f"Search path: {self.simulation_base_path}")
         print()
         
@@ -969,11 +958,7 @@ def main():
     parser.add_argument('--game_version', type=str, default='classic', 
                        choices=['classic', 'competition'],
                        help='Game version (default: classic)')
-    parser.add_argument('--intent_version', type=str, default='v3.1',
-                       help='Intent version (default: v3.1)')
-    parser.add_argument('--cooperative', type=int, default=1, choices=[0, 1],
-                       help='1 for cooperative, 0 for competitive (default: 1)')
-
+    
     args = parser.parse_args()
 
     if args.cluster.lower() == 'cuenca':
@@ -984,7 +969,7 @@ def main():
         base_cluster_dir = "C:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado"
 
     # Updated for new folder structure: /data/.../map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
-    base_dir = f"{base_cluster_dir}/data/samuel_lozano/cooked/{args.game_version}/{args.intent_version}/map_{args.map_nr}"
+    base_dir = f"{base_cluster_dir}/data/samuel_lozano/cooked/{args.game_version}/map_{args.map_nr}"
     training_dir = f"{base_dir}/simulations/Training_{args.training_id}/"
     simulation_dir = f"{training_dir}/checkpoint_{args.checkpoint_number}/"
 
@@ -994,8 +979,6 @@ def main():
         training_id=args.training_id,
         checkpoint_number=args.checkpoint_number,
         game_version=args.game_version,
-        intent_version=args.intent_version,
-        cooperative=args.cooperative
     )
     
     # Resolve checkpoint number (handles "final" case)
@@ -1009,9 +992,7 @@ def main():
         map_nr=args.map_nr,
         training_id=args.training_id,
         checkpoint_number=resolved_checkpoint,
-        game_version=args.game_version,
-        intent_version=args.intent_version,
-        cooperative=args.cooperative
+        game_version=args.game_version
     )
 
     analyzer.run_full_analysis(output_dir)

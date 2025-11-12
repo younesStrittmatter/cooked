@@ -6,10 +6,10 @@ This script analyzes simulation data across all training_ids and checkpoints for
 to generate a figure comparing averaged deliveries in the last frame over checkpoint numbers.
 
 The script expects the following directory structure:
-/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint}/
+/data/samuel_lozano/cooked/{game_version}/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint}/
 
 Usage:
-nohup python3 analysis_checkpoint_comparison.py --cluster cuenca --map_nr baseline_division_of_labor --game_version classic --intent_version v3.1 --cooperative 1 > log_analysis_checkpoint_comparison.out 2>&1 &
+nohup python3 analysis_checkpoint_comparison.py --cluster cuenca --map_nr baseline_division_of_labor --game_version classic > log_analysis_checkpoint_comparison.out 2>&1 &
 
 Author: Samuel Lozano
 """
@@ -33,8 +33,7 @@ sns.set_palette("husl")
 class CheckpointDeliveryAnalyzer:
     """Main class for analyzing deliveries across checkpoints and training_ids."""
     
-    def __init__(self, base_cluster_dir="", map_nr=None, game_version="classic", 
-                 intent_version="v3.1", cooperative=1):
+    def __init__(self, base_cluster_dir="", map_nr=None, game_version="classic"):
         """
         Initialize the analyzer with specific parameters.
         
@@ -42,18 +41,14 @@ class CheckpointDeliveryAnalyzer:
             base_cluster_dir: Base cluster directory 
             map_nr: Map number/name (e.g., "baseline_division_of_labor")
             game_version: Game version ("classic" or "competition")
-            intent_version: Intent version (e.g., "v3.1")
-            cooperative: 1 for cooperative, 0 for competitive
         """
         self.base_cluster_dir = base_cluster_dir
         self.map_nr = map_nr
         self.game_version = game_version
-        self.intent_version = intent_version
-        self.cooperative = "cooperative" if cooperative == 1 else "competitive"
         
         # Construct the base map directory path - updated for new structure
-        self.base_map_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/{intent_version}/map_{map_nr}/simulations")
-        
+        self.base_map_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/map_{map_nr}/simulations")
+
         self.checkpoint_data = {}  # {training_id: {checkpoint: delivery_data}}
         
     def find_all_training_directories(self):
@@ -439,7 +434,7 @@ class CheckpointDeliveryAnalyzer:
         
         plt.xlabel('Epoch Number', fontsize=12)
         plt.ylabel('Mean Final Deliveries', fontsize=12)
-        plt.title(f'Delivery Performance vs Training Epoch\nMap: {self.map_nr} ({self.cooperative})', 
+        plt.title(f'Delivery Performance vs Training Epoch\nMap: {self.map_nr}', 
                  fontsize=14)
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True, alpha=0.3)
@@ -633,8 +628,6 @@ class CheckpointDeliveryAnalyzer:
         summary.append("## Analysis Parameters")
         summary.append(f"Map: {self.map_nr}")
         summary.append(f"Game version: {self.game_version}")
-        summary.append(f"Intent version: {self.intent_version}")
-        summary.append(f"Mode: {self.cooperative}")
         summary.append(f"Base directory: {self.base_map_dir}\n")
         
         # Summary statistics
@@ -730,8 +723,6 @@ class CheckpointDeliveryAnalyzer:
         print("Starting checkpoint delivery comparison analysis...")
         print(f"Map: {self.map_nr}")
         print(f"Game version: {self.game_version}")
-        print(f"Intent version: {self.intent_version}")
-        print(f"Mode: {self.cooperative}")
         print(f"Search path: {self.base_map_dir}")
         print(f"Output directory: {output_dir}")
         print()
@@ -768,10 +759,6 @@ def main():
     parser.add_argument('--game_version', type=str, default='classic', 
                        choices=['classic', 'competition'],
                        help='Game version (default: classic)')
-    parser.add_argument('--intent_version', type=str, default='v3.1',
-                       help='Intent version (default: v3.1)')
-    parser.add_argument('--cooperative', type=int, default=1, choices=[0, 1],
-                       help='1 for cooperative, 0 for competitive (default: 1)')
     parser.add_argument('--output_dir', type=str, default=None,
                        help='Output directory for results (default: map directory)')
 
@@ -792,9 +779,7 @@ def main():
     analyzer = CheckpointDeliveryAnalyzer(
         base_cluster_dir=base_cluster_dir,
         map_nr=args.map_nr,
-        game_version=args.game_version,
-        intent_version=args.intent_version,
-        cooperative=args.cooperative
+        game_version=args.game_version
     )
 
     analyzer.run_analysis(args.output_dir)
