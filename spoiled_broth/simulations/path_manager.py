@@ -77,7 +77,10 @@ class PathManager:
             Dictionary containing all relevant paths
         """
         # Updated path structure: /data/samuel_lozano/cooked/{game_version}/map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
-        base_path = Path(f"{self.config.local_path}/data/samuel_lozano/cooked/{game_version}/map_{map_nr}")
+        if num_agents == 1:
+            base_path = Path(f"{self.config.local_path}/data/samuel_lozano/cooked/pretraining/{game_version}/map_{map_nr}")
+        else:
+            base_path = Path(f"{self.config.local_path}/data/samuel_lozano/cooked/{game_version}/map_{map_nr}")
 
         # New structure: all simulations go under /simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
         simulations_base = base_path / "simulations"

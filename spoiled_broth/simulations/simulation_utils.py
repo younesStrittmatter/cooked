@@ -33,12 +33,6 @@ def setup_simulation_argument_parser() -> argparse.ArgumentParser:
     )
     
     parser.add_argument(
-        'num_agents',
-        type=int,
-        help='Number of agents in the simulation'
-    )
-    
-    parser.add_argument(
         'game_version',
         type=str,
         help='Game version identifier'
@@ -54,6 +48,13 @@ def setup_simulation_argument_parser() -> argparse.ArgumentParser:
         'checkpoint_number',
         type=str,
         help='Checkpoint number to load (integer) or "final" for the latest checkpoint'
+    )
+
+    parser.add_argument(
+        '--num_agents',
+        type=int,
+        default=2,
+        help='Number of agents in the simulation'
     )
     
     parser.add_argument(

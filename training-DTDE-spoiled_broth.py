@@ -52,7 +52,7 @@ else:
 # Hyperparameters
 NUM_ENVS = 1
 INNER_SECONDS = 180 # In seconds
-NUM_EPOCHS = 7500
+NUM_EPOCHS = 75000
 TRAIN_BATCH_SIZE = 200 # (Train batch size should be aprox equal to inner_seconds)
 NUM_MINIBATCHES = 10
 SHOW_EVERY_N_EPOCHS = 1
@@ -65,27 +65,38 @@ MLP_LAYERS = [512, 512, 256]
 # Game characteristics
 PENALTIES_CFG = {
     "busy": 0.01, # Penalty per second spent busy
-    "useless_action": 2.0, # Penalty for useless actions
+    "useless_action": 5.0, # Penalty for useless actions
     "destructive_action": 10.0, # Penalty for destructive actions
     "inaccessible_tile": 5.0, # Penalty for trying to access an inaccessible tile
 }
 
 REWARDS_CFG = {
-    "raw_food": 0.2,
-    "plate": 0.2,
-    "counter": 0.5,
-    "cut": 2.0,
-    "salad": 5.0,
+    "raw_food": 2.0,
+    "plate": 2.0,
+    "counter": 0.0,
+    "cut": 5.0,
+    "salad": 7.0,
     "deliver": 10.0,
 }
 
 # Dynamic rewards configuration - exponential decay [rewards_cfg = original_rewards_cfg * exp(-decay_rate * (episode - decay_start_episode))]
 DYNAMIC_REWARDS_CFG = {
     "enabled": True,  # Set to False to disable dynamic rewards
-    "decay_rate": 0.005,  # Decay rate for exponential function (higher = faster decay)
-    "min_reward_multiplier": 0.0,  # Minimum multiplier (e.g., 0.1 = 10% of initial reward)
-    "decay_start_episode": 1000,  # Episode to start applying decay (0 = from beginning)
+    "decay_rate": 0.0001,  # Decay rate for exponential function (higher = faster decay)
+    "min_reward_multiplier": 0.05,  # Minimum multiplier (e.g., 0.1 = 10% of initial reward)
+    "decay_start_episode": 25000,  # Episode to start applying decay (0 = from beginning)
     "affected_rewards": ["raw_food", "plate", "counter", "cut", "salad"],  # Which reward types to apply decay to
+}
+
+# Dynamic PPO parameters configuration - exponential decay for exploration and policy change control
+# This gradually reduces clip_eps (policy change constraint) and ent_coef (exploration) during training
+# Starting with high values for exploration, then reducing them for more stable exploitation
+DYNAMIC_PPO_PARAMS_CFG = {
+    "enabled": True,  # Set to False to disable dynamic PPO parameters
+    "decay_rate": 0.0001,  # Decay rate for exponential function (higher = faster decay)
+    "min_param_multiplier": 0.1,  # Minimum multiplier (e.g., 0.1 = 10% of initial value)
+    "decay_start_episode": 50000,  # Episode to start applying decay (0 = from beginning)
+    "affected_params": ["ent_coef"],  # Which PPO parameters to apply decay to
 }
 
 WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next step
@@ -161,17 +172,18 @@ config = {
     "PENALTIES_CFG": PENALTIES_CFG,
     "REWARDS_CFG": REWARDS_CFG,
     "DYNAMIC_REWARDS_CFG": DYNAMIC_REWARDS_CFG,
+    "DYNAMIC_PPO_PARAMS_CFG": DYNAMIC_PPO_PARAMS_CFG,
     "WAIT_FOR_COMPLETION": WAIT_FOR_ACTION_COMPLETION,
     "SAVE_DIR": save_dir,
     "CHECKPOINT_ID_USED": pretrained_policies,  # Add pretrained policies configuration
     "PRETRAINED": PRETRAINING if PRETRAINING else "No",
     # RLlib specific parameters
     "NUM_UPDATES": 10,  # Number of updates of the policy
-    "GAMMA": 0.975,  # Discount factor
-    "GAE_LAMBDA": 0.95,  # GAE-Lambda parameter
-    "ENT_COEF": 0.07,  # Entropy coefficient
-    "CLIP_EPS": 0.2,  # PPO clip parameter
-    "VF_COEF": 0.5,  # Value function coefficient
+    "GAMMA": 0.975,      # Discount factor for future rewards (close to 1 = long-term, lower = short-term)
+    "GAE_LAMBDA": 0.95, # Lambda for Generalized Advantage Estimation (controls bias-variance tradeoff in advantage calculation)
+    "ENT_COEF": 0.07,   # Entropy coefficient (controls exploration: higher = more random actions)
+    "CLIP_EPS": 0.2,    # PPO clip parameter (limits how much the policy can change at each update; stabilizes training)
+    "VF_COEF": 0.5,     # Value function loss coefficient (relative weight of value loss vs. policy loss)
     "GRID_SIZE": GRID_SIZE,
     "FCNET_HIDDENS": MLP_LAYERS,  # Hidden layer sizes for MLP
     "FCNET_ACTIVATION": "tanh",  # Activation function for MLP ("tanh", "relu", etc.)

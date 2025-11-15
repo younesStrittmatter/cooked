@@ -41,7 +41,7 @@ import time
 class ComprehensiveAnalysisOrchestrator:
     """Main class that orchestrates both simulation and checkpoint analyses."""
     
-    def __init__(self, base_cluster_dir="", map_nr=None, game_version="classic", 
+    def __init__(self, base_cluster_dir="", map_nr=None, game_version="classic", num_agents=2,
                  training_id=None, checkpoint_number=None, output_dir=None):
         """
         Initialize the comprehensive analysis orchestrator.
@@ -50,6 +50,7 @@ class ComprehensiveAnalysisOrchestrator:
             base_cluster_dir: Base cluster directory 
             map_nr: Map number/name (e.g., "baseline_division_of_labor")
             game_version: Game version ("classic" or "competition")
+            num_agents: Number of agents (1 or 2)
             training_id: Optional specific training ID for detailed analysis
             checkpoint_number: Optional specific checkpoint for detailed analysis
             output_dir: Custom output directory
@@ -57,15 +58,19 @@ class ComprehensiveAnalysisOrchestrator:
         self.base_cluster_dir = base_cluster_dir
         self.map_nr = map_nr
         self.game_version = game_version
+        self.num_agents = num_agents
         self.training_id = training_id
         self.checkpoint_number = checkpoint_number
         self.output_dir = output_dir
         
         # Determine the output directory
         if output_dir is None:
+            if num_agents == 1:
+                self.map_base_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/pretraining/{game_version}/map_{map_nr}/")
+            else:
+                self.map_base_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/map_{map_nr}/")
             # Output figures should be one level up from the simulations directory
-            map_base_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/map_{map_nr}/")
-            self.output_dir = map_base_dir / "simulation_figures"
+            self.output_dir = self.map_base_dir / "simulation_figures"
         else:
             self.output_dir = Path(output_dir)
         
@@ -79,7 +84,7 @@ class ComprehensiveAnalysisOrchestrator:
     
     def find_all_training_directories(self):
         """Find all training directories for the specified map."""
-        base_map_dir = Path(f"{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/map_{self.map_nr}/simulations")
+        base_map_dir = Path(f"{self.map_base_dir}/simulations")
         
         training_dirs = []
         
@@ -101,7 +106,7 @@ class ComprehensiveAnalysisOrchestrator:
     
     def find_all_checkpoints_for_training(self, training_id):
         """Find all checkpoint directories for a specific training."""
-        training_dir = Path(f"{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/map_{self.map_nr}/simulations/Training_{training_id}")
+        training_dir = Path(f"{self.map_base_dir}/simulations/Training_{training_id}")
         
         checkpoints = []
         
@@ -141,7 +146,7 @@ class ComprehensiveAnalysisOrchestrator:
         if checkpoint_number != "final":
             return checkpoint_number
             
-        training_dir = Path(f"{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/map_{self.map_nr}/simulations/Training_{training_id}")
+        training_dir = Path(f"{self.map_base_dir}/Training_{training_id}")
         training_stats_path = training_dir / "training_stats.csv"
         
         if not training_stats_path.exists():
@@ -356,8 +361,7 @@ class ComprehensiveAnalysisOrchestrator:
         summary.append("## Analysis Configuration")
         summary.append(f"- **Map**: {self.map_nr}")
         summary.append(f"- **Game version**: {self.game_version}")
-        summary.append(f"- **Base cluster directory**: {self.base_cluster_dir}")
-        summary.append(f"- **Simulations directory**: {self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/map_{self.map_nr}/simulations/")
+        summary.append(f"- **Simulations directory**: {self.map_base_dir}/simulations/")
         summary.append(f"- **Figures output directory**: {self.output_dir}")
         if self.training_id and self.checkpoint_number:
             summary.append(f"- **Detailed analysis**: Training {self.training_id}, Checkpoint {self.checkpoint_number}")
@@ -398,7 +402,7 @@ class ComprehensiveAnalysisOrchestrator:
         # Generated files overview
         summary.append("## Generated Files Structure")
         summary.append(f"All analysis outputs (figures and reports) are organized in: `{self.output_dir}`")
-        summary.append(f"This is separate from the simulation data located in: `{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/map_{self.map_nr}/simulations/`")
+        summary.append(f"This is separate from the simulation data located in: `{self.map_base_dir}/simulations/`")
         summary.append("")
         
         if checkpoint_success:
@@ -463,7 +467,7 @@ class ComprehensiveAnalysisOrchestrator:
         print("="*60)
         print(f"Map: {self.map_nr}")
         print(f"Game version: {self.game_version}")
-        simulations_base_dir = f"{self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/map_{self.map_nr}/simulations/"
+        simulations_base_dir = f"{self.map_base_dir}/simulations/"
         print(f"Simulations directory: {simulations_base_dir}")
         print(f"Figures output directory: {self.output_dir}")
         if self.training_id and self.checkpoint_number:
@@ -504,7 +508,7 @@ class ComprehensiveAnalysisOrchestrator:
         print("="*60)
         print(f"Total execution time: {execution_time:.1f} seconds ({execution_time/60:.1f} minutes)")
         print(f"All analysis results (figures and reports) saved to: {self.output_dir}")
-        print(f"Simulation data remains in: {self.base_cluster_dir}/data/samuel_lozano/cooked/{self.game_version}/map_{self.map_nr}/simulations/")
+        print(f"Simulation data remains in: {self.map_base_dir}/simulations/")
         print(f"Open {self.output_dir}/comprehensive_analysis_summary.md for complete results overview.")
         print()
         
@@ -551,6 +555,8 @@ def main():
     parser.add_argument('--game_version', type=str, default='classic', 
                        choices=['classic', 'competition'],
                        help='Game version (default: classic)')
+    parser.add_argument('--num_agents', type=int, default=2, choices=[1, 2],
+                       help='Number of agents (default: 2)')
     parser.add_argument('--output_dir', type=str, default=None,
                        help='Output directory for results (default: map_{map_nr}/simulation_figures/)')
     
@@ -578,6 +584,7 @@ def main():
         base_cluster_dir=base_cluster_dir,
         map_nr=args.map_nr,
         game_version=args.game_version,
+        num_agents=args.num_agents,
         training_id=args.training_id,
         checkpoint_number=args.checkpoint_number,
         output_dir=args.output_dir
