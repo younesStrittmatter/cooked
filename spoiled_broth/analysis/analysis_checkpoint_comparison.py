@@ -33,7 +33,7 @@ sns.set_palette("husl")
 class CheckpointDeliveryAnalyzer:
     """Main class for analyzing deliveries across checkpoints and training_ids."""
     
-    def __init__(self, base_cluster_dir="", map_nr=None, game_version="classic"):
+    def __init__(self, base_cluster_dir="", map_nr=None, game_version="classic", num_agents=2):
         """
         Initialize the analyzer with specific parameters.
         
@@ -41,13 +41,18 @@ class CheckpointDeliveryAnalyzer:
             base_cluster_dir: Base cluster directory 
             map_nr: Map number/name (e.g., "baseline_division_of_labor")
             game_version: Game version ("classic" or "competition")
+            num_agents: Number of agents in the simulation (1 or 2)
         """
         self.base_cluster_dir = base_cluster_dir
         self.map_nr = map_nr
         self.game_version = game_version
+        self.num_agents = num_agents
         
         # Construct the base map directory path - updated for new structure
-        self.base_map_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/map_{map_nr}/simulations")
+        if self.num_agents == 1:
+            self.base_map_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/pretraining/cooked/{game_version}/map_{map_nr}/simulations")
+        else:
+            self.base_map_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/{game_version}/map_{map_nr}/simulations")
 
         self.checkpoint_data = {}  # {training_id: {checkpoint: delivery_data}}
         
@@ -761,6 +766,8 @@ def main():
                        help='Game version (default: classic)')
     parser.add_argument('--output_dir', type=str, default=None,
                        help='Output directory for results (default: map directory)')
+    parser.add_argument('--num_agents', type=int, default=2,
+                       help='Number of agents in the simulation (default: 2)')
 
     args = parser.parse_args()
 
@@ -779,7 +786,8 @@ def main():
     analyzer = CheckpointDeliveryAnalyzer(
         base_cluster_dir=base_cluster_dir,
         map_nr=args.map_nr,
-        game_version=args.game_version
+        game_version=args.game_version,
+        num_agents=args.num_agents
     )
 
     analyzer.run_analysis(args.output_dir)

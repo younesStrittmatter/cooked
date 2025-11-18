@@ -97,6 +97,7 @@ class DeliveryIntent(_base_intent.Intent):
             valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
 
             if agent.item in valid_items:
+                self.tile.delivered_by = agent.id  # Set who delivered for training detection
                 self.tile.delivered_item = agent.item
                 agent.item = None
                 agent.score += 1

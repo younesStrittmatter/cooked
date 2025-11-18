@@ -82,7 +82,6 @@ class SimulationAnalyzer:
             
         try:
             # Read the CSV and get the last episode number
-            import pandas as pd
             df = pd.read_csv(training_stats_path)
             
             if df.empty:
@@ -958,6 +957,8 @@ def main():
     parser.add_argument('--game_version', type=str, default='classic', 
                        choices=['classic', 'competition'],
                        help='Game version (default: classic)')
+    parser.add_argument('--num_agents', type=int, default=2,
+                       help='Number of agents in the simulation (default: 2)')
     
     args = parser.parse_args()
 
@@ -969,10 +970,13 @@ def main():
         base_cluster_dir = "C:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado"
 
     # Updated for new folder structure: /data/.../map_{map_nr}/simulations/Training_{training_id}/checkpoint_{checkpoint_number}/
-    base_dir = f"{base_cluster_dir}/data/samuel_lozano/cooked/{args.game_version}/map_{args.map_nr}"
+    if args.num_agents == 1:
+        base_dir = f"{base_cluster_dir}/data/samuel_lozano/cooked/pretraining/{args.game_version}/map_{args.map_nr}"
+    else:
+        base_dir = f"{base_cluster_dir}/data/samuel_lozano/cooked/{args.game_version}/map_{args.map_nr}"
     training_dir = f"{base_dir}/simulations/Training_{args.training_id}/"
     simulation_dir = f"{training_dir}/checkpoint_{args.checkpoint_number}/"
-
+    
     # Create a temporary analyzer to resolve checkpoint number if needed
     temp_analyzer = SimulationAnalyzer(
         map_nr=args.map_nr,
@@ -984,7 +988,7 @@ def main():
     # Resolve checkpoint number (handles "final" case)
     resolved_checkpoint = temp_analyzer.resolve_checkpoint_number(training_dir)
     
-    output_dir = f"{base_dir}/simulation_figures/"
+    output_dir = f"{base_dir}/simulation_figures/Training_{args.training_id}"
 
     # Create analyzer and run analysis with resolved checkpoint number
     analyzer = SimulationAnalyzer(

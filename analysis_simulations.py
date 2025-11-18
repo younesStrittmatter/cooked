@@ -155,16 +155,16 @@ class ComprehensiveAnalysisOrchestrator:
             return "final"
             
         try:
-            # Read the CSV and get the last epoch number
+            # Read the CSV and get the last episode number
             df = pd.read_csv(training_stats_path)
             
             if df.empty:
                 print("Warning: training_stats.csv is empty")
                 return "final"
                 
-            # Get the first column (epoch) from the last row and add 1
-            last_epoch = df.iloc[-1, 0]  # First column of last row
-            resolved_checkpoint = str(int(last_epoch) + 1)
+            # Get the first column (episode) from the last row and add 1
+            last_episode = df.iloc[-1, 0]  # First column of last row
+            resolved_checkpoint = str(int(last_episode) + 1)
             
             print(f"Resolved checkpoint_number 'final' to '{resolved_checkpoint}' for Training {training_id} based on training_stats.csv")
             return resolved_checkpoint
@@ -191,7 +191,8 @@ class ComprehensiveAnalysisOrchestrator:
             "--map_nr", self.map_nr,
             "--training_id", training_id,
             "--checkpoint_number", resolved_checkpoint,
-            "--game_version", self.game_version
+            "--game_version", self.game_version,
+            "--num_agents", str(self.num_agents),
         ]
         
         # Determine cluster argument
@@ -312,7 +313,8 @@ class ComprehensiveAnalysisOrchestrator:
             "python3", str(self.checkpoint_script),
             "--map_nr", self.map_nr,
             "--game_version", self.game_version,
-            "--output_dir", str(self.output_dir)
+            "--output_dir", str(self.output_dir),
+            "--num_agents", str(self.num_agents),
         ]
         
         # Determine cluster argument

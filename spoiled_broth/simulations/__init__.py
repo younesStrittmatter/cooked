@@ -26,6 +26,7 @@ from .game_manager import GameManager
 # Data handling
 from .data_logger import DataLogger
 from .raw_action_logger import RawActionLogger
+from .observation_logger import ObservationLogger
 from .video_recorder import VideoRecorder
 
 # Main simulation runner
@@ -67,6 +68,7 @@ __all__ = [
     # Data handling
     'DataLogger',
     'RawActionLogger',
+    'ObservationLogger',
     'VideoRecorder',
     
     # Main simulation runner

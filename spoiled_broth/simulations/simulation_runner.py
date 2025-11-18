@@ -23,6 +23,7 @@ from .game_manager import GameManager
 from .data_logger import DataLogger
 from .video_recorder import VideoRecorder
 from .raw_action_logger import RawActionLogger
+from .observation_logger import ObservationLogger
 
 
 class SimulationRunner:
@@ -103,6 +104,10 @@ class SimulationRunner:
             raw_action_csv_path = data_logger.simulation_dir / "actions.csv"
             raw_action_logger = RawActionLogger(raw_action_csv_path)
             
+            # Create observation logger for capturing observation vectors associated with actions
+            observation_csv_path = data_logger.simulation_dir / "observations.csv"
+            observation_logger = ObservationLogger(observation_csv_path)
+            
             # Setup game
             game_factory = self.game_manager.create_game_factory(
                 map_nr, grid_size, self.config.walking_speeds, self.config.cutting_speeds
@@ -111,7 +116,7 @@ class SimulationRunner:
             # Run the simulation
             output_paths = self._execute_simulation(
                 game_factory, controllers, paths, data_logger, 
-                raw_action_logger, timestamp, map_nr
+                raw_action_logger, observation_logger, timestamp, map_nr
             )
             
             return output_paths
@@ -121,7 +126,8 @@ class SimulationRunner:
     
     def _execute_simulation(self, game_factory: Callable, controllers: Dict,
                            paths: Dict, data_logger: DataLogger,
-                           raw_action_logger: RawActionLogger, 
+                           raw_action_logger: RawActionLogger,
+                           observation_logger: ObservationLogger, 
                            timestamp: str, map_nr: str) -> Dict[str, Path]:
         """Execute the main simulation loop."""
         
@@ -175,6 +181,9 @@ class SimulationRunner:
         
         # Attach raw action logger
         game.raw_action_logger = raw_action_logger
+        
+        # Attach observation logger
+        game.observation_logger = observation_logger
         
         # Attach controllers to agents
         for agent_id, controller in controllers.items():
@@ -284,6 +293,7 @@ class SimulationRunner:
             'config_file': data_logger.config_path,
             'state_csv': data_logger.state_csv_path,
             'action_csv': data_logger.simulation_dir / "actions.csv",
+            'observation_csv': data_logger.simulation_dir / "observations.csv",
             'counter_csv': data_logger.counter_csv_path,
             'video_file': data_logger.simulation_dir / f"offline_recording_{timestamp}.mp4" if self.config.enable_video else None
         }

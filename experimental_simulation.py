@@ -15,13 +15,13 @@ are positioned but do not perform any actions. This ensures complete system
 stabilization and prevents teleportation artifacts.
 
 Usage:
-python experimental_simulation.py <map_nr> <num_agents> <game_version> <training_id> <checkpoint_number> [options]
+python experimental_simulation.py <map_nr> <game_version> <training_id> <checkpoint_number> [options]
 
 For background execution:
-nohup python experimental_simulation.py <map_nr> <num_agents> <game_version> <training_id> <checkpoint_number> [options] > experimental_simulation.log 2>&1 &
+nohup python experimental_simulation.py <map_nr> <game_version> <training_id> <checkpoint_number> [options] > experimental_simulation.log 2>&1 &
 
 Example:
-nohup python experimental_simulation.py baseline_division_of_labor 2 classic 2025-09-13_13-27-52 final --enable_video true > experimental_simulation.log 2>&1 &
+nohup python experimental_simulation.py baseline_division_of_labor_v2 classic 2025-11-15_13-23-45 final --num_agents 1 --enable_video true --duration 60 --agent_initialization_period 10 > experimental_simulation.log 2>&1 &
 """
 
 import sys
@@ -128,6 +128,7 @@ def main():
             print(f"  Configuration file: {output_paths['config_file']}")
             print(f"  State CSV: {output_paths['state_csv']}")
             print(f"  Action CSV: {output_paths['action_csv']}")
+            print(f"  Observation CSV: {output_paths['observation_csv']}")
             if output_paths['video_file']:
                 print(f"  Video file: {output_paths['video_file']}")
             print(f"  Log file: {log_file_path}")
@@ -141,7 +142,27 @@ def main():
                 # Read the generated CSV files
                 actions_df = pd.read_csv(output_paths['action_csv'])
                 simulation_df = pd.read_csv(output_paths['state_csv'])
-                counters_df = pd.read_csv(output_paths['counter_csv']) 
+                counters_df = pd.read_csv(output_paths['counter_csv'])
+                
+                # Load and report on observation data
+                try:
+                    observations_df = pd.read_csv(output_paths['observation_csv'])
+                    print(f"\nOBSERVATION DATA SUMMARY:")
+                    print(f"  Total observation records: {len(observations_df)}")
+                    print(f"  Agents with observations:")
+                    for agent_id in observations_df['agent_id'].unique():
+                        agent_obs = observations_df[observations_df['agent_id'] == agent_id]
+                        print(f"    {agent_id}: {len(agent_obs)} observations")
+                    
+                    # Check observation vector size
+                    obs_columns = [col for col in observations_df.columns if col.startswith('obs_')]
+                    if obs_columns:
+                        print(f"  Observation vector size: {len(obs_columns)}")
+                    else:
+                        print("  No observation vector columns found")
+                        
+                except Exception as obs_e:
+                    print(f"\nWarning: Could not load observation data: {obs_e}") 
                 
                 # Analyze meaningful actions using the new modular function
                 meaningful_df = analyze_meaningful_actions(

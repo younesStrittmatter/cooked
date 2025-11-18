@@ -14,7 +14,7 @@ Folder structure:
 Usage:
 nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor --max-num-simulations 100 > check_corrupted_simulations_baseline.log 2>&1 &
 
-nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor > check_corrupted_simulations_baseline.log 2>&1 &
+nohup python3 check_corrupted_simulations.py --map_nr baseline_division_of_labor_v2 --num_agents 1 > check_corrupted_simulations_baseline.log 2>&1 &
 
 Author: Samuel Lozano
 """
@@ -31,7 +31,7 @@ import random
 class CorruptedSimulationCleaner:
     """Main class that handles corrupted simulation detection and cleanup."""
     
-    def __init__(self, base_cluster_dir="", map_nr=None, dry_run=False, max_num_simulations: int = None):
+    def __init__(self, base_cluster_dir="", map_nr=None, dry_run=False, max_num_simulations: int = None, num_agents=2):
         """
         Initialize the corrupted simulation cleaner.
         
@@ -47,7 +47,10 @@ class CorruptedSimulationCleaner:
         self.max_num_simulations = max_num_simulations
 
         # Base simulation directory
-        self.simulations_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/classic/map_{map_nr}/simulations")
+        if num_agents == 1:
+            self.simulations_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/pretraining/classic/map_{map_nr}/simulations")
+        else:
+            self.simulations_dir = Path(f"{base_cluster_dir}/data/samuel_lozano/cooked/classic/map_{map_nr}/simulations")
 
         # Statistics tracking
         self.total_simulations_found = 0
@@ -352,6 +355,8 @@ def main():
                        help='Dry run mode: show what would be deleted without actually deleting')
     parser.add_argument('--max-num-simulations', type=int, default=None,
                        help='Maximum number of simulations to keep per checkpoint (randomly prune extras)')
+    parser.add_argument('--num_agents', type=int, default=2,
+                       help='Number of agents in the simulation (default: 2)')
 
     args = parser.parse_args()
 
@@ -370,9 +375,9 @@ def main():
     cleaner = CorruptedSimulationCleaner(
         base_cluster_dir=base_cluster_dir,
         map_nr=args.map_nr,
-        dry_run=args.dry_run
-        ,
-        max_num_simulations=args.max_num_simulations
+        dry_run=args.dry_run        ,
+        max_num_simulations=args.max_num_simulations,
+        num_agents=args.num_agents
     )
 
     final_counts = cleaner.run_cleanup()

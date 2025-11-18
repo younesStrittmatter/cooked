@@ -18,22 +18,22 @@ MOVE_TIME = 0.1
 
 ACTIONS_OBSERVATION_MAPPING_CLASSIC = {
     0: 0, 1: 1, 2: 2, 3: 3, # Two dispensers, cutting board, delivery
-    4: 4, 5: 5, # Free counter (closest and midpoint)
-    6: 7, 7: 8, # Tomato on counter (closest and midpoint)
-    8: 10, 9: 11, # Plate on counter (closest and midpoint)
-    10: 13, 11: 14, # Tomato_cut on counter (closest and midpoint)
-    12: 16, 13: 17, # Pumpkin on counter (closest and midpoint)
+    4: 5, 5: 6, # Free counter (closest and midpoint)
+    6: 8, 7: 9, # Tomato on counter (closest and midpoint)
+    8: 11, 9: 12, # Plate on counter (closest and midpoint)
+    10: 14, 11: 15, # Tomato_cut on counter (closest and midpoint)
+    12: 17, 13: 18, # Tomato_salad on counter (closest and midpoint)
 }
 
 ACTIONS_OBSERVATION_MAPPING_COMPETITION = {
     0: 0, 1: 1, 2: 2, 3: 3, 4: 4, # Three dispensers, cutting board, delivery
-    5: 5, 6: 6, # Free counter (closest and midpoint)
-    7: 8, 8: 9, # Tomato on counter (closest and midpoint)
-    9: 11, 10: 12, # Pumpkin on counter (closest and midpoint)
-    11: 14, 12: 15, # Plate on counter (closest and midpoint)
-    13: 17, 14: 18, # Tomato_cut on counter (closest and midpoint)
-    15: 20, 16: 21, # Pumpkin_cut on counter (closest and midpoint)
-    17: 23, 18: 24, # Tomato_salad on counter (closest and midpoint)
+    5: 6, 6: 7, # Free counter (closest and midpoint)
+    7: 9, 8: 10, # Tomato on counter (closest and midpoint)
+    9: 12, 10: 13, # Pumpkin on counter (closest and midpoint)
+    11: 15, 12: 16, # Plate on counter (closest and midpoint)
+    13: 18, 14: 19, # Tomato_cut on counter (closest and midpoint)
+    15: 21, 16: 22, # Pumpkin_cut on counter (closest and midpoint)
+    17: 24, 18: 25, # Tomato_salad on counter (closest and midpoint)
     19: 26, 20: 27, # Pumpkin_salad on counter (closest and midpoint)
 }
 

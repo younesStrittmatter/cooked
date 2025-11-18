@@ -52,7 +52,7 @@ else:
 # Hyperparameters
 NUM_ENVS = 1
 INNER_SECONDS = 180 # In seconds
-NUM_EPOCHS = 75000
+NUM_EPOCHS = 25000
 TRAIN_BATCH_SIZE = 200 # (Train batch size should be aprox equal to inner_seconds)
 NUM_MINIBATCHES = 10
 SHOW_EVERY_N_EPOCHS = 1
@@ -73,7 +73,7 @@ PENALTIES_CFG = {
 REWARDS_CFG = {
     "raw_food": 2.0,
     "plate": 2.0,
-    "counter": 0.0,
+    "counter": 0.5,
     "cut": 5.0,
     "salad": 7.0,
     "deliver": 10.0,
@@ -84,7 +84,7 @@ DYNAMIC_REWARDS_CFG = {
     "enabled": True,  # Set to False to disable dynamic rewards
     "decay_rate": 0.0001,  # Decay rate for exponential function (higher = faster decay)
     "min_reward_multiplier": 0.05,  # Minimum multiplier (e.g., 0.1 = 10% of initial reward)
-    "decay_start_episode": 25000,  # Episode to start applying decay (0 = from beginning)
+    "decay_start_episode": 0,  # Episode to start applying decay (0 = from beginning)
     "affected_rewards": ["raw_food", "plate", "counter", "cut", "salad"],  # Which reward types to apply decay to
 }
 
@@ -95,7 +95,7 @@ DYNAMIC_PPO_PARAMS_CFG = {
     "enabled": True,  # Set to False to disable dynamic PPO parameters
     "decay_rate": 0.0001,  # Decay rate for exponential function (higher = faster decay)
     "min_param_multiplier": 0.1,  # Minimum multiplier (e.g., 0.1 = 10% of initial value)
-    "decay_start_episode": 50000,  # Episode to start applying decay (0 = from beginning)
+    "decay_start_episode": 100,  # Episode to start applying decay (0 = from beginning)
     "affected_params": ["ent_coef"],  # Which PPO parameters to apply decay to
 }
 
