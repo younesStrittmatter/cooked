@@ -26,7 +26,7 @@ class Agent(GameObject):
 
         # Initialize pathfinding variables
 
-        self.speed = 50
+        self.speed = 30
         self.path = []
         self.path_index = 0
         self.drawables = []

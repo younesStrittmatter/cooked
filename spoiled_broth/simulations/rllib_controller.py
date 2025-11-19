@@ -146,25 +146,6 @@ class RLlibController(Controller):
         game_mode = "competition" if self.competition else "classic"
         action_space = get_rl_action_space(game_mode)
         
-        # DEBUG: Log action probabilities and agent state when agent has tomato_salad
-        agent_item = getattr(self.agent, 'item', None)
-        if agent_item == 'tomato_salad':
-            # Get action probabilities
-            probs = torch.softmax(action_logits, dim=-1)
-            print(f"\n[DEBUG] Agent {self.agent_id} has tomato_salad, frame {getattr(self.agent.game, 'frame_count', 0)}")
-            print(f"[DEBUG] Sampled action: {action} ({action_space[action] if 0 <= action < len(action_space) else 'INVALID'})")
-            print(f"[DEBUG] Action probabilities:")
-            for i, (act_name, prob) in enumerate(zip(action_space, probs.tolist())):
-                if prob > 0.01:  # Only show actions with >1% probability
-                    print(f"  {i:2d}: {act_name:40s} = {prob:.4f}")
-            
-            # Check if use_delivery is available
-            try:
-                use_delivery_idx = action_space.index('use_delivery')
-                print(f"[DEBUG] use_delivery (index {use_delivery_idx}) probability: {probs[use_delivery_idx]:.4f}")
-            except ValueError:
-                print(f"[DEBUG] ERROR: 'use_delivery' not found in action space!")
-            
         if 0 <= action < len(action_space):
             action_name = action_space[action]
             
@@ -202,16 +183,8 @@ class RLlibController(Controller):
                 print(f"[RLLIB_DEBUG] Warning: No distance_map available for action '{action_name}', skipping action")
                 return None
                 
-            # DEBUG: Add detailed logging for use_delivery action
-            if action_name == 'use_delivery' or agent_item == 'tomato_salad':
-                print(f"[DEBUG] Converting action '{action_name}' to tile (agent has {agent_item})")
-                
             tile_index = convert_action_to_tile(self.agent, self.agent.game, action_name, distance_map=distance_map)
-            
-            # DEBUG: Log tile conversion result for delivery actions
-            if action_name == 'use_delivery' or agent_item == 'tomato_salad':
-                print(f"[DEBUG] Action '{action_name}' converted to tile_index: {tile_index}")
-            
+
             if tile_index is not None:
                 grid = self.agent.grid
                 x = tile_index % grid.width

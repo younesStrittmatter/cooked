@@ -6,6 +6,7 @@ import numpy as np
 from spoiled_broth.config import *
 from spoiled_broth.maps.accessibility_maps import get_accessibility_map
 import pickle as _pickle
+from spoiled_broth.rl.game_step import update_agents_directly, setup_agent_path
 from spoiled_broth.rl.action_space import get_rl_action_space, convert_action_to_tile
 from spoiled_broth.rl.observation_space import game_to_obs_vector
 from spoiled_broth.rl.classify_action_type import get_action_type_and_agent_events, get_action_type_list, ACTION_TYPE_INACCESSIBLE
@@ -13,8 +14,8 @@ from spoiled_broth.rl.reward_analysis import get_rewards
 from spoiled_broth.rl.dynamic_rewards import calculate_dynamic_rewards
 from spoiled_broth.game import SpoiledBroth, random_game_state
 
-INTENT_TIME = 0.1
-MOVE_TIME = 0.1
+INTENT_TIME = 0.5
+MOVE_TIME = 0.2
 
 ACTIONS_OBSERVATION_MAPPING_CLASSIC = {
     0: 0, 1: 1, 2: 2, 3: 3, # Two dispensers, cutting board, delivery
@@ -346,30 +347,12 @@ class GameEnv(ParallelEnv):
                 action_name = get_rl_action_space(self.game_mode)[action_idx]
                 tile_index = convert_action_to_tile(agent, self.game, action_name, distance_map=self.distance_map)
                 
-                # Check if this is a counter-related action that failed to find a target
-                is_counter_action = ("counter" in action_name.lower() or 
-                                   "pick_up" in action_name and "from_counter" in action_name)
-                
                 if tile_index is None:
-                    if is_counter_action:
-                        # For counter actions that fail to find a target, treat as useless counter
-                        # Find any counter to use as the target tile for classification
-                        for x in range(self.game.grid.width):
-                            for y in range(self.game.grid.height):
-                                potential_tile = self.game.grid.tiles[x][y]
-                                if getattr(potential_tile, "_type", None) == 2:  # Counter type
-                                    tile_index = y * self.game.grid.width + x
-                                    tile = potential_tile
-                                    break
-                            if tile_index is not None:
-                                break
-                    
-                    if tile_index is None:
-                        # Still no valid tile found (non-counter action or no counters exist)
-                        self.total_actions_not_performed[agent_id] += 1
-                        agent_penalties[agent_id] += self.penalties_cfg["inaccessible_tile"]
-                        busy_times[agent_id] = 0.1
-                        continue
+                    # No valid target found - action cannot be performed
+                    self.total_actions_not_performed[agent_id] += 1
+                    agent_penalties[agent_id] += self.penalties_cfg["inaccessible_tile"]
+                    busy_times[agent_id] = 0.1
+                    continue
                 else:
                     grid_w = self.game.grid.width
                     x = tile_index % grid_w
@@ -379,15 +362,7 @@ class GameEnv(ParallelEnv):
                 obs = self.observations.get(agent_id)
                 # Default movement time
                 move_time = obs[self.action_obs_mapping[action_idx]] * getattr(self.game, 'normalization_factor', 1.0) if obs is not None else MOVE_TIME
-                intent_time = INTENT_TIME
-                # Cutting board: only add intent time if valid item
-                if action_type == "useful_cutting_board":
-                    # Check if agent.item is a valid cuttable item
-                    if agent.item in ["tomato", "pumpkin"]:
-                        # Use agent.cut_speed and game.cutting_time
-                        intent_time = agent.cut_speed * getattr(self.game, 'cutting_time', 3.0)
-                # For useless/destructive/inaccessible actions, only movement time
-                busy_time = move_time + intent_time
+                busy_time = move_time + INTENT_TIME
                 agent.busy_until = self._elapsed_time + busy_time
                 busy_times[agent_id] = busy_time
                 # Penalties
@@ -421,6 +396,8 @@ class GameEnv(ParallelEnv):
                     "tile_index": tile_index,
                     "action_idx": action_idx
                 }
+                # Set up agent's movement path to the target tile
+                setup_agent_path(self, agent, tile_index)
                 # Track action types immediately when selected (for all actions, including useless ones)
                 self.total_action_types[agent_id][action_type] += 1
             else:
@@ -437,8 +414,8 @@ class GameEnv(ParallelEnv):
         advanced_time = next_time - self._elapsed_time
         self._elapsed_time = next_time
 
-        # Step the game for all agents for advanced_time
-        self.game.step(validated_actions, delta_time=advanced_time)
+        # Direct game state update instead of calling self.game.step()
+        update_agents_directly(self, validated_actions, advanced_time, action_info, agent_events)
         self.agent_map = {agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents}
 
         # Update totals for actions that just completed (for logging purposes only)

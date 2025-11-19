@@ -1,30 +1,44 @@
 import os
 import pickle
 import math
+import csv
+import time
+from pathlib import Path
+from datetime import datetime
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
 from ray.tune.registry import register_env
-from spoiled_broth.rl.game_env import GameEnv
+from spoiled_broth.rl.game_env_debug import GameEnvDebug
 from spoiled_broth.rl.dynamic_ppo_params import calculate_dynamic_ppo_params
 import warnings
-from datetime import datetime
 from ray.tune.logger import CSVLogger
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-def env_creator(config):
-    # Your existing GameEnv class goes here
-    return GameEnv(**config)
+def env_creator_debug(config):
+    # Use debug version of GameEnv
+    return GameEnvDebug(**config)
 
 # Define separate policies for each agent
 def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
     return f"policy_{agent_id}"
 
-def make_train_rllib(config):
+def make_train_rllib_debug(config):
+    """
+    Debug version of make_train_rllib that captures detailed episode data.
+    
+    Returns:
+        tuple: (trainer, current_date, final_episode_count, episode_data_summary)
+    """
     current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    path = os.path.join(config["SAVE_DIR"], f"Training_{current_date}")
+    path = os.path.join(config["SAVE_DIR"], f"DebugTraining_{current_date}")
     os.makedirs(path, exist_ok=True)
     config["PATH"] = path
+
+    # Create episodes directory for detailed episode data
+    episodes_dir = Path(path) / "episodes"
+    os.makedirs(episodes_dir, exist_ok=True)
+    config["EPISODES_DIR"] = str(episodes_dir)
 
     # Save config to file
     with open(os.path.join(path, "config.txt"), "w") as f:
@@ -43,7 +57,7 @@ def make_train_rllib(config):
     else:
         print(f"[WARNING] .npz Distance map cache not found for map_nr '{map_nr}'. Expected path: {cache_path}")
 
-    register_env("spoiled_broth", lambda cfg: ParallelPettingZooEnv(env_creator(cfg)))
+    register_env("spoiled_broth_debug", lambda cfg: ParallelPettingZooEnv(env_creator_debug(cfg)))
 
     # --- Dynamic policy setup ---
     num_agents = config.get("NUM_AGENTS", 2)
@@ -64,8 +78,8 @@ def make_train_rllib(config):
         }
         policies[f"policy_{agent_id}"] = (
             None,  # Use default PPO policy
-            env_creator(env_cfg).observation_space(agent_id),
-            env_creator(env_cfg).action_space(agent_id),
+            env_creator_debug(env_cfg).observation_space(agent_id),
+            env_creator_debug(env_cfg).action_space(agent_id),
             {}
         )
         policies_to_train.append(f"policy_{agent_id}")
@@ -123,7 +137,7 @@ def make_train_rllib(config):
             model_config=model_config
         )
         .environment(
-            env="spoiled_broth",
+            env="spoiled_broth_debug",
             env_config={
                 "reward_weights": config["REWARD_WEIGHTS"],
                 "map_nr": config["MAP_NR"],
@@ -141,6 +155,11 @@ def make_train_rllib(config):
                 "penalties_cfg": config.get("PENALTIES_CFG", None),
                 "rewards_cfg": config.get("REWARDS_CFG", None),
                 "dynamic_rewards_cfg": config.get("DYNAMIC_REWARDS_CFG", None),
+                # DEBUG CONFIG
+                "debug_mode": config.get("DEBUG_MODE", False),
+                "debug_capture_episodes": config.get("DEBUG_CAPTURE_EPISODES", False),
+                "episodes_dir": config.get("EPISODES_DIR", ""),
+                "debug_max_episodes_to_capture": config.get("DEBUG_MAX_EPISODES_TO_CAPTURE", 100),
             },
             clip_actions=True,
         )
@@ -149,34 +168,21 @@ def make_train_rllib(config):
             policy_mapping_fn=dynamic_policy_mapping_fn,
             policies_to_train=policies_to_train
         )
-        .resources(
-            num_gpus=config["NUM_GPUS"],  # Full GPU for learner
-            num_cpus_for_main_process=config.get("NUM_CPUS_FOR_DRIVER", 1)
-        )
-        .env_runners(
-            num_env_runners=config.get("NUM_ENV_WORKERS", 4),  # Multiple environment workers
-            num_gpus_per_env_runner=config.get("NUM_GPUS_PER_WORKER", 0),  # Environment workers use CPU only
-            num_cpus_per_env_runner=config.get("NUM_CPUS_PER_WORKER", 1),  # CPU cores per env worker
-            rollout_fragment_length=500,  # Steps per rollout (adjusted for batch size validation)
-            batch_mode=config.get("BATCH_MODE", "complete_episodes"),  # Collection mode
-            compress_observations=config.get("COMPRESS_OBSERVATIONS", False)  # Performance optimization
-        )
-        .learners(
-            num_learners=config.get("NUM_LEARNER_WORKERS", 1),  # Number of learner workers
-            num_gpus_per_learner=config["NUM_GPUS"],  # GPU allocation per learner
-            num_cpus_per_learner=2  # CPU cores per learner worker
-        )
+        .resources(num_gpus=config["NUM_GPUS"]/2)
+        .env_runners(num_env_runners=1, 
+                    num_gpus_per_env_runner=config["NUM_GPUS"]/2,
+                    num_cpus_per_env_runner=int(config["NUM_CPUS"] / 2))
         .training(
-            train_batch_size=config.get("TRAIN_BATCH_SIZE", 4000),  # Large batch for GPU efficiency
-            minibatch_size=config.get("SGD_MINIBATCH_SIZE", 500),  # GPU-optimized minibatch
-            num_epochs=config.get("NUM_SGD_ITER", 10),  # Training epochs per batch (renamed from num_sgd_iter)
-            lr=config["LR"],
-            gamma=config["GAMMA"],
-            lambda_=config["GAE_LAMBDA"],
-            entropy_coeff=config["ENT_COEF"],
-            clip_param=config["CLIP_EPS"],
-            vf_loss_coeff=config["VF_COEF"]
-        )
+                train_batch_size=config.get("TRAIN_BATCH_SIZE", 32),  # Fixed number of transitions
+                lr=config["LR"],
+                gamma=config["GAMMA"],
+                lambda_=config["GAE_LAMBDA"],
+                entropy_coeff=config["ENT_COEF"],
+                clip_param=config["CLIP_EPS"],
+                vf_loss_coeff=config["VF_COEF"],
+                minibatch_size=max(1, config.get("TRAIN_BATCH_SIZE", 32) // config["NUM_MINIBATCHES"]),
+                num_epochs=config["NUM_UPDATES"]
+            )
     )
 
     # Build algorithm with error handling
@@ -316,7 +322,12 @@ def make_train_rllib(config):
     initial_checkpoint_path = trainer.save(os.path.join(path, f"checkpoint_{initial_episode}"))
     print(f"Initial checkpoint saved at {initial_checkpoint_path} (episode {initial_episode})")
 
+    # Track episode data for summary
+    episode_data_summary = []
+
     for epoch in range(start_epoch, end_epoch):
+        print(f"\n=== DEBUG TRAINING EPOCH {epoch} ===")
+        
         # Update dynamic PPO parameters if configured
         if dynamic_ppo_params_cfg and dynamic_ppo_params_cfg.get("enabled", False):
             # Get current episode count from training_stats.csv for parameter updates
@@ -371,11 +382,51 @@ def make_train_rllib(config):
                         current_val = updated_ppo_params[param_name]
                         print(f"  {param_name}: {initial_val:.4f} -> {current_val:.4f}")
 
+        # Train one epoch/episode
         result = trainer.train()
+
+        # Get episode data from the environment if available
+        episode_info = {}
+        try:
+            # Try to get episode data from worker environments using new RLlib API
+            if hasattr(trainer, 'env_runner_group'):
+                env_runners = trainer.env_runner_group
+                if env_runners and hasattr(env_runners, 'local_env_runner'):
+                    local_runner = env_runners.local_env_runner()
+                    if local_runner and hasattr(local_runner, 'env'):
+                        env_wrapper = local_runner.env
+                        if hasattr(env_wrapper, 'env') and hasattr(env_wrapper.env, 'last_episode_data'):
+                            episode_info = env_wrapper.env.last_episode_data
+            elif hasattr(trainer, 'workers') and trainer.workers:
+                # Fallback to old API
+                local_worker = trainer.workers.local_worker()
+                if local_worker and hasattr(local_worker, 'env'):
+                    env_wrapper = local_worker.env
+                    if hasattr(env_wrapper, 'env') and hasattr(env_wrapper.env, 'last_episode_data'):
+                        episode_info = env_wrapper.env.last_episode_data
+        except Exception as e:
+            print(f"Warning: Could not get episode data: {e}")
+
+        # Add basic training result info
+        if episode_info:
+            episode_info.update({
+                'epoch': epoch,
+                'learning_rate': result.get('info', {}).get('learner', {}).get('default_policy', {}).get('cur_lr', config["LR"]),
+                'policy_loss': result.get('info', {}).get('learner', {}).get('default_policy', {}).get('learner_stats', {}).get('policy_loss', 0),
+                'value_loss': result.get('info', {}).get('learner', {}).get('default_policy', {}).get('learner_stats', {}).get('vf_loss', 0),
+            })
+            episode_data_summary.append(episode_info)
 
         # Log metrics
         if (epoch - start_epoch - 1) % config["SHOW_EVERY_N_EPOCHS"] == 0:
             print(f"Epoch {epoch} complete.")
+            
+            # Print episode info if available
+            if episode_info:
+                print("Episode debug info:")
+                for key, value in episode_info.items():
+                    if isinstance(value, (int, float)) and key.startswith(('total_', 'episode_')):
+                        print(f"  {key}: {value}")
 
         # Save checkpoint
         if (epoch - start_epoch - 1) % config["SAVE_EVERY_N_EPOCHS"] == 0:
@@ -410,4 +461,4 @@ def make_train_rllib(config):
         except Exception as e:
             print(f"Warning: Could not read final episode count from CSV: {e}")
 
-    return trainer, current_date, final_episode_count
+    return trainer, current_date, final_episode_count, episode_data_summary

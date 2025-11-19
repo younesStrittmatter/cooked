@@ -87,15 +87,59 @@ class CheckpointDeliveryAnalyzer:
         
         return checkpoints
     
+    def read_config_file(self, sim_dir):
+        """Read config.txt file and extract AGENT_INITIALIZATION_PERIOD."""
+        config_path = sim_dir / "config.txt"
+        initialization_period = 0.0  # Default if not found
+        
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config_contents = f.read()
+                
+                # Look for AGENT_INITIALIZATION_PERIOD
+                init_match = re.search(r"AGENT_INITIALIZATION_PERIOD:\s*([0-9.]+)", config_contents)
+                if init_match:
+                    initialization_period = float(init_match.group(1))
+                else:
+                    # Silent fallback for checkpoint comparison - don't spam logs
+                    pass
+                    
+            except Exception as e:
+                # Silent fallback for checkpoint comparison - don't spam logs
+                pass
+            
+        return initialization_period
+    
+    def convert_frames_to_seconds(self, sim_data, initialization_period):
+        """Convert frame numbers to adjusted seconds (subtracting initialization time)."""
+        if 'second' in sim_data.columns:
+            # If seconds column exists, use it and adjust by subtracting initialization period
+            sim_data = sim_data.copy()
+            sim_data['adjusted_second'] = sim_data['second'] - initialization_period
+            # Ensure we don't have negative seconds (clamp to 0)
+            sim_data['adjusted_second'] = sim_data['adjusted_second'].clip(lower=0)
+            return sim_data
+        else:
+            # If no seconds column, create one assuming some frame rate (e.g., 30 FPS)
+            sim_data = sim_data.copy()
+            assumed_fps = 30
+            sim_data['adjusted_second'] = (sim_data['frame'] / assumed_fps) - initialization_period
+            sim_data['adjusted_second'] = sim_data['adjusted_second'].clip(lower=0)
+            return sim_data
+    
     def compute_deliveries(self, sim_data):
         """Compute delivery counts over time from simulation data."""
+        # Use adjusted_second instead of frame for time axis
+        time_column = 'adjusted_second' if 'adjusted_second' in sim_data.columns else 'frame'
+        
         # Deliveries are typically tracked through score increases
-        deliveries = sim_data.groupby(['agent_id', 'frame'])['score'].max().reset_index()
+        deliveries = sim_data.groupby(['agent_id', time_column])['score'].max().reset_index()
         
         # Calculate delivery events (score increases)
         delivery_events = []
         for agent_id in deliveries['agent_id'].unique():
-            agent_data = deliveries[deliveries['agent_id'] == agent_id].sort_values('frame')
+            agent_data = deliveries[deliveries['agent_id'] == agent_id].sort_values(time_column)
             agent_data['score_diff'] = agent_data['score'].diff().fillna(0)
             agent_data['deliveries'] = (agent_data['score_diff'] > 0).astype(int)
             agent_data['cumulative_deliveries'] = agent_data['deliveries'].cumsum()
@@ -115,18 +159,28 @@ class CheckpointDeliveryAnalyzer:
                 if sim_csv.exists():
                     try:
                         sim_data = pd.read_csv(sim_csv)
+                        
+                        # Read config file to get initialization period
+                        initialization_period = self.read_config_file(sim_dir)
+                        
+                        # Convert frames to adjusted seconds
+                        sim_data = self.convert_frames_to_seconds(sim_data, initialization_period)
+                        
                         deliveries = self.compute_deliveries(sim_data)
                         
                         if not deliveries.empty:
-                            # Get the final frame deliveries (last frame, total across all agents)
-                            final_frame = deliveries['frame'].max()
-                            final_frame_data = deliveries[deliveries['frame'] == final_frame]
-                            total_final_deliveries = final_frame_data['cumulative_deliveries'].sum()
+                            # Determine time column
+                            time_column = 'adjusted_second' if 'adjusted_second' in deliveries.columns else 'frame'
+                            
+                            # Get the final time deliveries (last time point, total across all agents)
+                            final_time = deliveries[time_column].max()
+                            final_time_data = deliveries[deliveries[time_column] == final_time]
+                            total_final_deliveries = final_time_data['cumulative_deliveries'].sum()
                             
                             final_deliveries.append({
                                 'simulation': sim_dir.name,
                                 'final_deliveries': total_final_deliveries,
-                                'final_frame': final_frame
+                                'final_time': final_time
                             })
                         
                     except Exception as e:

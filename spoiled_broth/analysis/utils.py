@@ -118,14 +118,147 @@ class DataProcessor:
         # Load and clean CSV data
         with open(csv_path, 'r') as f:
             lines = f.readlines()
-        header = lines[0]
-        filtered_lines = [header] + [line for line in lines[1:] if not line.startswith("episode,env")]
         
-        df = pd.read_csv(StringIO("".join(filtered_lines)))
+        # Check if NUM_ENVS is > 1 in config to determine if we need to aggregate
+        num_envs_match = re.search(r"NUM_ENVS:\s*([0-9]+)", config_contents)
+        num_envs = int(num_envs_match.group(1)) if num_envs_match else 1
+        
+        print(f"Processing {folder_path} with NUM_ENVS = {num_envs}")
+        
+        if num_envs > 1:
+            # Parse the multi-environment format where each data line is preceded by a header
+            # Structure: header, episode_X_env_1, header, episode_X_env_2, ..., header, episode_X_env_N, 
+            #           header, episode_X+1_env_1, header, episode_X+1_env_2, ...
+            
+            print(f"Processing multi-environment CSV with {num_envs} environments")
+            
+            header = None
+            episode_groups = {}  # Dictionary to group data by episode number
+            
+            # Process the file alternating between headers and data
+            i = 0
+            data_lines_processed = 0
+            
+            while i < len(lines):
+                line = lines[i].strip()
+                
+                # Skip empty lines
+                if not line:
+                    i += 1
+                    continue
+                
+                # Check if this line is a header
+                if line.startswith('episode,'):
+                    if header is None:
+                        header = line
+                        print(f"Found header: {header[:50]}...")
+                    i += 1
+                    continue
+                
+                # This should be a data line
+                values = line.split(',')
+                if len(values) >= 2:  # At least episode and one metric
+                    try:
+                        episode_num = int(values[0])
+                        
+                        # Initialize episode group if not exists
+                        if episode_num not in episode_groups:
+                            episode_groups[episode_num] = []
+                        
+                        # Add this environment's data for this episode
+                        episode_groups[episode_num].append(line)
+                        data_lines_processed += 1
+                        
+                        # Print progress every 1000 lines
+                        if data_lines_processed % 1000 == 0:
+                            print(f"Processed {data_lines_processed} data lines, current episode: {episode_num}")
+                            
+                    except ValueError:
+                        print(f"Warning: Could not parse episode number from line: {line[:50]}...")
+                
+                i += 1
+            
+            print(f"Finished parsing. Found {len(episode_groups)} unique episodes, {data_lines_processed} total data lines")
+            
+            if header and episode_groups:
+                # Create cleaned CSV with single header and averaged data
+                cleaned_lines = [header]
+                
+                # Process episodes in order - sample first 10 and last 10 for debugging
+                episode_nums = sorted(episode_groups.keys())
+                print(f"Episode range: {episode_nums[0]} to {episode_nums[-1]}")
+                print(f"First 10 episodes: {episode_nums[:10]}")
+                print(f"Last 10 episodes: {episode_nums[-10:]}")
+                
+                # Check a sample of episodes for environment count
+                sample_episodes = episode_nums[:5] + episode_nums[-5:]
+                for ep in sample_episodes:
+                    env_count = len(episode_groups[ep])
+                    if env_count != num_envs:
+                        print(f"Warning: Episode {ep} has {env_count} environments, expected {num_envs}")
+                
+                # Process all episodes
+                episodes_processed = 0
+                for episode_num in episode_nums:
+                    episode_data_lines = episode_groups[episode_num]
+                    
+                    # Parse each environment's data for this episode
+                    episode_values = []
+                    
+                    for env_data in episode_data_lines:
+                        values = env_data.split(',')
+                        if len(values) >= 2:  # At least episode and one metric
+                            # Convert numeric values (skip episode column)
+                            numeric_values = []
+                            for val in values[1:]:  # Skip episode column
+                                try:
+                                    numeric_values.append(float(val))
+                                except ValueError:
+                                    numeric_values.append(0.0)  # Default for non-numeric
+                            episode_values.append(numeric_values)
+                    
+                    # Calculate mean across environments for this episode
+                    if episode_values:
+                        mean_values = [str(episode_num)]  # Start with episode number
+                        
+                        # Calculate means for each metric across environments
+                        num_metrics = len(episode_values[0])
+                        for metric_idx in range(num_metrics):
+                            metric_sum = sum(env_vals[metric_idx] for env_vals in episode_values if len(env_vals) > metric_idx)
+                            valid_envs = len([env_vals for env_vals in episode_values if len(env_vals) > metric_idx])
+                            if valid_envs > 0:
+                                mean_value = metric_sum / valid_envs
+                                mean_values.append(str(mean_value))
+                            else:
+                                mean_values.append('0.0')
+                        
+                        cleaned_lines.append(','.join(mean_values))
+                        episodes_processed += 1
+                
+                print(f"Successfully processed {episodes_processed} episodes")
+                
+                # Create DataFrame from cleaned data
+                df = pd.read_csv(StringIO('\n'.join(cleaned_lines)))
+                print(f"Final DataFrame: {len(df)} episodes aggregated across {num_envs} environments")
+            else:
+                print("Warning: Could not parse multi-environment format, falling back to single environment parsing")
+                # Fallback to single environment parsing
+                filtered_lines = [lines[0]] + [line for line in lines[1:] if not line.startswith("episode,")]
+                df = pd.read_csv(StringIO("".join(filtered_lines)))
+        else:
+            # Single environment - use original logic but clean header duplication
+            print(f"Single environment detected (NUM_ENVS = {num_envs})")
+            filtered_lines = [lines[0]] + [line for line in lines[1:] if not line.startswith("episode,")]
+            df = pd.read_csv(StringIO("".join(filtered_lines)))
+            print(f"Loaded {len(df)} episodes from single environment")
         # Check if 'episode' column exists and use it, otherwise use line numbers
         if 'episode' in df.columns:
-            # Use the existing episode column as x-axis
-            pass  # Keep the original episode values
+            # Ensure episode column is numeric - convert from string if necessary
+            df['episode'] = pd.to_numeric(df['episode'], errors='coerce')
+            # Drop rows where episode conversion failed (NaN values)
+            df = df.dropna(subset=['episode'])
+            # Convert to integer
+            df['episode'] = df['episode'].astype(int)
         else:
             print(f"Warning: 'episode' column not found in {folder_path}. Using line numbers as episode values.")
             # If no episode column exists, create one with line numbers
@@ -152,6 +285,23 @@ class DataProcessor:
         
         df.insert(len(matches) * 2 + 1, "lr", lr)
         
+        # Debug: Print DataFrame info
+        print(f"Parsed training folder {folder_path}:")
+        print(f"  NUM_ENVS detected: {num_envs}")
+        print(f"  DataFrame shape: {df.shape}")
+        print(f"  Columns: {list(df.columns)}")
+        if len(df) > 0:
+            print(f"  Episodes range: {df['episode'].min()} to {df['episode'].max()}")
+            print(f"  Sample data for first episode:")
+            print(f"    Episode: {df.iloc[0]['episode']}")
+            # Show some key metrics if they exist
+            key_metrics = ['pure_reward_ai_rl_1', 'deliver_ai_rl_1', 'cut_ai_rl_1', 'salad_ai_rl_1']
+            for metric in key_metrics:
+                if metric in df.columns:
+                    print(f"    {metric}: {df.iloc[0][metric]}")
+        else:
+            print("  WARNING: DataFrame is empty!")
+        
         return df
     
     def load_experiment_data(self, paths: Dict[str, str], 
@@ -171,18 +321,31 @@ class DataProcessor:
         raw_dir = paths['raw_dir']
         print("Loading experiment data from directory:", raw_dir)
 
-        if os.path.exists(raw_dir):                        
-            for folder in os.listdir(raw_dir):
-                folder_path = os.path.join(raw_dir, folder)
-                if not os.path.isdir(folder_path):
-                    continue
-                
-                df = self.parse_training_folder(folder_path, num_agents)
-                if df is not None:
-                    all_dfs.append(df)
+        if not os.path.exists(raw_dir):
+            raise ValueError(f"Data directory does not exist: {raw_dir}")
+            
+        folders_found = []
+        folders_processed = []
+        
+        for folder in os.listdir(raw_dir):
+            folder_path = os.path.join(raw_dir, folder)
+            if not os.path.isdir(folder_path):
+                continue
+            
+            folders_found.append(folder)
+            df = self.parse_training_folder(folder_path, num_agents)
+            if df is not None:
+                all_dfs.append(df)
+                folders_processed.append(folder)
+        
+        print(f"Found {len(folders_found)} folders, successfully processed {len(folders_processed)}")
+        if folders_found:
+            print(f"Folders found: {folders_found}")
+        if folders_processed:
+            print(f"Folders processed: {folders_processed}")
         
         if not all_dfs:
-            raise ValueError("No valid training data found")
+            raise ValueError(f"No valid training data found in {raw_dir}. Check that config.txt and training_stats.csv files exist in training folders.")
         
         # Combine all dataframes
         final_df = pd.concat(all_dfs, ignore_index=True)
@@ -225,15 +388,42 @@ class DataProcessor:
         # Create attitude key
         if num_agents == 1:
             df["attitude_key"] = df.apply(lambda row: f"{row['alpha_1']}_{row['beta_1']}", axis=1)
-            df["pure_reward_total"] = df["pure_reward_ai_rl_1"]
-            df["total_deliveries"] = df["deliver_ai_rl_1"]
+            
+            # Create total columns for single agent (check if source columns exist)
+            if "pure_reward_ai_rl_1" in df.columns:
+                df["pure_reward_total"] = df["pure_reward_ai_rl_1"]
+                print(f"Created pure_reward_total from pure_reward_ai_rl_1")
+            else:
+                print(f"WARNING: pure_reward_ai_rl_1 column not found!")
+                
+            if "deliver_ai_rl_1" in df.columns:
+                df["total_deliveries"] = df["deliver_ai_rl_1"]
+                print(f"Created total_deliveries from deliver_ai_rl_1")
+            else:
+                print(f"WARNING: deliver_ai_rl_1 column not found!")
+                
         else:  # num_agents == 2
             df["attitude_key"] = df.apply(
                 lambda row: f"{row['alpha_1']}_{row['beta_1']}_{row['alpha_2']}_{row['beta_2']}", 
                 axis=1
             )
-            df["pure_reward_total"] = df["pure_reward_ai_rl_1"] + df["pure_reward_ai_rl_2"]
-            df["total_deliveries"] = df["deliver_ai_rl_1"] + df["deliver_ai_rl_2"]
+            
+            # Create total columns for two agents
+            if "pure_reward_ai_rl_1" in df.columns and "pure_reward_ai_rl_2" in df.columns:
+                df["pure_reward_total"] = df["pure_reward_ai_rl_1"] + df["pure_reward_ai_rl_2"]
+            if "deliver_ai_rl_1" in df.columns and "deliver_ai_rl_2" in df.columns:
+                df["total_deliveries"] = df["deliver_ai_rl_1"] + df["deliver_ai_rl_2"]
+        
+        # Debug: Print final DataFrame info after processing
+        print(f"After prepare_dataframe processing:")
+        print(f"  DataFrame shape: {df.shape}")
+        print(f"  Key columns present:")
+        key_cols = ['episode', 'pure_reward_total', 'total_deliveries', 'pure_reward_ai_rl_1', 'deliver_ai_rl_1']
+        for col in key_cols:
+            if col in df.columns:
+                print(f"    {col}: YES (sample value: {df[col].iloc[0] if len(df) > 0 else 'N/A'})")
+            else:
+                print(f"    {col}: NO")
         
         return df
 
@@ -476,7 +666,8 @@ class PlotGenerator:
         return label, color
     
     def plot_basic_metrics(self, df: pd.DataFrame, figures_dir: str,
-                          metric_col: str, metric_name: str, by_attitude: bool = True):
+                          metric_col: str, metric_name: str, by_attitude: bool = True,
+                          xlim=None, ylim=None):
         """
         Generate basic metric plots (score, reward, etc.).
         
@@ -493,48 +684,49 @@ class PlotGenerator:
         if by_attitude:
             for attitude in unique_attitudes:
                 subset = df[df["attitude_key"] == attitude]
-                
                 plt.figure(figsize=(10, 6))
-                
                 for lr in unique_lr:
                     lr_filtered = subset[subset["lr"] == lr]
                     grouped = lr_filtered.groupby("episode")[metric_col].mean().reset_index()
                     label = f"LR {lr}"
                     plt.plot(grouped["episode"], grouped[metric_col], label=label)
-                
+                if xlim:
+                    plt.xlim(xlim)
+                if ylim:
+                    plt.ylim(ylim)
                 plt.title(f"{metric_name} vs Episode\nAttitude {attitude}")
                 plt.xlabel("Episode")
                 plt.ylabel(metric_name)
                 plt.legend()
                 plt.tight_layout()
-                
                 sanitized_attitude = self._sanitize_filename(attitude)
                 filename = f"{metric_name.lower().replace(' ', '_')}_attitude_{sanitized_attitude}.png"
                 plt.savefig(os.path.join(figures_dir, filename))
                 plt.close()
         else:
             plt.figure(figsize=(10, 6))
-            
             for lr in unique_lr:
                 lr_filtered = df[df["lr"] == lr]
                 grouped = lr_filtered.groupby("episode")[metric_col].mean().reset_index()
-                
                 label = f"LR {lr}"
                 plt.plot(grouped["episode"], grouped[metric_col], label=label)
-            
+            if xlim:
+                plt.xlim(xlim)
+            if ylim:
+                plt.ylim(ylim)
             plt.xlabel("Episodes", fontsize=20)
             plt.ylabel(f"Mean {metric_name.lower()}", fontsize=20)
             plt.legend(fontsize=20)
             plt.xticks(fontsize=18)
             plt.yticks(fontsize=18)
             plt.tight_layout()
-            
             filename = f"{metric_name.lower().replace(' ', '_')}.png"
             plt.savefig(os.path.join(figures_dir, filename))
             plt.close()
     
     def plot_smoothed_metrics(self, df: pd.DataFrame, figures_dir: str,
-                             metric_col: str, metric_name: str, by_attitude: bool = True):
+                             metric_col: str, metric_name: str, by_attitude: bool = True,
+                             xlim=None, ylim=None):
         """Generate smoothed versions of metric plots."""
         N = self.config.smoothing_factor
         unique_attitudes = df["attitude_key"].unique()
@@ -543,49 +735,48 @@ class PlotGenerator:
         if by_attitude:
             for attitude in unique_attitudes:
                 subset = df[df["attitude_key"] == attitude]
-                
                 plt.figure(figsize=(10, 6))
-                
                 for lr in unique_lr:
                     lr_filtered = subset[subset["lr"] == lr]
                     lr_filtered = lr_filtered.copy()
                     lr_filtered["episode_block"] = (lr_filtered["episode"] // N)
                     block_means = lr_filtered.groupby("episode_block")[metric_col].mean()
                     middle_episodes = lr_filtered.groupby("episode_block")["episode"].median()
-                    
                     label = f"LR {lr}"
                     plt.plot(middle_episodes, block_means, label=label)
-                
+                if xlim:
+                    plt.xlim(xlim)
+                if ylim:
+                    plt.ylim(ylim)
                 plt.title(f"{metric_name} vs Episode\nAttitude {attitude}")
                 plt.xlabel("Episode")
                 plt.ylabel(metric_name)
                 plt.legend()
                 plt.tight_layout()
-                
                 sanitized_attitude = self._sanitize_filename(attitude)
                 filename = f"{metric_name.lower().replace(' ', '_')}_attitude_{sanitized_attitude}_smoothed_{N}.png"
                 plt.savefig(os.path.join(figures_dir, filename))
                 plt.close()
         else:
             plt.figure(figsize=(10, 6))
-            
             for lr in unique_lr:
                 lr_filtered = df[df["lr"] == lr]
                 lr_filtered = lr_filtered.copy()
                 lr_filtered["episode_block"] = (lr_filtered["episode"] // N)
                 block_means = lr_filtered.groupby("episode_block")[metric_col].mean()
                 middle_episodes = lr_filtered.groupby("episode_block")["episode"].median()
-                
                 label = f"LR {lr}"
                 plt.plot(middle_episodes, block_means, label=label)
-            
+            if xlim:
+                plt.xlim(xlim)
+            if ylim:
+                plt.ylim(ylim)
             plt.xlabel("Episodes", fontsize=20)
             plt.ylabel(f"Mean {metric_name.lower()}", fontsize=20)
             plt.legend(fontsize=20)
             plt.xticks(fontsize=18)
             plt.yticks(fontsize=18)
             plt.tight_layout()
-            
             filename = f"{metric_name.lower().replace(' ', '_')}_smoothed_{N}.png"
             plt.savefig(os.path.join(figures_dir, filename))
             plt.close()

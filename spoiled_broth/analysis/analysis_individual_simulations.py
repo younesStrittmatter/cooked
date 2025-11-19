@@ -132,6 +132,51 @@ class SimulationAnalyzer:
         print(f"Found {len(simulation_dirs)} simulation directories")
         return simulation_dirs
     
+    def read_config_file(self, sim_dir):
+        """Read config.txt file and extract AGENT_INITIALIZATION_PERIOD."""
+        config_path = sim_dir / "config.txt"
+        initialization_period = 0.0  # Default if not found
+        
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config_contents = f.read()
+                
+                # Look for AGENT_INITIALIZATION_PERIOD
+                init_match = re.search(r"AGENT_INITIALIZATION_PERIOD:\s*([0-9.]+)", config_contents)
+                if init_match:
+                    initialization_period = float(init_match.group(1))
+                    print(f"  Found AGENT_INITIALIZATION_PERIOD: {initialization_period} seconds")
+                else:
+                    print(f"  Warning: AGENT_INITIALIZATION_PERIOD not found in config.txt, using default: {initialization_period}")
+                    
+            except Exception as e:
+                print(f"  Error reading config.txt: {e}, using default initialization period: {initialization_period}")
+        else:
+            print(f"  Warning: config.txt not found, using default initialization period: {initialization_period}")
+            
+        return initialization_period
+    
+    def convert_frames_to_seconds(self, sim_data, initialization_period):
+        """Convert frame numbers to adjusted seconds (subtracting initialization time)."""
+        if 'second' in sim_data.columns:
+            # If seconds column exists, use it and adjust by subtracting initialization period
+            sim_data = sim_data.copy()
+            sim_data['adjusted_second'] = sim_data['second'] - initialization_period
+            # Ensure we don't have negative seconds (clamp to 0)
+            sim_data['adjusted_second'] = sim_data['adjusted_second'].clip(lower=0)
+            return sim_data
+        else:
+            print("  Warning: 'second' column not found in simulation data, cannot convert to seconds")
+            # If no seconds column, create one assuming some frame rate (e.g., 30 FPS)
+            # This is a fallback, but we should warn the user
+            sim_data = sim_data.copy()
+            assumed_fps = 30
+            sim_data['adjusted_second'] = (sim_data['frame'] / assumed_fps) - initialization_period
+            sim_data['adjusted_second'] = sim_data['adjusted_second'].clip(lower=0)
+            print(f"  Using assumed frame rate of {assumed_fps} FPS for time conversion")
+            return sim_data
+    
     def load_simulation_data(self, simulation_dirs):
         """Load all simulation and meaningful actions data."""
         for sim_dir, metadata in simulation_dirs:
@@ -144,6 +189,12 @@ class SimulationAnalyzer:
                     sim_data = pd.read_csv(sim_csv)
                     actions_data = pd.read_csv(actions_csv)
                     
+                    # Read config file to get initialization period
+                    initialization_period = self.read_config_file(sim_dir)
+                    
+                    # Convert frames to adjusted seconds
+                    sim_data = self.convert_frames_to_seconds(sim_data, initialization_period)
+                    
                     # Create a unique key for this simulation
                     sim_key = f"{metadata.get('simulation_timestamp', 'unknown')}"
                     
@@ -151,7 +202,8 @@ class SimulationAnalyzer:
                         'simulation': sim_data,
                         'actions': actions_data,
                         'metadata': metadata,
-                        'path': sim_dir
+                        'path': sim_dir,
+                        'initialization_period': initialization_period
                     }
                     
                     print(f"Loaded data for {sim_key}")
@@ -170,13 +222,16 @@ class SimulationAnalyzer:
     
     def compute_deliveries(self, sim_data):
         """Compute delivery counts over time from simulation data."""
+        # Use adjusted_second instead of frame for time axis
+        time_column = 'adjusted_second' if 'adjusted_second' in sim_data.columns else 'frame'
+        
         # Deliveries are typically tracked through score increases
-        deliveries = sim_data.groupby(['agent_id', 'frame'])['score'].max().reset_index()
+        deliveries = sim_data.groupby(['agent_id', time_column])['score'].max().reset_index()
         
         # Calculate delivery events (score increases)
         delivery_events = []
         for agent_id in deliveries['agent_id'].unique():
-            agent_data = deliveries[deliveries['agent_id'] == agent_id].sort_values('frame')
+            agent_data = deliveries[deliveries['agent_id'] == agent_id].sort_values(time_column)
             agent_data['score_diff'] = agent_data['score'].diff().fillna(0)
             agent_data['deliveries'] = (agent_data['score_diff'] > 0).astype(int)
             agent_data['cumulative_deliveries'] = agent_data['deliveries'].cumsum()
@@ -187,18 +242,19 @@ class SimulationAnalyzer:
     def compute_agent_distance(self, sim_data):
         """Compute distance between agents over time."""
         distances = []
+        time_column = 'adjusted_second' if 'adjusted_second' in sim_data.columns else 'frame'
         
-        for frame in sim_data['frame'].unique():
-            frame_data = sim_data[sim_data['frame'] == frame]
-            if len(frame_data) >= 2:
-                agents = frame_data.groupby('agent_id')[['x', 'y']].first()
+        for time_point in sim_data[time_column].unique():
+            time_data = sim_data[sim_data[time_column] == time_point]
+            if len(time_data) >= 2:
+                agents = time_data.groupby('agent_id')[['x', 'y']].first()
                 if len(agents) >= 2:
                     agent_positions = agents.values
                     # Calculate Euclidean distance between first two agents
                     if len(agent_positions) >= 2:
                         dist = np.sqrt((agent_positions[0][0] - agent_positions[1][0])**2 + 
                                      (agent_positions[0][1] - agent_positions[1][1])**2)
-                        distances.append({'frame': frame, 'distance': dist})
+                        distances.append({time_column: time_point, 'distance': dist})
         
         return pd.DataFrame(distances)
     
@@ -212,21 +268,25 @@ class SimulationAnalyzer:
             sim_data = self.simulation_data[sim_key]['simulation']
             deliveries = self.compute_deliveries(sim_data)
             
+            # Determine time column to use
+            time_column = 'adjusted_second' if 'adjusted_second' in deliveries.columns else 'frame'
+            time_label = 'Time (seconds)' if time_column == 'adjusted_second' else 'Frame'
+            
             fig, ax = plt.subplots(figsize=(12, 8))
             
             # Plot individual agent deliveries and total
             for agent_id in deliveries['agent_id'].unique():
                 agent_data = deliveries[deliveries['agent_id'] == agent_id]
-                ax.plot(agent_data['frame'], agent_data['cumulative_deliveries'], 
+                ax.plot(agent_data[time_column], agent_data['cumulative_deliveries'], 
                        label=f'Agent {agent_id}', linewidth=2)
             
             # Plot total deliveries
-            total_deliveries = deliveries.groupby('frame')['cumulative_deliveries'].sum().reset_index()
-            ax.plot(total_deliveries['frame'], total_deliveries['cumulative_deliveries'], 
+            total_deliveries = deliveries.groupby(time_column)['cumulative_deliveries'].sum().reset_index()
+            ax.plot(total_deliveries[time_column], total_deliveries['cumulative_deliveries'], 
                    label='Total', linewidth=3, linestyle='--', color='black')
             
             ax.set_title(f'Deliveries Over Time\n{sim_key}')
-            ax.set_xlabel('Frame')
+            ax.set_xlabel(time_label)
             ax.set_ylabel('Cumulative Deliveries')
             ax.legend()
             ax.grid(True, alpha=0.3)
@@ -241,42 +301,51 @@ class SimulationAnalyzer:
         fig, ax = plt.subplots(figsize=(14, 8))
         
         aggregated_deliveries = defaultdict(list)
+        time_column = None
+        
         for sim_key, data in self.simulation_data.items():
             metadata = data['metadata']
             key = f"{metadata['training_id']}_{metadata['map']}"
             
             sim_data = data['simulation']
             deliveries = self.compute_deliveries(sim_data)
-            total_deliveries = deliveries.groupby('frame')['cumulative_deliveries'].sum()
+            
+            # Determine time column (should be consistent across simulations)
+            if time_column is None:
+                time_column = 'adjusted_second' if 'adjusted_second' in deliveries.columns else 'frame'
+            
+            total_deliveries = deliveries.groupby(time_column)['cumulative_deliveries'].sum()
             
             aggregated_deliveries[key].append(total_deliveries)
+        
+        time_label = 'Time (seconds)' if time_column == 'adjusted_second' else 'Frame'
         
         # Plot mean and std for each training_id + map combination
         for key, delivery_series in aggregated_deliveries.items():
             if delivery_series:
-                # Align all series to same frame range
-                all_frames = set()
+                # Align all series to same time range
+                all_times = set()
                 for series in delivery_series:
-                    all_frames.update(series.index)
-                all_frames = sorted(all_frames)
+                    all_times.update(series.index)
+                all_times = sorted(all_times)
                 
                 aligned_data = []
                 for series in delivery_series:
-                    aligned_series = series.reindex(all_frames, fill_value=series.iloc[-1] if len(series) > 0 else 0)
+                    aligned_series = series.reindex(all_times, fill_value=series.iloc[-1] if len(series) > 0 else 0)
                     aligned_data.append(aligned_series.values)
                 
                 if aligned_data:
                     mean_deliveries = np.mean(aligned_data, axis=0)
                     std_deliveries = np.std(aligned_data, axis=0)
                     
-                    ax.plot(all_frames, mean_deliveries, label=key, linewidth=2)
-                    ax.fill_between(all_frames, 
+                    ax.plot(all_times, mean_deliveries, label=key, linewidth=2)
+                    ax.fill_between(all_times, 
                                   mean_deliveries - std_deliveries,
                                   mean_deliveries + std_deliveries, 
                                   alpha=0.2)
         
         ax.set_title('Aggregated Deliveries Over Time by Training ID and Map')
-        ax.set_xlabel('Frame')
+        ax.set_xlabel(time_label)
         ax.set_ylabel('Cumulative Deliveries')
         ax.legend()
         ax.grid(True, alpha=0.3)
@@ -547,20 +616,28 @@ class SimulationAnalyzer:
                 # Calculate deliveries per frame
                 frame_deliveries = deliveries.groupby('frame')['deliveries'].sum().reset_index()
                 
+                # Determine time column to use
+                time_column = 'adjusted_second' if 'adjusted_second' in distances.columns else 'frame'
+                time_label = 'Time (seconds)' if time_column == 'adjusted_second' else 'Frame'
+                delivery_label = 'Deliveries per second' if time_column == 'adjusted_second' else 'Deliveries per frame'
+                
                 # Plot distance
                 color = 'tab:blue'
-                ax1.set_xlabel('Frame')
+                ax1.set_xlabel(time_label)
                 ax1.set_ylabel('Distance between agents', color=color)
-                line1 = ax1.plot(distances['frame'], distances['distance'], color=color, linewidth=2, label='Distance')
+                line1 = ax1.plot(distances[time_column], distances['distance'], color=color, linewidth=2, label='Distance')
                 ax1.tick_params(axis='y', labelcolor=color)
                 ax1.grid(True, alpha=0.3)
                 
                 # Plot deliveries on second y-axis
                 ax2 = ax1.twinx()
                 color = 'tab:red'
-                ax2.set_ylabel('Deliveries per frame', color=color)
-                bars = ax2.bar(frame_deliveries['frame'], frame_deliveries['deliveries'], 
-                             alpha=0.6, color=color, label='Deliveries per frame')
+                ax2.set_ylabel(delivery_label, color=color)
+                
+                # Use same time column for deliveries
+                frame_deliveries_time_col = time_column if time_column in frame_deliveries.columns else 'frame'
+                bars = ax2.bar(frame_deliveries[frame_deliveries_time_col], frame_deliveries['deliveries'], 
+                             alpha=0.6, color=color, label=delivery_label)
                 ax2.tick_params(axis='y', labelcolor=color)
                 
                 # Add legends
@@ -591,11 +668,14 @@ class SimulationAnalyzer:
             deliveries = self.compute_deliveries(sim_data)
             
             if not distances.empty and not deliveries.empty:
-                # Get frame deliveries
-                frame_deliveries = deliveries.groupby('frame')['deliveries'].sum().reset_index()
+                # Determine time column to use
+                time_column = 'adjusted_second' if 'adjusted_second' in distances.columns else 'frame'
                 
-                # Align distances and deliveries by frame
-                merged_data = distances.merge(frame_deliveries, on='frame', how='inner')
+                # Get time-based deliveries
+                time_deliveries = deliveries.groupby(time_column)['deliveries'].sum().reset_index()
+                
+                # Align distances and deliveries by time
+                merged_data = distances.merge(time_deliveries, on=time_column, how='inner')
                 
                 aggregated_distances[key].append(merged_data)
         
@@ -603,28 +683,32 @@ class SimulationAnalyzer:
         for key, data_list in aggregated_distances.items():
             if data_list:
                 # Combine all simulations for this training_map
+                time_column = 'adjusted_second' if 'adjusted_second' in data_list[0].columns else 'frame'
                 all_frames = set()
                 for df in data_list:
-                    all_frames.update(df['frame'])
+                    all_frames.update(df[time_column])
                 all_frames = sorted(all_frames)
+                
+                # Determine time column from first dataset
+                time_column = 'adjusted_second' if 'adjusted_second' in data_list[0].columns else 'frame'
                 
                 # Average distances and deliveries across simulations
                 avg_distances = []
                 avg_deliveries = []
                 
-                for frame in all_frames:
-                    frame_distances = []
-                    frame_deliveries = []
+                for time_point in all_frames:
+                    time_distances = []
+                    time_deliveries = []
                     
                     for df in data_list:
-                        frame_data = df[df['frame'] == frame]
-                        if not frame_data.empty:
-                            frame_distances.append(frame_data['distance'].iloc[0])
-                            frame_deliveries.append(frame_data['deliveries'].iloc[0])
+                        time_data = df[df[time_column] == time_point]
+                        if not time_data.empty:
+                            time_distances.append(time_data['distance'].iloc[0])
+                            time_deliveries.append(time_data['deliveries'].iloc[0])
                     
-                    if frame_distances:
-                        avg_distances.append(np.mean(frame_distances))
-                        avg_deliveries.append(np.mean(frame_deliveries))
+                    if time_distances:
+                        avg_distances.append(np.mean(time_distances))
+                        avg_deliveries.append(np.mean(time_deliveries))
                     else:
                         avg_distances.append(np.nan)
                         avg_deliveries.append(np.nan)
@@ -632,37 +716,33 @@ class SimulationAnalyzer:
                 # Plot distance
                 ax1.plot(all_frames, avg_distances, label=f'{key} - Distance', linewidth=2)
         
-        # Plot deliveries on second y-axis
-        ax2 = ax1.twinx()
-        for key, data_list in aggregated_distances.items():
-            if data_list:
-                # Same calculation as above for deliveries
-                all_frames = set()
-                for df in data_list:
-                    all_frames.update(df['frame'])
-                all_frames = sorted(all_frames)
+                # Plot deliveries on second y-axis\n        ax2 = ax1.twinx()\n        for key, data_list in aggregated_distances.items():\n            if data_list:\n                # Same calculation as above for deliveries\n                time_column = 'adjusted_second' if 'adjusted_second' in data_list[0].columns else 'frame'\n                all_frames = set()\n                for df in data_list:\n                    all_frames.update(df[time_column])\n                all_frames = sorted(all_frames)
                 
                 avg_deliveries = []
-                for frame in all_frames:
-                    frame_deliveries = []
+                for time_point in all_frames:
+                    time_deliveries = []
                     for df in data_list:
-                        frame_data = df[df['frame'] == frame]
-                        if not frame_data.empty:
-                            frame_deliveries.append(frame_data['deliveries'].iloc[0])
+                        time_data = df[df[time_column] == time_point]
+                        if not time_data.empty:
+                            time_deliveries.append(time_data['deliveries'].iloc[0])
                     
-                    if frame_deliveries:
-                        avg_deliveries.append(np.mean(frame_deliveries))
+                    if time_deliveries:
+                        avg_deliveries.append(np.mean(time_deliveries))
                     else:
                         avg_deliveries.append(np.nan)
                 
                 ax2.plot(all_frames, avg_deliveries, '--', label=f'{key} - Deliveries', linewidth=2)
         
-        ax1.set_xlabel('Frame')
+        # Determine label based on time column used
+        time_label = 'Time (seconds)' if time_column == 'adjusted_second' else 'Frame'
+        delivery_label = 'Deliveries per Second' if time_column == 'adjusted_second' else 'Deliveries per Frame'
+        
+        ax1.set_xlabel(time_label)
         ax1.set_ylabel('Average Distance', color='blue')
         ax1.tick_params(axis='y', labelcolor='blue')
         ax1.grid(True, alpha=0.3)
         
-        ax2.set_ylabel('Deliveries per Frame', color='red')
+        ax2.set_ylabel(delivery_label, color='red')
         ax2.tick_params(axis='y', labelcolor='red')
         
         ax1.set_title('Aggregated Distance & Deliveries Over Time by Training & Map')

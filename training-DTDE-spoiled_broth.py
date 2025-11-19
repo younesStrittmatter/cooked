@@ -1,4 +1,5 @@
-# USE: nohup python training-DTDE-spoiled_broth.py <input_path> <map_nr> <lr> <game_version> [<num_agents>] [<checkpoint_id>] [<pretraining>] [<seed>] > log_training.txt &
+# USE:   <input_path> <map_nr> <lr> <game_version> [<num_agents>] [<checkpoint_id>] [<pretraining>] [<seed>] > log_training.txt 2>&1 &
+# Example: nohup python training-DTDE-spoiled_broth.py ./cuenca/input_0_0.txt baseline_division_of_labor_v2 0.0003 classic 1 none no 0 > log_training_map1.txt 2>&1 &
 
 import os
 import sys
@@ -11,8 +12,11 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
 ##### Cluster config ##################
-NUM_GPUS = 0.2
-NUM_CPUS = 10
+# Resource allocation optimized for RL training
+NUM_GPUS = 0.2  # Full GPU for neural network training
+NUM_CPUS = 12   # Increased CPU cores for parallel environments
+NUM_ENV_WORKERS = 8  # Parallel environment workers
+NUM_LEARNER_WORKERS = 1  # GPU learner workers
 CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
 
 # Read input file
@@ -49,12 +53,13 @@ elif CLUSTER == 'local':
 else:
     raise ValueError("Invalid cluster specified. Choose from 'brigit', 'cuenca', or 'local'.")
 
-# Hyperparameters
-NUM_ENVS = 1
+# Hyperparameters - Optimized for parallel training
+NUM_ENVS = NUM_ENV_WORKERS  # Use all environment workers
 INNER_SECONDS = 180 # In seconds
-NUM_EPOCHS = 25000
-TRAIN_BATCH_SIZE = 200 # (Train batch size should be aprox equal to inner_seconds)
-NUM_MINIBATCHES = 10
+NUM_EPOCHS = 100
+TRAIN_BATCH_SIZE = 4000  # Increased for better GPU utilization (NUM_ENVS * rollout_fragment_length * num_timesteps)
+SGD_MINIBATCH_SIZE = 500  # Optimized minibatch size for GPU
+NUM_SGD_ITER = 10  # Number of SGD iterations per training batch
 SHOW_EVERY_N_EPOCHS = 1
 SAVE_EVERY_N_EPOCHS = 500
 PAYOFF_MATRIX = [1,1,-2]
@@ -82,9 +87,9 @@ REWARDS_CFG = {
 # Dynamic rewards configuration - exponential decay [rewards_cfg = original_rewards_cfg * exp(-decay_rate * (episode - decay_start_episode))]
 DYNAMIC_REWARDS_CFG = {
     "enabled": True,  # Set to False to disable dynamic rewards
-    "decay_rate": 0.0001,  # Decay rate for exponential function (higher = faster decay)
-    "min_reward_multiplier": 0.05,  # Minimum multiplier (e.g., 0.1 = 10% of initial reward)
-    "decay_start_episode": 0,  # Episode to start applying decay (0 = from beginning)
+    "decay_rate": 0.005,  # Decay rate for exponential function (higher = faster decay)
+    "min_reward_multiplier": 0.00,  # Minimum multiplier (e.g., 0.1 = 10% of initial reward)
+    "decay_start_episode": 100,  # Episode to start applying decay (0 = from beginning)
     "affected_rewards": ["raw_food", "plate", "counter", "cut", "salad"],  # Which reward types to apply decay to
 }
 
@@ -92,7 +97,7 @@ DYNAMIC_REWARDS_CFG = {
 # This gradually reduces clip_eps (policy change constraint) and ent_coef (exploration) during training
 # Starting with high values for exploration, then reducing them for more stable exploitation
 DYNAMIC_PPO_PARAMS_CFG = {
-    "enabled": True,  # Set to False to disable dynamic PPO parameters
+    "enabled": False,  # Set to False to disable dynamic PPO parameters
     "decay_rate": 0.0001,  # Decay rate for exponential function (higher = faster decay)
     "min_param_multiplier": 0.1,  # Minimum multiplier (e.g., 0.1 = 10% of initial value)
     "decay_start_episode": 100,  # Episode to start applying decay (0 = from beginning)
@@ -151,12 +156,13 @@ if rows != cols:
     raise ValueError(f"Map must be square, but got {rows} rows and {cols} columns.")
 GRID_SIZE = (rows, cols)
 
-# RLlib specific configuration
+# RLlib specific configuration - Optimized for GPU training
 config = {
     "NUM_ENVS": NUM_ENVS,
     "INNER_SECONDS": INNER_SECONDS,
     "TRAIN_BATCH_SIZE": TRAIN_BATCH_SIZE,
-    "NUM_MINIBATCHES": NUM_MINIBATCHES,
+    "SGD_MINIBATCH_SIZE": SGD_MINIBATCH_SIZE,
+    "NUM_SGD_ITER": NUM_SGD_ITER,
     "NUM_EPOCHS": NUM_EPOCHS,
     "NUM_AGENTS": NUM_AGENTS,
     "SHOW_EVERY_N_EPOCHS": SHOW_EVERY_N_EPOCHS,
@@ -177,8 +183,10 @@ config = {
     "SAVE_DIR": save_dir,
     "CHECKPOINT_ID_USED": pretrained_policies,  # Add pretrained policies configuration
     "PRETRAINED": PRETRAINING if PRETRAINING else "No",
-    # RLlib specific parameters
-    "NUM_UPDATES": 10,  # Number of updates of the policy
+    # RLlib specific parameters - Optimized for GPU
+    "NUM_ENV_WORKERS": NUM_ENV_WORKERS,  # Parallel environment workers (CPU)
+    "NUM_LEARNER_WORKERS": NUM_LEARNER_WORKERS,  # GPU learner workers
+    "NUM_UPDATES": NUM_SGD_ITER,  # Number of SGD iterations per batch
     "GAMMA": 0.975,      # Discount factor for future rewards (close to 1 = long-term, lower = short-term)
     "GAE_LAMBDA": 0.95, # Lambda for Generalized Advantage Estimation (controls bias-variance tradeoff in advantage calculation)
     "ENT_COEF": 0.07,   # Entropy coefficient (controls exploration: higher = more random actions)
@@ -187,34 +195,106 @@ config = {
     "GRID_SIZE": GRID_SIZE,
     "FCNET_HIDDENS": MLP_LAYERS,  # Hidden layer sizes for MLP
     "FCNET_ACTIVATION": "tanh",  # Activation function for MLP ("tanh", "relu", etc.)
+    # Resource allocation
     "NUM_CPUS": NUM_CPUS,
     "NUM_GPUS": NUM_GPUS,
+    # Performance optimizations
+    "ROLLOUT_FRAGMENT_LENGTH": 200,  # Steps per rollout fragment
+    "BATCH_MODE": "complete_episodes",  # Collect complete episodes for better learning
+    "COMPRESS_OBSERVATIONS": False,  # Disable compression for speed
+    "NUM_CPUS_PER_WORKER": 1,  # CPU cores per environment worker
+    "NUM_GPUS_PER_WORKER": 0,  # Environment workers run on CPU only
+    "NUM_CPUS_FOR_DRIVER": 1,  # Driver CPU usage
 }
 
 if ray.is_initialized():
     ray.shutdown()
-ray.init(num_cpus=NUM_CPUS)
 
-torch.set_num_threads(NUM_CPUS)
+# Initialize Ray with optimized resource allocation
+ray.init(
+    num_cpus=NUM_CPUS,
+    num_gpus=1,  # Ensure GPU is available
+    object_store_memory=2000000000,  # 2GB object store for efficient data transfer
+    _plasma_directory="/tmp",  # Use fast storage for plasma store
+)
 
-# Run training
-trainer, current_date, final_episode_count = make_train_rllib(config)
+# Optimize PyTorch for GPU training
+torch.set_num_threads(2)  # Limit CPU threads per process to avoid oversubscription
 
-# Save the final model
-path = os.path.join(config["SAVE_DIR"], f"Training_{current_date}")
-os.makedirs(path, exist_ok=True)
-
-# Update config with final episode count
-if final_episode_count is not None:
-    config["NUM_EPISODES"] = final_episode_count
+# GPU optimization settings
+if torch.cuda.is_available():
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    print(f"CUDA devices: {torch.cuda.device_count()}")
+    print(f"Current device: {torch.cuda.current_device()}")
+    print(f"GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
     
-    # Append the final episode count to config.txt
-    config_path = os.path.join(path, "config.txt")
-    with open(config_path, "a") as f:
-        f.write(f"NUM_EPISODES: {final_episode_count}\n")
+    # GPU memory optimizations
+    torch.cuda.set_per_process_memory_fraction(0.85)  # Use 85% of GPU memory
+    torch.cuda.empty_cache()  # Clear cache
+    
+    # Performance optimizations
+    torch.backends.cudnn.benchmark = True  # Optimize for consistent input sizes
+    torch.backends.cudnn.deterministic = False  # Allow non-deterministic algorithms for speed
+    
+    print("GPU optimizations enabled")
+else:
+    print("CUDA not available, falling back to CPU training")
 
-# Save the final policy
-final_checkpoint = trainer.save(os.path.join(path, f"checkpoint_final"))
-print(f"Final checkpoint saved at {final_checkpoint}")
-if final_episode_count is not None:
-    print(f"Training completed after {final_episode_count} episodes")
+# Environment optimization
+os.environ["CUDA_LAUNCH_BLOCKING"] = "0"  # Enable async CUDA operations
+os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"  # Allow GPU memory growth
+
+# Run training with performance monitoring
+print(f"Starting training with configuration:")
+print(f"  Environment workers: {NUM_ENV_WORKERS} (CPU)")
+print(f"  Learner workers: {NUM_LEARNER_WORKERS} (GPU)")
+print(f"  Train batch size: {TRAIN_BATCH_SIZE}")
+print(f"  SGD minibatch size: {SGD_MINIBATCH_SIZE}")
+print(f"  Total CPU cores: {NUM_CPUS}")
+print(f"  GPU allocation: {NUM_GPUS}")
+
+# Monitor GPU memory before training
+if torch.cuda.is_available():
+    print(f"GPU memory before training: {torch.cuda.memory_allocated()/1024**3:.2f} GB allocated, {torch.cuda.memory_reserved()/1024**3:.2f} GB reserved")
+
+try:
+    trainer, current_date, final_episode_count = make_train_rllib(config)
+
+    # Save the final model
+    path = os.path.join(config["SAVE_DIR"], f"Training_{current_date}")
+    os.makedirs(path, exist_ok=True)
+
+    # Update config with final episode count
+    if final_episode_count is not None:
+        config["NUM_EPISODES"] = final_episode_count
+        
+        # Append the final episode count to config.txt
+        config_path = os.path.join(path, "config.txt")
+        with open(config_path, "a") as f:
+            f.write(f"NUM_EPISODES: {final_episode_count}\n")
+
+    # Save the final policy
+    final_checkpoint = trainer.save(os.path.join(path, f"checkpoint_final"))
+    print(f"Final checkpoint saved at {final_checkpoint}")
+    if final_episode_count is not None:
+        print(f"Training completed after {final_episode_count} episodes")
+
+except Exception as e:
+    print(f"Error during training: {e}")
+    raise
+finally:
+    # Proper cleanup to avoid Ray shutdown warnings
+    try:
+        if 'trainer' in locals() and trainer is not None:
+            # Stop the trainer properly
+            trainer.stop()
+            print("Trainer stopped successfully")
+    except Exception as cleanup_error:
+        print(f"Warning: Error during trainer cleanup: {cleanup_error}")
+    
+    try:
+        # Shutdown Ray
+        ray.shutdown()
+        print("Ray shutdown completed")
+    except Exception as ray_error:
+        print(f"Warning: Error during Ray shutdown: {ray_error}")

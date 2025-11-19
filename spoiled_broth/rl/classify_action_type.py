@@ -133,6 +133,9 @@ def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, acc
                     self.total_agent_events[agent_id]["plate"] += 1
                 return ACTION_TYPE_USEFUL_PLATE_DISPENSER, agent_events
             else:
+                agent_events[agent_id]["plate"] += 1
+                if update_totals:
+                    self.total_agent_events[agent_id]["plate"] += 1
                 return ACTION_TYPE_USELESS_PLATE_DISPENSER, agent_events
         else:
             if holding_item is None:
@@ -141,6 +144,9 @@ def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, acc
                     self.total_agent_events[agent_id]["raw_food"] += 1
                 return ACTION_TYPE_USEFUL_FOOD_DISPENSER, agent_events
             else:
+                agent_events[agent_id]["raw_food"] += 1
+                if update_totals:
+                    self.total_agent_events[agent_id]["raw_food"] += 1
                 return ACTION_TYPE_USELESS_FOOD_DISPENSER, agent_events
             
     # Tile type 4: cutting board

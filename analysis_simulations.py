@@ -14,7 +14,7 @@ Folder structure:
 
 Usage examples:
 # Run analysis for all trainings and all checkpoints:
-nohup python3 analysis_simulations.py --cluster cuenca --map_nr baseline_division_of_labor --game_version classic > log_analysis_simulations.out 2>&1 &
+nohup python3 analysis_simulations.py --cluster cuenca --map_nr baseline_division_of_labor --game_version classic --num_agents 1 > log_analysis_simulations.out 2>&1 &
 
 # Run analysis for specific training, all checkpoints:
 nohup python3 analysis_simulations.py --cluster cuenca --map_nr baseline_division_of_labor --training_id 12345 --game_version classic > log_analysis_simulations.out 2>&1 &

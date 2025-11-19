@@ -74,7 +74,7 @@ def game_to_obs_vector_classic(game, agent_id, distance_map):
     item_names = [None, 'tomato', 'plate', 'tomato_cut', 'tomato_salad']
 
     # Get agent walking and cutting speeds
-    agent_walking_speed = game.walking_speeds.get(agent_id, 1) * game.walking_time
+    agent_walking_speed = game.walking_speeds.get(agent_id, 1) * game.walked_tiles_per_second
     agent_cutting_speed = game.cutting_speeds.get(agent_id, 1) * game.cutting_time 
 
     # Get agent positions
@@ -98,20 +98,8 @@ def game_to_obs_vector_classic(game, agent_id, distance_map):
     else:
         other_agent = None
         other_pos = None  # No other agent
-        # For single agent, calculate midpoint as closest accessible tile position
-        all_tiles = []
-        for tile_type in tile_types:
-            indices = get_tile_indices_by_type(game, tile_type)
-            accessible = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
-            all_tiles.extend(accessible)
-        
-        if all_tiles:
-            # Find the closest tile to agent
-            closest_tile = min(all_tiles, key=lambda t: get_distance(distance_map, agent_pos, (t[1], t[2])))
-            midpoint = (closest_tile[1], closest_tile[2])
-        else:
-            # Fallback to agent position if no accessible tiles
-            midpoint = (agent.slot_x, agent.slot_y)
+        # For single agent, midpoint is just the agent position
+        midpoint = (agent.slot_x, agent.slot_y)
     obs_vector = []
 
     # --- Add times to tile types ---
@@ -229,8 +217,8 @@ def game_to_obs_vector_competition(game, agent_id, distance_map):
     item_names = [None, 'tomato', 'pumpkin', 'plate', 'tomato_cut', 'pumpkin_cut', 'tomato_salad', 'pumpkin_salad']
 
     # Get agent walking and cutting speeds
-    agent_walking_speed = game.walking_speeds.get(agent_id, 1)
-    agent_cutting_speed = game.cutting_speeds.get(agent_id, 1)
+    agent_walking_speed = game.walking_speeds.get(agent_id, 1) * game.walked_tiles_per_second
+    agent_cutting_speed = game.cutting_speeds.get(agent_id, 1) * game.cutting_time
 
     # Get agent positions
     all_agent_ids = [aid for aid in game.gameObjects if aid.startswith('ai_rl_')]
@@ -252,20 +240,8 @@ def game_to_obs_vector_competition(game, agent_id, distance_map):
     else:
         other_agent = None
         other_pos = None  # No other agent
-        # For single agent, calculate midpoint as closest accessible tile position
-        all_tiles = []
-        for tile_type in tile_types:
-            indices = get_tile_indices_by_type(game, tile_type)
-            accessible = [(_idx, x, y) for (_idx, x, y) in indices if get_distance(distance_map, agent_pos, (x, y)) is not None]
-            all_tiles.extend(accessible)
-        
-        if all_tiles:
-            # Find the closest tile to agent
-            closest_tile = min(all_tiles, key=lambda t: get_distance(distance_map, agent_pos, (t[1], t[2])))
-            midpoint = (closest_tile[1], closest_tile[2])
-        else:
-            # Fallback to agent position if no accessible tiles
-            midpoint = (agent.slot_x, agent.slot_y)
+        # For single agent, midpoint is just the agent position
+        midpoint = (agent.slot_x, agent.slot_y)
     obs_vector = []
 
     # --- Add distances to tile types ---
