@@ -11,30 +11,24 @@ import torch
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
-##### Cluster config ##################
-# Resource allocation optimized for RL training
-NUM_GPUS = 0.2  # Full GPU for neural network training
-NUM_CPUS = 12   # Increased CPU cores for parallel environments
-NUM_ENV_WORKERS = 8  # Parallel environment workers
-NUM_LEARNER_WORKERS = 1  # GPU learner workers
-CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
-
 # Read input file
-input_path = sys.argv[1]
-MAP_NR = str(sys.argv[2]).lower()
-LR = float(sys.argv[3])
-GAME_VERSION = str(sys.argv[4]).lower() ## If game_version = classic, one type of food (tomato); if game_version = competition, two types of food (tomato and pumpkin)
-if len(sys.argv) > 5:
-    NUM_AGENTS = int(sys.argv[5])
+CLUSTER = str(sys.argv[1]).lower()
+input_path = sys.argv[2]
+MAP_NR = str(sys.argv[3]).lower()
+LR = float(sys.argv[4])
+GAME_VERSION = str(sys.argv[5]).lower() ## If game_version = classic, one type of food (tomato); if game_version = competition, two types of food (tomato and pumpkin)
+if len(sys.argv) > 6:
+    NUM_AGENTS = int(sys.argv[6])
     if NUM_AGENTS not in [1, 2]:
         raise ValueError("NUM_AGENTS must be 1 or 2")
 else:
     NUM_AGENTS = 2  # Default to 2 agents for backward compatibility
 
 # Optional checkpoint paths for loading pretrained policies
-CHECKPOINT_ID = str(sys.argv[6]) if len(sys.argv) > 6 else None
-PRETRAINING = str(sys.argv[7]) if len(sys.argv) > 7 else None
-SEED = int(sys.argv[8]) if len(sys.argv) > 8 else 0
+CHECKPOINT_ID = str(sys.argv[7]) if len(sys.argv) > 7 else None
+PRETRAINING = str(sys.argv[8]) if len(sys.argv) > 8 else None
+SEED = int(sys.argv[9]) if len(sys.argv) > 9 else 0
+NUM_EPOCHS = int(sys.argv[10]) if len(sys.argv) > 10 else 500
 
 with open(input_path, "r") as f:
     lines = f.readlines()
@@ -44,19 +38,31 @@ with open(input_path, "r") as f:
         alpha_2, beta_2 = [round(float(x), 4) for x in lines[2].strip().split()]
         walking_speed_2, cutting_speed_2 = [round(float(x), 4) for x in lines[3].strip().split()]    
 
+
+##### Cluster config ##################
+NUM_ENV_WORKERS = 8  # Parallel environment workers
+NUM_LEARNER_WORKERS = 1  # GPU learner workers
 if CLUSTER == 'brigit':
     local = '/mnt/lustre/home/samuloza'
+    # Resource allocation optimized for RL training
+    NUM_GPUS = 1.0  # Full GPU for neural network training
+    NUM_CPUS = 24   # Increased CPU cores for parallel environments
 elif CLUSTER == 'cuenca':
     local = ''
+    # Resource allocation optimized for RL training
+    NUM_GPUS = 0.2  # Full GPU for neural network training
+    NUM_CPUS = 12   # Increased CPU cores for parallel environments
 elif CLUSTER == 'local':
     local = 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
+    # Resource allocation optimized for RL training
+    NUM_GPUS = 0.0  # Full GPU for neural network training
+    NUM_CPUS = 1   # Increased CPU cores for parallel environments
 else:
     raise ValueError("Invalid cluster specified. Choose from 'brigit', 'cuenca', or 'local'.")
 
 # Hyperparameters - Optimized for parallel training
 NUM_ENVS = NUM_ENV_WORKERS  # Use all environment workers
 INNER_SECONDS = 180 # In seconds
-NUM_EPOCHS = 200
 TRAIN_BATCH_SIZE = 4000  # Increased for better GPU utilization (NUM_ENVS * rollout_fragment_length * num_timesteps)
 SGD_MINIBATCH_SIZE = 500  # Optimized minibatch size for GPU
 NUM_SGD_ITER = 10  # Number of SGD iterations per training batch
