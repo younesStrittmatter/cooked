@@ -25,7 +25,11 @@ from spoiled_broth.analysis.utils import (
 
 
 def generate_competition_plots(analysis_results):
-    """Generate all plots specific to competition experiments."""
+    """Generate all plots specific to competition experiments.
+    
+    Note: All metrics in df are already averaged across NUM_ENVS during data loading.
+    Each row represents the mean of NUM_ENVS parallel environments for that episode.
+    """
     df = analysis_results['df']
     paths = analysis_results['paths']
     plotter = analysis_results['plotter']

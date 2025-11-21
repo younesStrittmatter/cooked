@@ -8,8 +8,6 @@ from spoiled_broth.world.tiles import ITEM_LIST
 from spoiled_broth.world.tiles import Dispenser
 from spoiled_broth.agent.intents import PickUpIntent
 
-BASE_WALKING_SPEED = 30  # pixels per second
-
 class Agent(agent.Agent):
     def __init__(self, agent_id, grid, game, walk_speed=1, cut_speed=1):
         super().__init__(agent_id, grid)
@@ -24,7 +22,6 @@ class Agent(agent.Agent):
         self.provisional_item = None  # Item that is being processed (e.g., being cut)
         self.walk_speed = walk_speed
         self.cut_speed = cut_speed
-        self.speed = walk_speed * BASE_WALKING_SPEED  # Base speed multiplier for movement
         self.action = None
         self.score = 0
         self.current_action = None

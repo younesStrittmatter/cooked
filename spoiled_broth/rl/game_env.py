@@ -129,7 +129,8 @@ class GameEnv(ParallelEnv):
             "busy": 0.01,
             "useless_action": 0.2,
             "destructive_action": 1.0,
-            "inaccessible_tile": 0.5,
+            "not_available": 0.5,
+            "inaccessible_tile": 1.0,
         }
         default_rewards_cfg = {
             "raw_food": 0.2,
@@ -209,19 +210,14 @@ class GameEnv(ParallelEnv):
             for agent_id in self.agents
         }
         self.total_actions_asked = {agent_id: 0 for agent_id in self.agents}
-        self.total_actions_not_performed = {agent_id: 0 for agent_id in self.agents}
+        self.total_actions_not_available = {agent_id: 0 for agent_id in self.agents}
         self.total_actions_inaccessible = {agent_id: 0 for agent_id in self.agents}
-        self.ACTION_TYPE_INACCESSIBLE = ACTION_TYPE_INACCESSIBLE
 
         self.game, self.action_spaces, self._clickable_mask, self.clickable_indices = init_game(self.agents, map_nr=self.map_nr, grid_size=self.grid_size, seed=self.seed, game_mode=self.game_mode, walking_speeds=self.walking_speeds, cutting_speeds=self.cutting_speeds)
 
-        self.agent_map = {
-            agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents
-        }
-
-        # Initialize action completion states for all agents
-        for agent_id, agent in self.agent_map.items():
-            agent.is_busy = False
+        self.agent_map = {agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents}
+        self.busy_until = {agent_id: None for agent_id in self.agents}
+        self.action_info = {agent_id: None for agent_id in self.agents}
 
         # --- New observation space---
         obs_vector = game_to_obs_vector(self.game, self.agents[0], game_mode=self.game_mode, distance_map=self.distance_map)
@@ -255,6 +251,15 @@ class GameEnv(ParallelEnv):
         random_game_state(self.game)
 
         self.agent_map = {agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents}
+        self.busy_until = {agent_id: None for agent_id in self.agents}
+        self.action_info = {agent_id: None for agent_id in self.agents}
+
+        # Initialize agent busy states
+        for agent_id, agent in self.agent_map.items():
+            if hasattr(agent, 'path'):
+                agent.path = []
+            if hasattr(agent, 'path_index'):
+                agent.path_index = 0
 
         self.cumulated_pure_rewards = {agent: 0.0 for agent in self.agents}
         self.cumulated_modified_rewards = {agent: 0.0 for agent in self.agents}
@@ -286,7 +291,7 @@ class GameEnv(ParallelEnv):
             for agent_id in self.agents
         }
         self.total_actions_asked = {agent_id: 0 for agent_id in self.agents}
-        self.total_actions_not_performed = {agent_id: 0 for agent_id in self.agents}
+        self.total_actions_not_available = {agent_id: 0 for agent_id in self.agents}
         self.total_actions_inaccessible = {agent_id: 0 for agent_id in self.agents}
 
         self.observations = {agent: self.observe(agent) for agent in self.agents}
@@ -337,41 +342,85 @@ class GameEnv(ParallelEnv):
         # Track current actions and busy times
         busy_times = {}
         validated_actions = {}
-        action_info = {}
-        # For each agent, determine if a new action is needed
+        
+        # Store validated actions for debug access (used by GameEnvDebug)
+        self._logging_actions = {}
+        
+        # First, calculate remaining busy times for all agents
+        for agent_id in self.agents:
+            agent = self.agent_map[agent_id]
+            if self.busy_until.get(agent_id) is not None and self.busy_until[agent_id] > self._elapsed_time:
+                busy_times[agent_id] = self.busy_until[agent_id] - self._elapsed_time
+            else:
+                busy_times[agent_id] = 0  # Agent is not busy
+        
+        # Only process actions for agents that are not busy
         for agent_id, action_idx in actions.items():
             agent = self.agent_map[agent_id]
-            # If agent is not busy, process new action
-            if getattr(agent, "busy_until", None) is None or self._elapsed_time >= agent.busy_until:
+
+            # Check if agent is ready for a new action
+            if busy_times[agent_id] <= 0:
                 self.total_actions_asked[agent_id] += 1
                 action_name = get_rl_action_space(self.game_mode)[action_idx]
                 tile_index = convert_action_to_tile(agent, self.game, action_name, distance_map=self.distance_map)
                 
                 if tile_index is None:
-                    # No valid target found - action cannot be performed
-                    self.total_actions_not_performed[agent_id] += 1
-                    agent_penalties[agent_id] += self.penalties_cfg["inaccessible_tile"]
-                    busy_times[agent_id] = 0.1
-                    continue
+                    tile, x, y = None, None, None
+                    logging_index = -1
+                    logging_x = -1
+                    logging_y = -1
                 else:
                     grid_w = self.game.grid.width
                     x = tile_index % grid_w
                     y = tile_index // grid_w
                     tile = self.game.grid.tiles[x][y]
+                    logging_index = tile_index
+                    logging_x = x
+                    logging_y = y
+                
                 action_type, agent_events = get_action_type_and_agent_events(self, tile, agent, agent_id, agent_events, agent_food_type=self.agent_food_type if self.game_mode == "competition" else None, game_mode=self.game_mode, x=x, y=y, accessibility_map=self.accessibility_map, update_totals=False)
                 obs = self.observations.get(agent_id)
-                # Default movement time
-                move_time = obs[self.action_obs_mapping[action_idx]] * getattr(self.game, 'normalization_factor', 1.0) if obs is not None else MOVE_TIME
-                busy_time = move_time + INTENT_TIME
-                agent.busy_until = self._elapsed_time + busy_time
-                busy_times[agent_id] = busy_time
-                # Penalties
-                if action_type == self.ACTION_TYPE_INACCESSIBLE:
+            
+                # Store validated action for debug access
+                self._logging_actions[agent_id] = {
+                    'elapsed_time': self._elapsed_time,
+                    'action_idx': action_idx,
+                    'action_name': action_name,
+                    'tile_index': logging_index,
+                    'action_type': action_type,
+                    'x': logging_x,
+                    'y': logging_y
+                }
+
+                if action_type == "inaccessible_tile":
+                    # No valid target found - action cannot be performed
                     self.total_actions_inaccessible[agent_id] += 1
                     self.total_action_types[agent_id][action_type] += 1
                     agent_penalties[agent_id] += self.penalties_cfg["inaccessible_tile"]
+                    busy_times[agent_id] = MOVE_TIME
+                    self.busy_until[agent_id] = self._elapsed_time + busy_times[agent_id]
                     continue
-                elif action_type.startswith("useless_"):
+                elif action_type == "not_available":
+                    self.total_actions_not_available[agent_id] += 1
+                    self.total_action_types[agent_id][action_type] += 1
+                    agent_penalties[agent_id] += self.penalties_cfg["not_available"]
+                    busy_times[agent_id] = MOVE_TIME
+                    self.busy_until[agent_id] = self._elapsed_time + busy_times[agent_id]
+                    continue
+                
+                # Calculate movement time based on distance, but ensure minimum time
+                if obs is not None and action_idx in self.action_obs_mapping:
+                    distance_normalized = obs[self.action_obs_mapping[action_idx]]
+                    move_time = distance_normalized * getattr(self.game, 'normalization_factor', 1.0)
+                else:
+                    move_time = MOVE_TIME
+                
+                busy_time = move_time + INTENT_TIME
+                self.busy_until[agent_id] = self._elapsed_time + busy_time
+                busy_times[agent_id] = busy_time
+
+                # Penalties
+                if action_type.startswith("useless_"):
                     agent_penalties[agent_id] += self.penalties_cfg["useless_action"]
                 elif action_type.startswith("destructive_"):
                     # Get the penalty for the destroyed item based on what the agent is carrying
@@ -389,33 +438,39 @@ class GameEnv(ParallelEnv):
 
                     # Apply both the base destructive penalty and the destroyed item penalty
                     agent_penalties[agent_id] += self.penalties_cfg["destructive_action"] + destroyed_item_penalty
+                
                 agent_penalties[agent_id] += self.penalties_cfg["busy"] * busy_time
                 validated_actions[agent_id] = {"type": "click", "target": tile_index}
-                action_info[agent_id] = {
+                self.action_info[agent_id] = {
                     "action_type": action_type,
                     "tile_index": tile_index,
                     "action_idx": action_idx
                 }
+                
                 # Set up agent's movement path to the target tile
                 setup_agent_path(self, agent, tile_index)
                 # Track action types immediately when selected (for all actions, including useless ones)
                 self.total_action_types[agent_id][action_type] += 1
             else:
-                # Agent is still busy, maintain current action, do not record new events
-                busy_left = agent.busy_until - self._elapsed_time
-                busy_times[agent_id] = busy_left if busy_left > 0 else MOVE_TIME + INTENT_TIME
+                # Agent is busy, ignore the new action and continue with current action
+                pass
 
-        # Find minimal delta_time (the next action to finish)
-        if busy_times:
-            min_delta = min(busy_times.values())
+        # We need to advance time until at least one agent becomes available for a new action
+        all_busy_times = [t for t in busy_times.values() if t > 0]
+
+        if all_busy_times:
+            # Advance to when the first agent finishes
+            min_delta = min(all_busy_times)
         else:
-            min_delta = MOVE_TIME + INTENT_TIME
+            # All agents are ready, minimal advancement
+            min_delta = 0.01
+        
         next_time = min(self._elapsed_time + min_delta, self._max_seconds_per_episode)
         advanced_time = next_time - self._elapsed_time
         self._elapsed_time = next_time
 
         # Direct game state update instead of calling self.game.step()
-        update_agents_directly(self, validated_actions, advanced_time, action_info, agent_events)
+        update_agents_directly(self, advanced_time, agent_events)
         self.agent_map = {agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents}
 
         # Update totals for actions that just completed (for logging purposes only)
@@ -427,8 +482,14 @@ class GameEnv(ParallelEnv):
 
         # Mark agents as available if their busy_until has passed
         for agent_id, agent in self.agent_map.items():
-            if hasattr(agent, 'busy_until') and agent.busy_until is not None and self._elapsed_time >= agent.busy_until:
-                agent.busy_until = None
+            if self.busy_until.get(agent_id) is not None and self._elapsed_time >= self.busy_until[agent_id]:
+                self.busy_until[agent_id] = None
+                self.action_info[agent_id] = None
+                # Clear agent path when action completes
+                if hasattr(agent, 'path'):
+                    agent.path = []
+                if hasattr(agent, 'path_index'):
+                    agent.path_index = 0
 
         # Compute rewards
         self.cumulated_pure_rewards, self.cumulated_modified_rewards = get_rewards(self, agent_events, agent_penalties, self.rewards_cfg)
@@ -464,7 +525,7 @@ class GameEnv(ParallelEnv):
                 for result_event in self.total_agent_events[agent_id]:
                     row[f"{result_event}_{agent_id}"] = self.total_agent_events[agent_id][result_event]
                 row[f"actions_asked_{agent_id}"] = self.total_actions_asked[agent_id]
-                row[f"actions_not_performed_{agent_id}"] = self.total_actions_not_performed[agent_id]
+                row[f"actions_not_available_{agent_id}"] = self.total_actions_not_available[agent_id]
                 row[f"inaccessible_actions_{agent_id}"] = self.total_actions_inaccessible[agent_id]
 
                 for action_type in get_action_type_list(self.game_mode):

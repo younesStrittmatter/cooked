@@ -13,6 +13,8 @@ import os
 import numpy as np
 import random
 
+BASE_WALKING_SPEED = 30  # Base walking speed in pixels/second
+
 class SpoiledBroth(BaseGame):
     def __init__(self, map_nr=None, grid_size=(8, 8), num_agents=2, seed=None, walking_speeds=None, cutting_speeds=None, cutting_time=3):
         super().__init__()
@@ -24,11 +26,10 @@ class SpoiledBroth(BaseGame):
         self.agent_start_tiles = {}
         self.walking_speeds = walking_speeds
         self.cutting_speeds = cutting_speeds
-        self.walked_tiles_per_second = base.BASE_WALKING_SPEED / 16  # Base walking speed in tiles/second
+        self.walked_tiles_per_second = BASE_WALKING_SPEED / 16  # Base walking speed in tiles/second
         self.cutting_time = cutting_time
         max_distance = load_max_distance(map_nr)
         self.normalization_factor = max_distance / self.walked_tiles_per_second + self.cutting_time # Walked_tiles_per_second in tiles/second + cutting_time in seconds
-        print(f"Normalization factor set to: {self.normalization_factor}")
         self.clickable_indices = []  # Initialize clickable indices storage
         # Track action completion status for each agent
         self.agent_action_status = {}

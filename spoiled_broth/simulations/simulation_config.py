@@ -20,7 +20,7 @@ class SimulationConfig:
     engine_tick_rate: int = 24
     ai_tick_rate: int = 1
     duration_seconds: int = 180
-    agent_speed_px_per_sec: int = 32
+    agent_speed_px_per_sec: int = 30
     agent_initialization_period: float = 0.0  # Agent initialization period in seconds
     
     # Video settings

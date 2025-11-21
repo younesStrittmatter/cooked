@@ -13,6 +13,7 @@ ACTION_TYPE_USELESS_PLATE_DISPENSER = "destructive_plate_dispenser"
 ACTION_TYPE_USELESS_DELIVERY = "useless_delivery"
 ACTION_TYPE_USEFUL_DELIVERY = "useful_delivery"
 ACTION_TYPE_INACCESSIBLE = "inaccessible_tile"
+ACTION_TYPE_NOT_AVAILABLE = "not_available"
 
 # Detailed action types considering ownership and usefulness (competition mode)
 ACTION_TYPE_OWN_SALAD_ASSEMBLY = "salad_assembly_own"
@@ -42,7 +43,8 @@ ACTION_TYPE_LIST_CLASSIC = [
     ACTION_TYPE_USEFUL_PLATE_DISPENSER,
     ACTION_TYPE_USELESS_DELIVERY,
     ACTION_TYPE_USEFUL_DELIVERY,
-    ACTION_TYPE_INACCESSIBLE
+    ACTION_TYPE_INACCESSIBLE,
+    ACTION_TYPE_NOT_AVAILABLE
 ]
 
 ACTION_TYPE_LIST_COMPETITION = [
@@ -65,7 +67,8 @@ ACTION_TYPE_LIST_COMPETITION = [
     ACTION_TYPE_USELESS_DELIVERY,
     ACTION_TYPE_OWN_USEFUL_DELIVERY,
     ACTION_TYPE_OTHER_USEFUL_DELIVERY,
-    ACTION_TYPE_INACCESSIBLE
+    ACTION_TYPE_INACCESSIBLE,
+    ACTION_TYPE_NOT_AVAILABLE
 ]
 
 # Helper: wrapper functions to get action type based on game mode
@@ -87,11 +90,12 @@ def get_action_type_classic(self, tile, agent, agent_id, agent_events, x, y, acc
     """
 
     if tile is None or not hasattr(tile, '_type'):
-        return ACTION_TYPE_FLOOR, agent_events  # Default to floor for None/invalid tiles
+        return ACTION_TYPE_NOT_AVAILABLE, agent_events  # Default to not available for None/invalid tiles
 
     # Check accessibility using pre-computed map
     agent_pos = (agent.slot_x, agent.slot_y)
     tile_pos = (x, y)
+
     if accessibility_map is not None and tile_pos not in accessibility_map.get(agent_pos, set()):
         return ACTION_TYPE_INACCESSIBLE, agent_events
 
@@ -186,7 +190,7 @@ def get_action_type_competition(self, tile, agent, agent_id, agent_events, agent
     """
 
     if tile is None or not hasattr(tile, '_type'):
-        return ACTION_TYPE_FLOOR, agent_events  # Default to floor for None/invalid tiles
+        return ACTION_TYPE_NOT_AVAILABLE, agent_events  # Default to not available for None/invalid tiles
     
     # Check accessibility using pre-computed map
     agent_pos = (agent.slot_x, agent.slot_y)

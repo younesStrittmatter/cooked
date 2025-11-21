@@ -54,7 +54,7 @@ def make_train_rllib(config):
         env_cfg = {
             "map_nr": config["MAP_NR"],
             "grid_size": config.get("GRID_SIZE", (8, 8)),
-            # pass path (prefer .npz) to distance map; can be None
+            "game_mode": config["GAME_VERSION"],
             "distance_map": distance_map_path,
             "walking_speeds": config.get("WALKING_SPEEDS", None),
             "cutting_speeds": config.get("CUTTING_SPEEDS", None),

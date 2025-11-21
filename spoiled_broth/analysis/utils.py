@@ -240,6 +240,7 @@ class DataProcessor:
                 # Create DataFrame from cleaned data
                 df = pd.read_csv(StringIO('\n'.join(cleaned_lines)))
                 print(f"Final DataFrame: {len(df)} episodes aggregated across {num_envs} environments")
+                print(f"  Each episode row now contains the MEAN values across {num_envs} parallel environments")
             else:
                 print("Warning: Could not parse multi-environment format, falling back to single environment parsing")
                 # Fallback to single environment parsing
@@ -687,9 +688,9 @@ class PlotGenerator:
                 plt.figure(figsize=(10, 6))
                 for lr in unique_lr:
                     lr_filtered = subset[subset["lr"] == lr]
-                    grouped = lr_filtered.groupby("episode")[metric_col].mean().reset_index()
+                    # Data is already averaged per episode during loading
                     label = f"LR {lr}"
-                    plt.plot(grouped["episode"], grouped[metric_col], label=label)
+                    plt.plot(lr_filtered["episode"], lr_filtered[metric_col], label=label)
                 if xlim:
                     plt.xlim(xlim)
                 if ylim:
@@ -707,9 +708,9 @@ class PlotGenerator:
             plt.figure(figsize=(10, 6))
             for lr in unique_lr:
                 lr_filtered = df[df["lr"] == lr]
-                grouped = lr_filtered.groupby("episode")[metric_col].mean().reset_index()
+                # Data is already averaged per episode during loading
                 label = f"LR {lr}"
-                plt.plot(grouped["episode"], grouped[metric_col], label=label)
+                plt.plot(lr_filtered["episode"], lr_filtered[metric_col], label=label)
             if xlim:
                 plt.xlim(xlim)
             if ylim:
@@ -804,8 +805,8 @@ class PlotGenerator:
                     middle_episodes = filtered_subset.groupby("episode_block")["episode"].median()
                     plt.plot(middle_episodes, block_means, label=label, color=color)
                 else:
-                    grouped = filtered_subset.groupby("episode")[metric].mean().reset_index()
-                    plt.plot(grouped["episode"], grouped[metric], label=label, color=color)
+                    # Data is already averaged per episode during loading
+                    plt.plot(filtered_subset["episode"], filtered_subset[metric], label=label, color=color)
             
             title = f"Metrics per Episode - LR {lr}"
             if smoothed:

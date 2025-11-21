@@ -1,5 +1,5 @@
-# USE:   <input_path> <map_nr> <lr> <game_version> [<num_agents>] [<checkpoint_id>] [<pretraining>] [<seed>] > log_training.txt 2>&1 &
-# Example: nohup python training-DTDE-spoiled_broth.py ./cuenca/input_0_0.txt baseline_division_of_labor_v2 0.0003 classic 1 none no 0 > log_training_map1.txt 2>&1 &
+# USE:   <input_path> <map_nr> <lr> <game_version> [<num_agents>] [<checkpoint_id>] [<pretraining>] [<seed>] > log_training.log 2>&1 &
+# Example: nohup python training-DTDE-spoiled_broth.py ./cuenca/input_0_0.txt baseline_division_of_labor_v2 0.0003 classic 1 none no 0 > log_training.log 2>&1 &
 
 import os
 import sys
@@ -56,7 +56,7 @@ else:
 # Hyperparameters - Optimized for parallel training
 NUM_ENVS = NUM_ENV_WORKERS  # Use all environment workers
 INNER_SECONDS = 180 # In seconds
-NUM_EPOCHS = 100
+NUM_EPOCHS = 200
 TRAIN_BATCH_SIZE = 4000  # Increased for better GPU utilization (NUM_ENVS * rollout_fragment_length * num_timesteps)
 SGD_MINIBATCH_SIZE = 500  # Optimized minibatch size for GPU
 NUM_SGD_ITER = 10  # Number of SGD iterations per training batch
@@ -70,23 +70,24 @@ MLP_LAYERS = [512, 512, 256]
 # Game characteristics
 PENALTIES_CFG = {
     "busy": 0.01, # Penalty per second spent busy
-    "useless_action": 5.0, # Penalty for useless actions
+    "useless_action": 2.0, # Penalty for useless actions
     "destructive_action": 10.0, # Penalty for destructive actions
     "inaccessible_tile": 5.0, # Penalty for trying to access an inaccessible tile
+    "not_available": 2.0, # Penalty for trying to perform an action that is not available
 }
 
 REWARDS_CFG = {
-    "raw_food": 2.0,
-    "plate": 2.0,
-    "counter": 0.5,
-    "cut": 5.0,
-    "salad": 7.0,
+    "raw_food": 0.0,
+    "plate": 0.0,
+    "counter": 0.0,
+    "cut": 0.0,
+    "salad": 0.0,
     "deliver": 10.0,
 }
 
 # Dynamic rewards configuration - exponential decay [rewards_cfg = original_rewards_cfg * exp(-decay_rate * (episode - decay_start_episode))]
 DYNAMIC_REWARDS_CFG = {
-    "enabled": True,  # Set to False to disable dynamic rewards
+    "enabled": False,  # Set to False to disable dynamic rewards
     "decay_rate": 0.005,  # Decay rate for exponential function (higher = faster decay)
     "min_reward_multiplier": 0.00,  # Minimum multiplier (e.g., 0.1 = 10% of initial reward)
     "decay_start_episode": 100,  # Episode to start applying decay (0 = from beginning)

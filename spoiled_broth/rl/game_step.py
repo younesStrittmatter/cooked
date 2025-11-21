@@ -7,7 +7,7 @@ from engine.extensions.topDownGridWorld.a_star import grid_to_world, Node, find_
 from spoiled_broth.rl.action_space import get_rl_action_space
 import math
 
-def update_agents_directly(self, validated_actions, advanced_time, action_info, agent_events):
+def update_agents_directly(self, advanced_time, agent_events):
     """
     Directly update game state without going through the engine.
     Handles agent movement, action completion, and state updates.
@@ -20,13 +20,13 @@ def update_agents_directly(self, validated_actions, advanced_time, action_info, 
             update_agent_movement(self, agent, advanced_time)
         
         # Handle action completion if agent was performing an action
-        if agent_id in action_info and hasattr(agent, 'busy_until'):
-            action_data = action_info[agent_id]
+        if agent_id in self.action_info and self.busy_until.get(agent_id) is not None:
+            action_data = self.action_info[agent_id]
             # Check if action should complete within advanced_time
-            if agent.busy_until <= self._elapsed_time:
+            if action_data is not None and self.busy_until[agent_id] is not None and self.busy_until[agent_id] <= self._elapsed_time:
                 complete_agent_action(self, agent_id, agent, action_data, agent_events)
 
-def update_agent_movement(self, agent, delta_time):
+def update_agent_movement(self, agent, advanced_time):
     """Update agent position along their path using A* trajectory and walking speed."""
     if not hasattr(agent, 'path') or not agent.path or not hasattr(agent, 'path_index'):
         return
@@ -37,7 +37,7 @@ def update_agent_movement(self, agent, delta_time):
     def close(a, b, tolerance=TILE_SNAP_THRESHOLD):
         return abs(a - b) < tolerance
     
-    d_t = delta_time / PHYSICS_STEPS
+    d_t = advanced_time / PHYSICS_STEPS
     
     for i in range(PHYSICS_STEPS):
         if agent.path_index >= len(agent.path):
@@ -63,7 +63,6 @@ def update_agent_movement(self, agent, delta_time):
 def complete_agent_action(self, agent_id, agent, action_data, agent_events):
     """Complete an agent's action by updating game state directly."""
     tile_index = action_data['tile_index']
-    action_type = action_data['action_type']
     
     # Get the tile
     grid_w = self.game.grid.width
@@ -94,7 +93,8 @@ def complete_agent_action(self, agent_id, agent, action_data, agent_events):
             handle_delivery_action(self, agent, tile, action_data)
     
     # Clear the busy state now that the action is complete
-    agent.busy_until = 0
+    self.busy_until[agent_id] = None
+    self.action_info[agent_id] = None
 
 def handle_dispenser_action(self, agent, tile, action_data):
     """Handle picking up items from dispensers."""

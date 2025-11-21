@@ -9,7 +9,7 @@ detailed debugging of what happens during training.
 Usage: python training-debug-DTDE-spoiled_broth.py <input_path> <map_nr> <lr> <game_version> [<num_agents>] [<checkpoint_id>] [<pretraining>] [<seed>]
 
 Example:
-python training-debug-DTDE-spoiled_broth.py cuenca/input_0_0.txt baseline_division_of_labor_v2 0.001 classic 2 none none 42
+nohup python training-debug-DTDE-spoiled_broth.py cuenca/input_0_0.txt baseline_division_of_labor_v2 0.0003 classic 2 none none 0 > debug_training.log 2>&1 &
 
 This will create a debug training folder with:
 - Regular training checkpoints and stats
@@ -43,7 +43,7 @@ NUM_CPUS = 10
 CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
 
 # DEBUG SETTINGS
-DEBUG_MAX_EPOCHS = 200 # Maximum number of training epochs for debugging
+DEBUG_MAX_EPOCHS = 100 # Maximum number of training epochs for debugging
 DEBUG_CAPTURE_ALL_EPISODES = True  # Capture simulation data for every episode
 DEBUG_SAVE_EVERY_N_EPOCHS = 100  # Save checkpoint more frequently for debugging
 
@@ -107,9 +107,10 @@ MLP_LAYERS = [512, 512, 256]
 # Game characteristics
 PENALTIES_CFG = {
     "busy": 0.01, # Penalty per second spent busy
-    "useless_action": 5.0, # Penalty for useless actions
+    "useless_action": 2.0, # Penalty for useless actions
     "destructive_action": 10.0, # Penalty for destructive actions
     "inaccessible_tile": 5.0, # Penalty for trying to access an inaccessible tile
+    "not_available": 2.0, # Penalty for trying to perform an action that is not available
 }
 
 REWARDS_CFG = {
@@ -308,5 +309,4 @@ if episode_data_summary:
 
 print(f"\nDebug training completed!")
 print(f"Main training directory: {path}")
-print(f"Episode data directory: {episodes_dir}")
 print(f"Use these files to debug what happens during training episodes.")

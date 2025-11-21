@@ -5,6 +5,8 @@ from datetime import datetime
 import numpy as np
 from spoiled_broth.rl.game_env import GameEnv
 from spoiled_broth.rl.observation_space import game_to_obs_vector
+from spoiled_broth.rl.action_space import get_rl_action_space, convert_action_to_tile
+from spoiled_broth.world.tiles import Counter
 
 
 class GameEnvDebug(GameEnv):
@@ -89,32 +91,18 @@ class GameEnvDebug(GameEnv):
         if self.current_episode_dir is not None:
             self._track_agent_items_before_step()
         
-        # Store validated actions for debugging tile information
-        # We need to do action validation to get tile indices
-        self._last_validated_actions = {}
-        for agent_id, action_idx in actions.items():
-            if agent_id in self.agent_map:
-                agent = self.agent_map[agent_id]
-                # Use the same action processing as the parent class
-                from spoiled_broth.rl.action_space import get_rl_action_space, convert_action_to_tile
-                action_name = get_rl_action_space(self.game_mode)[action_idx]
-                tile_index = convert_action_to_tile(agent, self.game, action_name, distance_map=getattr(self, 'distance_map', None))
-                
-                validated_action = {
-                    'action_idx': action_idx,
-                    'action_name': action_name,
-                    'tile_index': tile_index if tile_index is not None else -1,
-                    'action_type': 'unknown'
-                }
-                self._last_validated_actions[agent_id] = validated_action
-            
-        # Log actions before step if capturing
-        if self.current_episode_dir is not None:
-            self._log_episode_actions(actions)
-            
-        # Call parent step
+        # Store original actions for logging reference
+        self._original_actions = actions.copy()
+        
+        # Call parent step to get the actual validated_actions
+        # We need to capture the validated_actions from the parent class
         observations, rewards, terminations, truncations, infos = super().step(actions)
         
+        # Log validated actions after step if capturing 
+        # Now we can access the validated_actions from the parent step method
+        if self.current_episode_dir is not None:
+            self._log_validated_actions()
+            
         # Increment frame count
         self.frame_count += 1
         
@@ -123,7 +111,7 @@ class GameEnvDebug(GameEnv):
             self._log_episode_state()
             self._log_episode_observations(observations)
             self._log_episode_counters()
-            self._log_item_state_changes(actions)
+            self._log_item_state_changes()
         
         # If episode is done, prepare summary data
         if any(terminations.values()) or any(truncations.values()):
@@ -207,50 +195,39 @@ class GameEnvDebug(GameEnv):
                         getattr(obj, 'score', 0)
                     ])
 
-    def _log_episode_actions(self, actions):
-        """Log actions to episode data."""
+    def _log_validated_actions(self):
+        """Log only the validated actions (those that were actually processed by the game) to episode data."""
         if self.current_episode_dir is None:
             return
             
         action_csv_path = self.current_episode_dir / "actions.csv"
         with open(action_csv_path, 'a', newline='') as f:
             writer = csv.writer(f)
-            for agent_id, action_idx in actions.items():
-                # Get action name from action space
-                from spoiled_broth.rl.action_space import get_rl_action_space
-                action_space = get_rl_action_space(self.game_mode)
-                action_name = action_space[action_idx] if 0 <= action_idx < len(action_space) else f"unknown_{action_idx}"
-                
-                # Get tile information for this action
-                tile_index = -1
-                tile_x = -1
-                tile_y = -1
-                
-                # Try to get tile index from the action validation process
-                if hasattr(self, 'agent_map') and agent_id in self.agent_map:
-                    agent = self.agent_map[agent_id]
-                    # Check if we can get tile index from recent action processing
-                    # This might be stored in validated_actions or action processing
-                    if hasattr(self, '_last_validated_actions') and agent_id in self._last_validated_actions:
-                        validated_action = self._last_validated_actions[agent_id]
-                        if validated_action and 'tile_index' in validated_action:
-                            tile_index = validated_action['tile_index']
-                            # Calculate tile coordinates from index
-                            if hasattr(self.game, 'grid') and tile_index is not None and tile_index >= 0:
-                                grid_w = self.game.grid.width
-                                tile_x = tile_index % grid_w
-                                tile_y = tile_index // grid_w
-                
-                writer.writerow([
-                    agent_id, 
-                    self.frame_count, 
-                    self._elapsed_time,  # Use actual episode time
-                    action_idx,
-                    action_name,
-                    tile_index,
-                    tile_x,
-                    tile_y
-                ])
+            
+            # Only log actions that were actually validated by the parent GameEnv
+            if hasattr(self, '_logging_actions'):
+                for agent_id, validated_action in self._logging_actions.items():
+                    elapsed_time = validated_action["elapsed_time"]
+
+                    # Extract validated action data
+                    action_idx = validated_action['action_idx']
+                    action_name = validated_action['action_name'] 
+                    tile_index = validated_action['tile_index']
+                    
+                    # Calculate tile coordinates from validated data
+                    tile_x = validated_action.get('x', -1)
+                    tile_y = validated_action.get('y', -1)
+                    
+                    writer.writerow([
+                        agent_id, 
+                        self.frame_count,
+                        elapsed_time,
+                        action_idx,
+                        action_name,
+                        tile_index,
+                        tile_x,
+                        tile_y
+                    ])
 
     def _log_episode_observations(self, observations):
         """Log observations to episode data."""
@@ -288,9 +265,7 @@ class GameEnvDebug(GameEnv):
             position_to_item = {}
             
             try:
-                # Import Counter class to check isinstance
-                from spoiled_broth.world.tiles import Counter
-                
+                # Import Counter class to check isinstance                
                 for x in range(grid.width):
                     for y in range(grid.height):
                         tile = grid.tiles[x][y]
@@ -325,9 +300,7 @@ class GameEnvDebug(GameEnv):
         grid = getattr(self.game, 'grid', None)
         if grid is not None:
             try:
-                # Import Counter class to check isinstance
-                from spoiled_broth.world.tiles import Counter
-                
+                # Import Counter class to check isinstance                
                 for x in range(grid.width):
                     for y in range(grid.height):
                         tile = grid.tiles[x][y]
@@ -367,7 +340,7 @@ class GameEnvDebug(GameEnv):
             if agent_id.startswith('ai_rl_'):
                 self.previous_agent_items[agent_id] = getattr(obj, 'item', None)
 
-    def _log_item_state_changes(self, actions):
+    def _log_item_state_changes(self):
         """Log detailed item state changes to help debug delivery/salad mismatches."""
         if self.current_episode_dir is None:
             return
@@ -387,9 +360,12 @@ class GameEnvDebug(GameEnv):
                     "agent_score_before", "agent_score_after", "score_changed"
                 ])
             
-            # Check each agent for changes
+            # Check each agent for changes - only log for agents that had validated actions
             for agent_id, obj in self.game.gameObjects.items():
-                if agent_id.startswith('ai_rl_') and agent_id in actions:
+                if (agent_id.startswith('ai_rl_') and 
+                    hasattr(self, '_original_actions') and 
+                    agent_id in self._original_actions):
+                    
                     current_item = getattr(obj, 'item', None)
                     previous_item = self.previous_agent_items.get(agent_id, None)
                     current_score = getattr(obj, 'score', 0)
@@ -405,26 +381,23 @@ class GameEnvDebug(GameEnv):
                         elif previous_item != current_item:
                             change_type = "item_transformed"
                     
-                    # Get action info
-                    action_idx = actions[agent_id]
-                    from spoiled_broth.rl.action_space import get_rl_action_space
+                    # Default action info (for cases where action wasn't validated)
+                    action_idx = self._original_actions[agent_id] if hasattr(self, '_original_actions') else -1
                     action_space = get_rl_action_space(self.game_mode)
                     action_name = action_space[action_idx] if 0 <= action_idx < len(action_space) else f"unknown_{action_idx}"
                     
-                    # Get tile information
+                    # Get tile information - use validated action data if available
                     tile_index = -1
                     tile_x = -1
                     tile_y = -1
                     
-                    if hasattr(self, '_last_validated_actions') and agent_id in self._last_validated_actions:
-                        validated_action = self._last_validated_actions[agent_id]
-                        if validated_action and 'tile_index' in validated_action:
-                            tile_index = validated_action['tile_index']
-                            # Calculate tile coordinates from index
-                            if hasattr(self.game, 'grid') and tile_index is not None and tile_index >= 0:
-                                grid_w = self.game.grid.width
-                                tile_x = tile_index % grid_w
-                                tile_y = tile_index // grid_w
+                    if hasattr(self, '_logging_actions') and agent_id in self._logging_actions:
+                        validated_action = self._logging_actions[agent_id]
+                        action_idx = validated_action['action_idx']
+                        action_name = validated_action['action_name']
+                        tile_index = validated_action['tile_index']
+                        tile_x = validated_action.get('x', -1)
+                        tile_y = validated_action.get('y', -1)
                     
                     # Log the change (even if no change, for completeness)
                     writer.writerow([
@@ -471,7 +444,7 @@ class GameEnvDebug(GameEnv):
             
             # Add action statistics
             self.last_episode_data[f'total_actions_{agent_id}'] = self.total_actions_asked.get(agent_id, 0)
-            self.last_episode_data[f'actions_not_performed_{agent_id}'] = self.total_actions_not_performed.get(agent_id, 0)
+            self.last_episode_data[f'actions_not_available_{agent_id}'] = self.total_actions_not_available.get(agent_id, 0)
             self.last_episode_data[f'inaccessible_actions_{agent_id}'] = self.total_actions_inaccessible.get(agent_id, 0)
             
             # Add event statistics

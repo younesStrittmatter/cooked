@@ -7,7 +7,7 @@ generating comprehensive visualizations and statistics.
 
 Usage:
 nohup python analysis_classic.py <map_name> [options] > analysis_classic.log 2>&1 &
- 
+
 Example:
 nohup python analysis_classic.py baseline_division_of_labor > analysis_classic.log 2>&1 &
 """
@@ -27,7 +27,11 @@ from spoiled_broth.analysis.utils import (
 
 
 def generate_classic_plots(analysis_results):
-    """Generate all plots specific to classic experiments."""
+    """Generate all plots specific to classic experiments.
+    
+    Note: All metrics in df are already averaged across NUM_ENVS during data loading.
+    Each row represents the mean of NUM_ENVS parallel environments for that episode.
+    """
     df = analysis_results['df']
     paths = analysis_results['paths']
     plotter = analysis_results['plotter']
@@ -95,11 +99,11 @@ def generate_classic_plots(analysis_results):
     plotter.plot_agent_metrics(df, paths['smoothed_figures_dir'], movement_metrics_2, 2, smoothed=True)
     
     # Generate combined plots (use smoothing factor from config)
+    # Note: Smoothing groups episodes into blocks and averages within blocks
+    # This is separate from NUM_ENVS averaging which happens during data loading
     smoothing_factor = analysis_results.get('config').smoothing_factor if analysis_results.get('config') else 15
     generate_combined_plots(df, paths, rewarded_metrics_1, rewarded_metrics_2, 
-                           movement_metrics_1, movement_metrics_2, smoothing_factor)
-    
-    # Generate meaningful actions combined plots (excluding counter)
+                           movement_metrics_1, movement_metrics_2, smoothing_factor)    # Generate meaningful actions combined plots (excluding counter)
     generate_meaningful_actions_combined(df, paths, base_rewarded_metrics, base_movement_metrics, smoothing_factor)
     
     # Combined reward plots for both agents
@@ -125,6 +129,7 @@ def generate_combined_reward_plots(df, paths, smoothing_factor=15):
         plt.figure(figsize=(10, 6))
         
         # Agent 1 pure reward
+        # Note: This groupby averages N consecutive episodes for smoothing (not NUM_ENVS averaging)
         block_means_1 = lr_filtered.groupby("episode_block")["pure_reward_ai_rl_1"].mean()
         middle_episodes = lr_filtered.groupby("episode_block")["episode"].median()
         plt.plot(middle_episodes, block_means_1, label="Agent 1", color="#2980B9", linewidth=2)
