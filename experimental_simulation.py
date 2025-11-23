@@ -14,6 +14,19 @@ IMPORTANT: The simulation includes a 15-second initialization period where agent
 are positioned but do not perform any actions. This ensures complete system
 stabilization and prevents teleportation artifacts.
 
+Custom Checkpoints:
+Use --custom_checkpoints to specify different policies/checkpoints for each agent
+
+Checkpoint configuration file format (2 lines per agent):
+Line 1: policy_id_to_load (e.g., policy_ai_rl_1, policy_ai_rl_2, etc.)
+Line 2: path_to_checkpoint_directory
+
+Example checkpoints_config.txt for 2 agents:
+policy_ai_rl_1
+/path/to/Training_2025-11-15_13-23-45/checkpoint_final
+policy_ai_rl_2  
+/path/to/Training_2025-11-16_14-30-12/checkpoint_100
+
 Usage:
 python experimental_simulation.py <map_nr> <game_version> <training_id> <checkpoint_number> [options]
 
@@ -21,6 +34,8 @@ For background execution:
 nohup python experimental_simulation.py <map_nr> <game_version> <training_id> <checkpoint_number> [options] > experimental_simulation.log 2>&1 &
 
 Example:
+nohup python experimental_simulation.py baseline_division_of_labor_v2 classic 2025-11-15_13-23-45 final --custom_checkpoints ./cuenca/checkpoints.txt > experimental_simulation.log 2>&1 &
+
 nohup python experimental_simulation.py baseline_division_of_labor_v2 classic 2025-11-15_13-23-45 final --num_agents 1 --enable_video true --duration 60 --agent_initialization_period 10 > experimental_simulation.log 2>&1 &
 """
 
@@ -95,6 +110,7 @@ def main():
     print(f"Cluster: {args.cluster}")
     print(f"Duration: {args.duration} seconds gameplay (+ {args.agent_initialization_period}s initialization = {args.duration + args.agent_initialization_period}s total)")
     print(f"Tick rate: {args.tick_rate} FPS")
+    print(f"Checkpoint config: {args.custom_checkpoints}")
     print(f"Note: First {args.agent_initialization_period} seconds are agent initialization period (no actions)")
     print(f"Note: Requested duration refers to active gameplay time, not total simulation time")
     print("=" * 50)
@@ -112,7 +128,8 @@ def main():
             duration=args.duration,
             tick_rate=args.tick_rate,
             video_fps=args.video_fps,
-            agent_initialization_period=args.agent_initialization_period
+            agent_initialization_period=args.agent_initialization_period,
+            custom_checkpoints=args.custom_checkpoints
         )
         
         # Setup logging to save in simulation directory

@@ -35,6 +35,9 @@ class SimulationConfig:
     walking_speeds: Dict[str, float] = None
     cutting_speeds: Dict[str, float] = None
     
+    # Checkpoint configuration
+    custom_checkpoints: Dict[str, Dict[str, str]] = None
+    
     def __post_init__(self):
         if self.cluster_paths is None:
             self.cluster_paths = {
@@ -48,6 +51,8 @@ class SimulationConfig:
             self.walking_speeds = {}
         if self.cutting_speeds is None:
             self.cutting_speeds = {}
+        if self.custom_checkpoints is None:
+            self.custom_checkpoints = {}
     
     def validate_cluster(self):
         """Validate cluster configuration."""

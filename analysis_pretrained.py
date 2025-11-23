@@ -16,12 +16,26 @@ nohup python analysis_pretrained.py baseline_division_of_labor_v2 --cluster cuen
 import sys
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 
 # Add the project root to the path to import utilities
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from spoiled_broth.analysis.utils import (
     setup_argument_parser, main_analysis_pipeline, MetricDefinitions
+)
+from spoiled_broth.analysis.individual_training_classic_plots import (
+    generate_individual_basic_metrics_plots,
+    generate_individual_combined_reward_plots,
+    generate_individual_combined_delivery_cut_plots,
+    generate_individual_meaningful_actions_combined,
+    generate_individual_combined_plots
+)
+from spoiled_broth.analysis.multi_training_classic_plots import (
+    generate_combined_plots,
+    generate_meaningful_actions_combined,
+    generate_combined_reward_plots,
+    generate_combined_delivery_cut_plots
 )
 
 
@@ -81,7 +95,6 @@ def generate_pretrained_plots(analysis_results):
 
 def generate_individual_training_plots(analysis_results):
     """Generate plots for each individual training session."""
-    import matplotlib.pyplot as plt
     
     df = analysis_results['df']
     paths = analysis_results['paths']
@@ -227,9 +240,8 @@ def generate_attitude_analysis(analysis_results):
 
 
 def generate_individual_attitude_plots(df, paths, unique_individual_attitudes, config, individual_trainings=False):
-    """Generate plots for individual attitudes with averaged metrics."""
-    import matplotlib.pyplot as plt
-    
+    """Generate plots for individual attitudes with averaged metrics."""    
+
     N = config.smoothing_factor
     unique_lr = df["lr"].unique()
     
@@ -302,7 +314,6 @@ def generate_individual_attitude_plots(df, paths, unique_individual_attitudes, c
 
 def generate_individual_training_attitude_plots(filtered_subset, paths, individual_attitude, lr, degree, N, available_rewarded_metrics):
     """Generate individual training plots for a specific attitude."""
-    import matplotlib.pyplot as plt
     
     # Create directory for individual training attitude plots
     individual_attitude_dir = os.path.join(paths['smoothed_figures_dir'], 'individual_trainings_by_attitude')
@@ -348,7 +359,6 @@ def generate_individual_training_attitude_plots(filtered_subset, paths, individu
 
 def generate_combined_attitude_plots(df, paths, unique_attitudes, config, individual_trainings=False):
     """Generate plots showing metrics averaged over all other agent attitudes."""
-    import matplotlib.pyplot as plt
     
     N = config.smoothing_factor
     unique_lr = df["lr"].unique()

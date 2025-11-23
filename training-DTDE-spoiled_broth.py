@@ -1,5 +1,5 @@
-# USE:   <input_path> <map_nr> <lr> <game_version> [<num_agents>] [<checkpoint_id>] [<pretraining>] [<seed>] > log_training.log 2>&1 &
-# Example: nohup python training-DTDE-spoiled_broth.py ./cuenca/input_0_0.txt baseline_division_of_labor_v2 0.0003 classic 1 none no 0 > log_training.log 2>&1 &
+# USE:   <cluster> <input_path> <map_nr> <lr> <game_version> [<num_agents>] [<num_epochs>] [<seed>] [<checkpoints>] > log_training.log 2>&1 &
+# Example: nohup python training-DTDE-spoiled_broth.py cuenca ./cuenca/input_0_0.txt baseline_division_of_labor_v2 0.0003 classic 1 1000 0 none > log_training.log 2>&1 &
 
 import os
 import sys
@@ -13,7 +13,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 
 # Read input file
 CLUSTER = str(sys.argv[1]).lower()
-input_path = sys.argv[2]
+INPUT_PATH = sys.argv[2]
 MAP_NR = str(sys.argv[3]).lower()
 LR = float(sys.argv[4])
 GAME_VERSION = str(sys.argv[5]).lower() ## If game_version = classic, one type of food (tomato); if game_version = competition, two types of food (tomato and pumpkin)
@@ -24,20 +24,20 @@ if len(sys.argv) > 6:
 else:
     NUM_AGENTS = 2  # Default to 2 agents for backward compatibility
 
-# Optional checkpoint paths for loading pretrained policies
-CHECKPOINT_ID = str(sys.argv[7]) if len(sys.argv) > 7 else None
-PRETRAINING = str(sys.argv[8]) if len(sys.argv) > 8 else None
-SEED = int(sys.argv[9]) if len(sys.argv) > 9 else 0
-NUM_EPOCHS = int(sys.argv[10]) if len(sys.argv) > 10 else 500
+NUM_EPOCHS = int(sys.argv[7]) if len(sys.argv) > 7 else 500
+SEED = int(sys.argv[8]) if len(sys.argv) > 8 else 0
 
-with open(input_path, "r") as f:
+# Optional checkpoint paths for loading pretrained policies (CHECKPOINT_PATHS should be a file with three lines per agent)
+# Line 1: policy_id_to_be_loaded (policy_ai_rl_1, policy_ai_rl_2, etc.)
+# Line 2: checkpoint_number
+# Line 3: path_to_checkpoint
+CHECKPOINT_PATHS = sys.argv[9] if len(sys.argv) > 9 else "none"
+
+with open(INPUT_PATH, "r") as f:
     lines = f.readlines()
-    alpha_1, beta_1 = [round(float(x), 4) for x in lines[0].strip().split()]
-    walking_speed_1, cutting_speed_1 = [round(float(x), 4) for x in lines[1].strip().split()]
-    if NUM_AGENTS == 2:
-        alpha_2, beta_2 = [round(float(x), 4) for x in lines[2].strip().split()]
-        walking_speed_2, cutting_speed_2 = [round(float(x), 4) for x in lines[3].strip().split()]    
-
+    for i in range(NUM_AGENTS):
+        globals()[f"alpha_{i+1}"], globals()[f"beta_{i+1}"] = [round(float(x), 4) for x in lines[2*i].strip().split()]
+        globals()[f"walking_speed_{i+1}"], globals()[f"cutting_speed_{i+1}"] = [round(float(x), 4) for x in lines[2*i + 1].strip().split()]
 
 ##### Cluster config ##################
 NUM_ENV_WORKERS = 8  # Parallel environment workers
@@ -50,7 +50,7 @@ if CLUSTER == 'brigit':
 elif CLUSTER == 'cuenca':
     local = ''
     # Resource allocation optimized for RL training
-    NUM_GPUS = 0.2  # Full GPU for neural network training
+    NUM_GPUS = 0.1  # Full GPU for neural network training
     NUM_CPUS = 12   # Increased CPU cores for parallel environments
 elif CLUSTER == 'local':
     local = 'D:/OneDrive - Universidad Complutense de Madrid (UCM)/Doctorado'
@@ -116,40 +116,33 @@ WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next
 # Path definitions
 if NUM_AGENTS == 1:
     save_dir = f'{local}/data/samuel_lozano/cooked/pretraining/{GAME_VERSION}/map_{MAP_NR}'
-    reward_weights = {"ai_rl_1": (alpha_1, beta_1)}
-    walking_speeds = {"ai_rl_1": walking_speed_1}
-    cutting_speeds = {"ai_rl_1": cutting_speed_1}
+    reward_weights = {"ai_rl_1": (globals()[f"alpha_1"], globals()[f"beta_1"])}
+    walking_speeds = {"ai_rl_1": globals()[f"walking_speed_1"]}
+    cutting_speeds = {"ai_rl_1": globals()[f"cutting_speed_1"]}
 else: 
     save_dir = f'{local}/data/samuel_lozano/cooked/{GAME_VERSION}/map_{MAP_NR}'
-    reward_weights = {
-        "ai_rl_1": (alpha_1, beta_1),
-        "ai_rl_2": (alpha_2, beta_2),
-    }
-    walking_speeds = {
-        "ai_rl_1": walking_speed_1,
-        "ai_rl_2": walking_speed_2,
-    }
-    cutting_speeds = {
-        "ai_rl_1": cutting_speed_1,
-        "ai_rl_2": cutting_speed_2,
-    }
+    reward_weights, walking_speeds, cutting_speeds = {}, {}, {}
+    for i in range(1, NUM_AGENTS + 1):
+        reward_weights[f"ai_rl_{i}"] = (globals()[f"alpha_{i}"], globals()[f"beta_{i}"])
+        walking_speeds[f"ai_rl_{i}"] = globals()[f"walking_speed_{i}"]
+        cutting_speeds[f"ai_rl_{i}"] = globals()[f"cutting_speed_{i}"]
 
 os.makedirs(save_dir, exist_ok=True)
 
-pretrained_policies = {}
-
-if CHECKPOINT_ID is not None and CHECKPOINT_ID.lower() != "none":
-    if PRETRAINING.upper() == "YES":
-        CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/{GAME_VERSION}/map_{MAP_NR}/Training_{CHECKPOINT_ID}'
-    else:
-        CHECKPOINT_PATH = f'{save_dir}/Training_{CHECKPOINT_ID}'
-
-    if NUM_AGENTS == 1:
-        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
-
-    elif NUM_AGENTS == 2:
-        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
-        pretrained_policies["ai_rl_2"] = {"path": CHECKPOINT_PATH}
+pretrained_policies = None
+# Load pretrained policies if specified
+if CHECKPOINT_PATHS != "none":
+    pretrained_policies = {}
+    with open(CHECKPOINT_PATHS, "r") as f:
+        lines = f.readlines()
+        for i in range(NUM_AGENTS):
+            policy_id = str(lines[3*i]).strip()
+            checkpoint_number = str(lines[3*i + 1]).strip()
+            checkpoint_path = str(lines[3*i + 2]).strip()
+            if policy_id.lower() != "none" and checkpoint_number.lower() != "none" and checkpoint_path.lower() != "none":
+                pretrained_policies[f"ai_rl_{i+1}"] = {"source_policy_id": policy_id, "checkpoint_number": checkpoint_number, "path": checkpoint_path}
+            else:
+                pretrained_policies[f"ai_rl_{i+1}"] = None
 
 # Determine grid size from map file (text format)
 map_txt_path = os.path.join(os.path.dirname(__file__), 'spoiled_broth', 'maps', f'{MAP_NR}.txt')
@@ -160,8 +153,8 @@ with open(map_txt_path, 'r') as f:
 rows = len(map_lines)
 cols = len(map_lines[0]) if rows > 0 else 0
 if rows != cols:
-    raise ValueError(f"Map must be square, but got {rows} rows and {cols} columns.")
-GRID_SIZE = (rows, cols)
+    print(f"WARNING: Map is not square, this could cause errors in the future (got {rows} rows and {cols} columns).")
+GRID_SIZE = (cols, rows)
 
 # RLlib specific configuration - Optimized for GPU training
 config = {
@@ -188,8 +181,7 @@ config = {
     "DYNAMIC_PPO_PARAMS_CFG": DYNAMIC_PPO_PARAMS_CFG,
     "WAIT_FOR_COMPLETION": WAIT_FOR_ACTION_COMPLETION,
     "SAVE_DIR": save_dir,
-    "CHECKPOINT_ID_USED": pretrained_policies,  # Add pretrained policies configuration
-    "PRETRAINED": PRETRAINING if PRETRAINING else "No",
+    "CHECKPOINTS": pretrained_policies,  # Add pretrained policies configuration
     # RLlib specific parameters - Optimized for GPU
     "NUM_ENV_WORKERS": NUM_ENV_WORKERS,  # Parallel environment workers (CPU)
     "NUM_LEARNER_WORKERS": NUM_LEARNER_WORKERS,  # GPU learner workers

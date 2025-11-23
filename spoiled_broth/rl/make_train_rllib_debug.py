@@ -1,8 +1,4 @@
 import os
-import pickle
-import math
-import csv
-import time
 from pathlib import Path
 from datetime import datetime
 from ray.rllib.algorithms.ppo import PPOConfig
@@ -12,7 +8,6 @@ from ray.tune.registry import register_env
 from spoiled_broth.rl.game_env_debug import GameEnvDebug
 from spoiled_broth.rl.dynamic_ppo_params import calculate_dynamic_ppo_params
 import warnings
-from ray.tune.logger import CSVLogger
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def env_creator_debug(config):
@@ -68,7 +63,7 @@ def make_train_rllib_debug(config):
         env_cfg = {
             "map_nr": config["MAP_NR"],
             "grid_size": config.get("GRID_SIZE", (8, 8)),
-            # pass path (prefer .npz) to distance map; can be None
+            "game_mode": config["GAME_VERSION"],
             "distance_map": distance_map_path,
             "walking_speeds": config.get("WALKING_SPEEDS", None),
             "cutting_speeds": config.get("CUTTING_SPEEDS", None),
@@ -84,15 +79,12 @@ def make_train_rllib_debug(config):
         )
         policies_to_train.append(f"policy_{agent_id}")
 
-    start_epoch = 0
-    end_epoch = config["NUM_EPOCHS"]
     start_episode = 0
     checkpoint_episodes = []
-    if "CHECKPOINT_ID_USED" in config and not ("PRETRAINED" in config and config["PRETRAINED"] == "Yes"): 
-        for agent_id, checkpoint_info in config["CHECKPOINT_ID_USED"].items():
+    if config["CHECKPOINTS"] is not None: 
+        for agent_id, checkpoint_info in config["CHECKPOINTS"].items():
             if checkpoint_info and "path" in checkpoint_info:
                 try:
-                    checkpoint_path = checkpoint_info["path"]
                     stats_path = os.path.join(checkpoint_info["path"], "training_stats.csv")
                     if os.path.exists(stats_path):
                         with open(stats_path, "r") as f:
@@ -113,8 +105,6 @@ def make_train_rllib_debug(config):
 
         if checkpoint_episodes:
             start_episode = min(checkpoint_episodes) + 1
-            start_epoch = start_episode
-            end_epoch = start_epoch + config["NUM_EPOCHS"]
 
     def dynamic_policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
         return f"policy_{agent_id}"
@@ -148,7 +138,7 @@ def make_train_rllib_debug(config):
                 "payoff_matrix": config.get("PAYOFF_MATRIX", [1,1,-2]),
                 "initial_seed": config.get("INITIAL_SEED", 0),
                 "wait_for_completion": config.get("WAIT_FOR_COMPLETION", True),
-                "start_epoch": start_episode,
+                "start_episode": start_episode,
                 "distance_map": distance_map_path,
                 "walking_speeds": config.get("WALKING_SPEEDS", None),
                 "cutting_speeds": config.get("CUTTING_SPEEDS", None),
@@ -202,111 +192,44 @@ def make_train_rllib_debug(config):
 
     checkpoint_log_lines = []
     # Load pretrained policies if specified in config
-    if "CHECKPOINT_ID_USED" in config: 
-        msg = f"Loading pretrained policies from checkpoints:\n {config['CHECKPOINT_ID_USED']}" 
+    if config["CHECKPOINTS"] is not None: 
+        msg = f"Loading pretrained policies from checkpoints:\n {config['CHECKPOINTS']}" 
         checkpoint_log_lines.append(msg)
-        if "PRETRAINED" in config and config["PRETRAINED"] == "Yes":
-            msg = f"\nPRETRAINING: Loading ai_rl_1 policy into all agents."
-            checkpoint_log_lines.append(msg)
-            # First, find and load the ai_rl_1 policy
-            ai_rl_1_policy_module = None
+        # Load each specified policy from its own checkpoint
+        for agent_id, checkpoint_info in config["CHECKPOINTS"].items():
+            if checkpoint_info and "path" in checkpoint_info:
+                try:
+                    checkpoint_path = checkpoint_info["path"]
+                    policy_id = checkpoint_info.get('policy_id', agent_id)
 
-            for agent_id, checkpoint_info in config["CHECKPOINT_ID_USED"].items():
-                if agent_id == "ai_rl_1" and checkpoint_info and "path" in checkpoint_info:
-                    try:
-                        checkpoint_path = checkpoint_info["path"]
-                        policy_id = f"policy_{agent_id}"
+                    # --- Load the MultiRLModule directly from checkpoint ---
+                    rl_module_path = os.path.join(
+                        checkpoint_path,
+                        "checkpoint_final",
+                        "learner_group",
+                        "learner",
+                        "rl_module"
+                    )
+                    multi_rl_module = MultiRLModule.from_checkpoint(rl_module_path)
 
-                        # --- Load the MultiRLModule directly from checkpoint ---
-                        rl_module_path = os.path.join(
-                            checkpoint_path,
-                            "checkpoint_final",
-                            "learner_group",
-                            "learner",
-                            "rl_module"
-                        )
-                        multi_rl_module = MultiRLModule.from_checkpoint(rl_module_path)
+                    if policy_id not in multi_rl_module.keys():
+                        raise ValueError(f"\nPolicy {policy_id} not found in the checkpoint.")
 
-                        if policy_id not in multi_rl_module.keys():
-                            raise ValueError(f"Policy {policy_id} not found in the checkpoint.")
+                    def load_weights(learner):
+                        if policy_id in learner.module:
+                            current_module = learner.module[policy_id]
+                            current_module.load_state_dict(multi_rl_module[policy_id].state_dict())
 
-                        # --- Extract the ai_rl_1 policy module ---
-                        ai_rl_1_policy_module = multi_rl_module[policy_id]
-                        msg = f"\nLoaded ai_rl_1 policy module from {checkpoint_path}"
-                        checkpoint_log_lines.append(msg)
-                        break
+                    trainer.learner_group.foreach_learner(load_weights)
 
-                    except Exception as e:
-                        msg = f"\nError loading ai_rl_1 policy: {e}"
-                        checkpoint_log_lines.append(msg)
-                        raise
-                    
-            if ai_rl_1_policy_module is None:
-                raise ValueError(f"\nai_rl_1 policy not found in {config['CHECKPOINT_ID_USED']} config")
+                    msg = f"\nSuccessfully loaded {agent_id} policy weights from {checkpoint_path}"
+                    checkpoint_log_lines.append(msg)
 
-            # Now load the ai_rl_1 policy into ALL policies
-            for agent_id, checkpoint_info in config["CHECKPOINT_ID_USED"].items():
-                if checkpoint_info and "path" in checkpoint_info:
-                    try:
-                        policy_id = f"policy_{agent_id}"
+                except Exception as e:
+                    msg = f"\nError loading {agent_id} policy: {e}"
+                    checkpoint_log_lines.append(msg)
+                    raise
 
-                        def load_weights(learner):
-                            if policy_id in learner.module:
-                                current_module = learner.module[policy_id]
-                                # Load ai_rl_1 weights into this policy
-                                current_module.load_state_dict(ai_rl_1_policy_module.state_dict())
-
-                        trainer.learner_group.foreach_learner(load_weights)
-
-                        msg = f"\nSuccessfully loaded ai_rl_1 policy weights into {agent_id} from {checkpoint_path}"
-                        checkpoint_log_lines.append(msg)
-
-                    except Exception as e:
-                        msg = f"\nError loading ai_rl_1 weights into {agent_id}: {e}"
-                        checkpoint_log_lines.append(msg)
-                        raise
-        else:
-            msg = f"\nNO PRETRAINING: Loading each policy from its own checkpoint."
-            checkpoint_log_lines.append(msg)
-            # Load each specified policy from its own checkpoint
-            for agent_id, checkpoint_info in config["CHECKPOINT_ID_USED"].items():
-                if checkpoint_info and "path" in checkpoint_info:
-                    try:
-                        checkpoint_path = checkpoint_info["path"]
-                        policy_id = f"policy_{agent_id}"
-
-                        # --- Load the MultiRLModule directly from checkpoint ---
-                        rl_module_path = os.path.join(
-                            checkpoint_path,
-                            "checkpoint_final",
-                            "learner_group",
-                            "learner",
-                            "rl_module"
-                        )
-                        multi_rl_module = MultiRLModule.from_checkpoint(rl_module_path)
-
-                        if policy_id not in multi_rl_module.keys():
-                            raise ValueError(f"\nPolicy {policy_id} not found in the checkpoint.")
-
-                        def load_weights(learner):
-                            if policy_id in learner.module:
-                                current_module = learner.module[policy_id]
-                                current_module.load_state_dict(multi_rl_module[policy_id].state_dict())
-
-                        trainer.learner_group.foreach_learner(load_weights)
-
-                        msg = f"\nSuccessfully loaded {agent_id} policy weights from {checkpoint_path}"
-                        checkpoint_log_lines.append(msg)
-
-                    except Exception as e:
-                        msg = f"\nError loading {agent_id} policy: {e}"
-                        checkpoint_log_lines.append(msg)
-                        raise
-
-            if checkpoint_episodes:
-                start_episode = min(checkpoint_episodes) + 1
-                start_epoch = start_episode
-                end_epoch = start_epoch + config["NUM_EPOCHS"]
     else:
         msg = f"No checkpoint specified, training from scratch."
         checkpoint_log_lines.append(msg)
@@ -325,7 +248,7 @@ def make_train_rllib_debug(config):
     # Track episode data for summary
     episode_data_summary = []
 
-    for epoch in range(start_epoch, end_epoch):
+    for epoch in range(config["NUM_EPOCHS"]):
         print(f"\n=== DEBUG TRAINING EPOCH {epoch} ===")
         
         # Update dynamic PPO parameters if configured
@@ -418,7 +341,7 @@ def make_train_rllib_debug(config):
             episode_data_summary.append(episode_info)
 
         # Log metrics
-        if (epoch - start_epoch - 1) % config["SHOW_EVERY_N_EPOCHS"] == 0:
+        if (epoch - 1) % config["SHOW_EVERY_N_EPOCHS"] == 0:
             print(f"Epoch {epoch} complete.")
             
             # Print episode info if available
@@ -429,7 +352,7 @@ def make_train_rllib_debug(config):
                         print(f"  {key}: {value}")
 
         # Save checkpoint
-        if (epoch - start_epoch - 1) % config["SAVE_EVERY_N_EPOCHS"] == 0:
+        if (epoch - 1) % config["SAVE_EVERY_N_EPOCHS"] == 0:
             # Get current episode count from training_stats.csv for checkpoint naming
             current_episode = epoch  # fallback to epoch if CSV reading fails
             stats_csv_path = os.path.join(path, "training_stats.csv")

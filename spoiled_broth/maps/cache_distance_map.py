@@ -203,7 +203,8 @@ if __name__ == "__main__":
 				# Create a temporary dummy file with a reasonable default value
 				np.save(dummy_max_dist_path, np.array(100.0))  # Temporary placeholder
 			
-			game = SpoiledBroth(map_nr=map_id)
+			grid_size = (len(open(map_file).readlines()[0].rstrip("\n")), len(open(map_file).readlines()))
+			game = SpoiledBroth(map_nr=map_id, grid_size=grid_size)
 			grid = game.grid
 			_ = load_or_compute_distance_map(game, grid, map_id)
 			print(f"    Done: distance_map_{map_id}.npz")

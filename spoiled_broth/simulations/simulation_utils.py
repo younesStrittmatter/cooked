@@ -101,6 +101,13 @@ def setup_simulation_argument_parser() -> argparse.ArgumentParser:
         help='Video recording frame rate'
     )
     
+    parser.add_argument(
+        '--custom_checkpoints',
+        type=str,
+        default='none',
+        help='Path to checkpoint configuration file with policy IDs and paths for each agent (format: policy_id\npath_to_checkpoint per agent), or "none" to use default checkpoint loading'
+    )
+    
     return parser
 
 
@@ -109,7 +116,8 @@ def main_simulation_pipeline(map_nr: str, num_agents: int,
                            checkpoint_number: str, enable_video: bool = True,
                            cluster: str = 'cuenca', duration: int = 180,
                            tick_rate: int = 24, video_fps: int = 24,
-                           agent_initialization_period: float = 15.0) -> Dict[str, Path]:
+                           agent_initialization_period: float = 15.0,
+                           custom_checkpoints: str = 'none') -> Dict[str, Path]:
     """
     Main simulation pipeline that can be used by different simulation scripts.
     
@@ -125,6 +133,7 @@ def main_simulation_pipeline(map_nr: str, num_agents: int,
         TICK_RATE: Engine tick rate
         VIDEO_FPS: Video frame rate
         AGENT_INITIALIZATION_PERIOD: Time period for agent initialization in seconds
+        CHECKPOINTS: Path to checkpoint configuration file or "none" for default behavior
     Returns:
         Dictionary containing output file paths
     """
@@ -140,6 +149,26 @@ def main_simulation_pipeline(map_nr: str, num_agents: int,
         temp_paths['training_path'], num_agents
     )
     
+    # Parse checkpoint configuration if provided
+    pretrained_checkpoints = None
+    if custom_checkpoints is not None and custom_checkpoints.lower() != 'none':
+        pretrained_checkpoints = {}
+        try:
+            with open(custom_checkpoints, "r") as f:
+                lines = f.readlines()
+                for i in range(num_agents):
+                    policy_id = str(lines[3*i]).strip()
+                    checkpoint_number = str(lines[3*i + 1]).strip()
+                    checkpoint_path = str(lines[3*i + 2]).strip()
+                    if policy_id.lower() != "none" and checkpoint_number.lower() != "none" and checkpoint_path.lower() != "none":
+                        pretrained_checkpoints[f"ai_rl_{i+1}"] = {"loaded_agent_id": policy_id, "checkpoint_number": checkpoint_number, "path": checkpoint_path}
+                    else:
+                        pretrained_checkpoints[f"ai_rl_{i+1}"] = None
+        except Exception as e:
+            print(f"Warning: Could not parse checkpoint configuration file '{custom_checkpoints}': {e}")
+            print("Using default checkpoint loading behavior")
+            pretrained_checkpoints = None
+    
     # Create configuration with loaded speeds
     config = SimulationConfig(
         cluster=cluster,
@@ -149,7 +178,8 @@ def main_simulation_pipeline(map_nr: str, num_agents: int,
         video_fps=video_fps,
         agent_initialization_period=agent_initialization_period,
         walking_speeds=walking_speeds,
-        cutting_speeds=cutting_speeds
+        cutting_speeds=cutting_speeds,
+        custom_checkpoints=pretrained_checkpoints
     )
     
     # Create timestamp

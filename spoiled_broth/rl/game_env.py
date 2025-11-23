@@ -9,7 +9,7 @@ import pickle as _pickle
 from spoiled_broth.rl.game_step import update_agents_directly, setup_agent_path
 from spoiled_broth.rl.action_space import get_rl_action_space, convert_action_to_tile
 from spoiled_broth.rl.observation_space import game_to_obs_vector
-from spoiled_broth.rl.classify_action_type import get_action_type_and_agent_events, get_action_type_list, ACTION_TYPE_INACCESSIBLE
+from spoiled_broth.rl.classify_action_type import get_action_type, get_action_type_list
 from spoiled_broth.rl.reward_analysis import get_rewards
 from spoiled_broth.rl.dynamic_rewards import calculate_dynamic_rewards
 from spoiled_broth.game import SpoiledBroth, random_game_state
@@ -100,7 +100,7 @@ class GameEnv(ParallelEnv):
         payoff_matrix=[1,1,-2],
         initial_seed=0,
         wait_for_completion=True,  # New parameter to control action completion waiting
-        start_epoch=0,
+        start_episode=0,
         distance_map=None,
         walking_speeds=None,
         cutting_speeds=None,
@@ -110,7 +110,7 @@ class GameEnv(ParallelEnv):
     ):
         super().__init__()
         self.map_nr = map_nr
-        self.episode_count = start_epoch
+        self.episode_count = start_episode
         self.game_mode = game_mode
         self._max_seconds_per_episode = inner_seconds
         self._elapsed_time = 0.0
@@ -283,6 +283,7 @@ class GameEnv(ParallelEnv):
                 }
         elif self.game_mode == "classic":
             self.total_agent_events = {agent_id: {"deliver": 0, "salad": 0, "cut": 0, "plate": 0, "raw_food": 0, "counter": 0} for agent_id in self.agents}
+            self.agent_food_type = None
         else:
             raise ValueError(f"Unknown game mode: {self.game_mode}")
 
@@ -378,7 +379,7 @@ class GameEnv(ParallelEnv):
                     logging_x = x
                     logging_y = y
                 
-                action_type, agent_events = get_action_type_and_agent_events(self, tile, agent, agent_id, agent_events, agent_food_type=self.agent_food_type if self.game_mode == "competition" else None, game_mode=self.game_mode, x=x, y=y, accessibility_map=self.accessibility_map, update_totals=False)
+                action_type = get_action_type(tile, agent, agent_id, agent_food_type=self.agent_food_type, game_mode=self.game_mode, x=x, y=y, accessibility_map=self.accessibility_map)
                 obs = self.observations.get(agent_id)
             
                 # Store validated action for debug access
@@ -470,7 +471,7 @@ class GameEnv(ParallelEnv):
         self._elapsed_time = next_time
 
         # Direct game state update instead of calling self.game.step()
-        update_agents_directly(self, advanced_time, agent_events)
+        agent_events = update_agents_directly(self, advanced_time, agent_events, agent_food_type=self.agent_food_type, game_mode=self.game_mode)
         self.agent_map = {agent_id: self.game.gameObjects[agent_id] for agent_id in self.agents}
 
         # Update totals for actions that just completed (for logging purposes only)

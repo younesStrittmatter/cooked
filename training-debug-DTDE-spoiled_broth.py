@@ -9,7 +9,7 @@ detailed debugging of what happens during training.
 Usage: python training-debug-DTDE-spoiled_broth.py <input_path> <map_nr> <lr> <game_version> [<num_agents>] [<checkpoint_id>] [<pretraining>] [<seed>]
 
 Example:
-nohup python training-debug-DTDE-spoiled_broth.py cuenca/input_0_0.txt baseline_division_of_labor_v2 0.0003 classic 2 none none 0 > debug_training.log 2>&1 &
+nohup python training-debug-DTDE-spoiled_broth.py cuenca cuenca/input_0_0.txt baseline_division_of_labor_v2 0.0003 classic 2 5 0 none > debug_training.log 2>&1 &
 
 This will create a debug training folder with:
 - Regular training checkpoints and stats
@@ -40,7 +40,6 @@ os.environ["MKL_NUM_THREADS"] = "1"
 ##### Cluster config ##################
 NUM_GPUS = 0.2
 NUM_CPUS = 10
-CLUSTER = 'cuenca'  # Options: 'brigit', 'local', 'cuenca'
 
 # DEBUG SETTINGS
 DEBUG_MAX_EPOCHS = 100 # Maximum number of training epochs for debugging
@@ -58,21 +57,25 @@ print(f"- Create detailed episode analysis files")
 print("=" * 60)
 
 # Read input file
-input_path = sys.argv[1]
-MAP_NR = str(sys.argv[2]).lower()
-LR = float(sys.argv[3])
-GAME_VERSION = str(sys.argv[4]).lower() ## If game_version = classic, one type of food (tomato); if game_version = competition, two types of food (tomato and pumpkin)
-if len(sys.argv) > 5:
-    NUM_AGENTS = int(sys.argv[5])
+CLUSTER = str(sys.argv[1]).lower()
+input_path = sys.argv[2]
+MAP_NR = str(sys.argv[3]).lower()
+LR = float(sys.argv[4])
+GAME_VERSION = str(sys.argv[5]).lower() ## If game_version = classic, one type of food (tomato); if game_version = competition, two types of food (tomato and pumpkin)
+if len(sys.argv) > 6:
+    NUM_AGENTS = int(sys.argv[6])
     if NUM_AGENTS not in [1, 2]:
         raise ValueError("NUM_AGENTS must be 1 or 2")
 else:
     NUM_AGENTS = 2  # Default to 2 agents for backward compatibility
 
-# Optional checkpoint paths for loading pretrained policies
-CHECKPOINT_ID = str(sys.argv[6]) if len(sys.argv) > 6 else None
-PRETRAINING = str(sys.argv[7]) if len(sys.argv) > 7 else None
+NUM_EPOCHS = int(sys.argv[7]) if len(sys.argv) > 7 else 500
 SEED = int(sys.argv[8]) if len(sys.argv) > 8 else 0
+
+# Optional checkpoint paths for loading pretrained policies (CHECKPOINT_PATHS should be a file with two lines per agent)
+# Line 1: policy_id_to_be_loaded (policy_ai_rl_1, policy_ai_rl_2, etc.)
+# Line 2: path_to_checkpoint
+CHECKPOINT_PATHS = sys.argv[9] if len(sys.argv) > 9 else "none"
 
 with open(input_path, "r") as f:
     lines = f.readlines()
@@ -145,41 +148,32 @@ WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next
 # Path definitions - use debug_training for all scenarios
 save_dir = f'{local}/data/samuel_lozano/cooked/debug_training/{GAME_VERSION}/map_{MAP_NR}'
 
-# Agent configuration based on actual number of agents
+# Path definitions
 if NUM_AGENTS == 1:
-    reward_weights = {"ai_rl_1": (alpha_1, beta_1)}
-    walking_speeds = {"ai_rl_1": walking_speed_1}
-    cutting_speeds = {"ai_rl_1": cutting_speed_1}
+    reward_weights = {"ai_rl_1": (globals()[f"alpha_1"], globals()[f"beta_1"])}
+    walking_speeds = {"ai_rl_1": globals()[f"walking_speed_1"]}
+    cutting_speeds = {"ai_rl_1": globals()[f"cutting_speed_1"]}
 else: 
-    reward_weights = {
-        "ai_rl_1": (alpha_1, beta_1),
-        "ai_rl_2": (alpha_2, beta_2),
-    }
-    walking_speeds = {
-        "ai_rl_1": walking_speed_1,
-        "ai_rl_2": walking_speed_2,
-    }
-    cutting_speeds = {
-        "ai_rl_1": cutting_speed_1,
-        "ai_rl_2": cutting_speed_2,
-    }
+    for i in range(1, NUM_AGENTS + 1):
+        reward_weights = {f"ai_rl_{i}": (globals()[f"alpha_{i}"], globals()[f"beta_{i}"])}
+        walking_speeds = {f"ai_rl_{i}": globals()[f"walking_speed_{i}"]}
+        cutting_speeds = {f"ai_rl_{i}": globals()[f"cutting_speed_{i}"]}
 
 os.makedirs(save_dir, exist_ok=True)
 
-pretrained_policies = {}
-
-if CHECKPOINT_ID is not None and CHECKPOINT_ID.lower() != "none":
-    if PRETRAINING.upper() == "YES":
-        CHECKPOINT_PATH = f'{local}/data/samuel_lozano/cooked/pretraining/{GAME_VERSION}/map_{MAP_NR}/Training_{CHECKPOINT_ID}'
-    else:
-        CHECKPOINT_PATH = f'{save_dir}/Training_{CHECKPOINT_ID}'
-
-    if NUM_AGENTS == 1:
-        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
-
-    elif NUM_AGENTS == 2:
-        pretrained_policies["ai_rl_1"] = {"path": CHECKPOINT_PATH}
-        pretrained_policies["ai_rl_2"] = {"path": CHECKPOINT_PATH}
+pretrained_policies = None
+# Load pretrained policies if specified
+if CHECKPOINT_PATHS != "none":
+    pretrained_policies = {}
+    with open(input_path, "r") as f:
+        lines = f.readlines()
+        for i in range(NUM_AGENTS):
+            policy_id = str(lines[i]).strip()
+            CHECKPOINT_PATH = str(lines[i+1]).strip()
+            if policy_id.lower() != "none" and CHECKPOINT_PATH.lower() != "none":
+                pretrained_policies[f"ai_rl_{i+1}"] = {"loaded_agent_id": policy_id, "path": CHECKPOINT_PATH}
+            else:
+                pretrained_policies[f"ai_rl_{i+1}"] = None
 
 # Determine grid size from map file (text format)
 map_txt_path = os.path.join(os.path.dirname(__file__), 'spoiled_broth', 'maps', f'{MAP_NR}.txt')
@@ -217,8 +211,7 @@ config = {
     "DYNAMIC_PPO_PARAMS_CFG": DYNAMIC_PPO_PARAMS_CFG,
     "WAIT_FOR_COMPLETION": WAIT_FOR_ACTION_COMPLETION,
     "SAVE_DIR": save_dir,
-    "CHECKPOINT_ID_USED": pretrained_policies,
-    "PRETRAINED": PRETRAINING if PRETRAINING else "No",
+    "CHECKPOINTS": pretrained_policies,
     # RLlib specific parameters
     "NUM_UPDATES": 10,
     "GAMMA": 0.975,

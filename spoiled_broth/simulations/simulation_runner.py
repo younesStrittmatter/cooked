@@ -6,6 +6,7 @@ Author: Samuel Lozano
 
 import os
 import time
+import numpy as np
 import sys
 import threading
 from pathlib import Path
@@ -24,6 +25,7 @@ from .data_logger import DataLogger
 from .video_recorder import VideoRecorder
 from .raw_action_logger import RawActionLogger
 from .observation_logger import ObservationLogger
+from spoiled_broth.maps.cache_distance_map import load_or_compute_distance_map
 
 
 class SimulationRunner:
@@ -68,7 +70,7 @@ class SimulationRunner:
             # Initialize controllers
             controllers = self.controller_manager.initialize_controllers(
                 num_agents, paths['checkpoint_dir'], game_version, 
-                tick_rate=self.config.engine_tick_rate
+                tick_rate=self.config.engine_tick_rate, custom_checkpoints=self.config.custom_checkpoints
             )
             
             if not controllers:
@@ -148,12 +150,10 @@ class SimulationRunner:
         
         # Load and attach distance map to the game
         try:
-            from spoiled_broth.maps.cache_distance_map import load_or_compute_distance_map
             distance_cache_dir = os.path.join(os.path.dirname(__file__), "../maps/distance_cache")
             distance_map_path = load_or_compute_distance_map(game, game.grid, map_nr, distance_cache_dir)
             
             # Load the distance map from the npz file
-            import numpy as np
             data = np.load(distance_map_path)
             D = data['D']
             pos_from = data['pos_from']
@@ -431,7 +431,6 @@ class SimulationRunner:
     
     def _wait_for_agent_initialization(self, game: Any, max_wait_time: float = 60.0):
         """Wait for all agents to complete their initialization period and be ready to act."""
-        import time
         
         start_wait = time.time()
         print("Waiting for agent initialization...")

@@ -3,11 +3,11 @@ Optimized game step functions for CPU execution.
 These functions handle game state updates efficiently on CPU while
 neural network training happens on GPU in parallel.
 """
-from engine.extensions.topDownGridWorld.a_star import grid_to_world, Node, find_path, path_length
-from spoiled_broth.rl.action_space import get_rl_action_space
+from engine.extensions.topDownGridWorld.a_star import grid_to_world, Node, find_path
+from engine.extensions.topDownGridWorld.a_star import get_neighbors
 import math
 
-def update_agents_directly(self, advanced_time, agent_events):
+def update_agents_directly(self, advanced_time, agent_events, agent_food_type=None, game_mode="classic"):
     """
     Directly update game state without going through the engine.
     Handles agent movement, action completion, and state updates.
@@ -24,7 +24,13 @@ def update_agents_directly(self, advanced_time, agent_events):
             action_data = self.action_info[agent_id]
             # Check if action should complete within advanced_time
             if action_data is not None and self.busy_until[agent_id] is not None and self.busy_until[agent_id] <= self._elapsed_time:
-                complete_agent_action(self, agent_id, agent, action_data, agent_events)
+                if game_mode == "competition":
+                    own_food = agent_food_type.get(agent_id, None)
+                else:
+                    own_food = None
+                agent_events = complete_agent_action(self, agent_id, agent, action_data, agent_events, own_food)
+
+    return agent_events
 
 def update_agent_movement(self, agent, advanced_time):
     """Update agent position along their path using A* trajectory and walking speed."""
@@ -60,7 +66,7 @@ def update_agent_movement(self, agent, advanced_time):
             agent.path_index += 1
             # Note: slot_x and slot_y are calculated automatically from x and y pixel coordinates
 
-def complete_agent_action(self, agent_id, agent, action_data, agent_events):
+def complete_agent_action(self, agent_id, agent, action_data, agent_events, own_food):
     """Complete an agent's action by updating game state directly."""
     tile_index = action_data['tile_index']
     
@@ -84,19 +90,93 @@ def complete_agent_action(self, agent_id, agent, action_data, agent_events):
     # Process the action based on tile type and agent state
     if hasattr(tile, '_type'):
         if tile._type == 3:  # Dispenser
-            handle_dispenser_action(self, agent, tile, action_data)
+            holding_item = getattr(agent, "item", None)
+            handle_dispenser_action(agent, tile)
+            new_holding_item = getattr(agent, "item", None)
+            agent_events = log_dispenser_action(agent_id, holding_item, new_holding_item, agent_events, own_food)
         elif tile._type == 2:  # Counter
-            handle_counter_action(self, agent, tile, action_data)
+            holding_item = getattr(agent, "item", None)
+            handle_counter_action(agent, tile)
+            new_tile_item = getattr(tile, "item", None)
+            new_holding_item = getattr(agent, "item", None)
+            agent_events = log_counter_action(agent_id, holding_item, new_holding_item, new_tile_item, agent_events, own_food)
         elif tile._type == 4:  # Cutting board
-            handle_cutting_board_action(self, agent, tile, action_data)
+            holding_item = getattr(agent, "item", None)
+            handle_cutting_board_action(agent, tile)
+            new_holding_item = getattr(agent, "item", None)
+            agent_events = log_cutting_board_action(agent_id, holding_item, new_holding_item, agent_events, own_food)
         elif tile._type == 5:  # Delivery
-            handle_delivery_action(self, agent, tile, action_data)
+            holding_item = getattr(agent, "item", None)
+            handle_delivery_action(self, agent, tile)
+            new_holding_item = getattr(agent, "item", None)
+            agent_events = log_delivery_action(agent_id, holding_item, new_holding_item, agent_events, own_food)
     
     # Clear the busy state now that the action is complete
     self.busy_until[agent_id] = None
     self.action_info[agent_id] = None
 
-def handle_dispenser_action(self, agent, tile, action_data):
+    return agent_events
+
+def log_dispenser_action(agent_id, holding_item, new_holding_item, agent_events, own_food):
+    """Log dispenser action for analysis."""
+    if new_holding_item == "plate":
+        if holding_item is None or holding_item != "plate":
+            agent_events[agent_id]["plate"] += 1
+    else: 
+        if own_food is not None:
+            if new_holding_item == own_food:
+                agent_events[agent_id]["raw_food_own"] += 1
+            else:
+                agent_events[agent_id]["raw_food_other"] += 1
+        else:
+            if holding_item is None or holding_item != new_holding_item:
+                agent_events[agent_id]["raw_food"] += 1
+    return agent_events
+
+def log_counter_action(agent_id, holding_item, new_holding_item, new_tile_item, agent_events, own_food):
+    """Log counter action for analysis."""
+    valid_salad_items = ["tomato_salad", "pumpkin_salad", "cabbage_salad"]
+    if own_food is not None:
+        if new_holding_item is None and new_tile_item == f"{own_food}_salad":
+            agent_events[agent_id]["salad_own"] += 1
+        elif holding_item != new_tile_item and new_tile_item in valid_salad_items and new_holding_item is None:
+            agent_events[agent_id]["salad_other"] += 1
+        elif holding_item is not None or new_holding_item is not None:
+            agent_events[agent_id]["counter"] += 1
+    else:
+        if holding_item != new_tile_item and new_tile_item in valid_salad_items and new_holding_item is None:
+            agent_events[agent_id]["salad"] += 1
+        elif holding_item is not None or new_holding_item is not None:
+            agent_events[agent_id]["counter"] += 1
+    return agent_events
+
+def log_cutting_board_action(agent_id, holding_item, new_holding_item, agent_events, own_food):
+    """Log cutting board action for analysis."""
+    valid_items = ["tomato", "pumpkin", "cabbage"]
+    if own_food is not None:
+        if holding_item == own_food and new_holding_item == f"{own_food}_cut":
+            agent_events[agent_id]["cut_own"] += 1
+        elif holding_item in valid_items and new_holding_item == f"{holding_item}_cut":
+            agent_events[agent_id]["cut_other"] += 1
+    else:
+        if holding_item in valid_items and new_holding_item == f"{holding_item}_cut":
+            agent_events[agent_id]["cut"] += 1
+    return agent_events
+
+def log_delivery_action(agent_id, holding_item, new_holding_item, agent_events, own_food):
+    """Log delivery action for analysis."""
+    valid_items = ["tomato_salad", "pumpkin_salad", "cabbage_salad"]
+    if own_food is not None:
+        if holding_item == f"{own_food}_salad" and new_holding_item is None:
+            agent_events[agent_id]["deliver_own"] += 1
+        elif holding_item in valid_items and new_holding_item is None:
+            agent_events[agent_id]["deliver_other"] += 1
+    else:
+        if holding_item in valid_items and new_holding_item is None:
+            agent_events[agent_id]["deliver"] += 1
+    return agent_events
+
+def handle_dispenser_action(agent, tile):
     """Handle picking up items from dispensers."""
     if hasattr(tile, 'item'):
         # Always pick up from dispenser, replacing any item the agent currently has
@@ -107,60 +187,41 @@ def handle_dispenser_action(self, agent, tile, action_data):
     agent.path = []
     agent.path_index = 0
 
-def handle_counter_action(self, agent, tile, action_data):
+def handle_counter_action(agent, tile):
     """Handle interactions with counters (placing/picking up items, making salads)."""
-    # Get the original action name to determine intent
-    action_idx = action_data['action_idx']
-    game_mode = getattr(self, 'game_mode', 'classic')
-    action_name = get_rl_action_space(game_mode)[action_idx]
-    
     # Check if this is a pick_up action
-    if action_name.startswith('pick_up_') and 'from_counter' in action_name:
-        # Extract the item type from the action name
-        # e.g., "pick_up_tomato_cut_from_counter_closest" -> "tomato_cut"
-        parts = action_name.split('_')
-        if len(parts) >= 6:
-            item_to_pick = '_'.join(parts[2:-3])  # Remove "pick", "up", "from", "counter", "closest/midpoint"
-            
-            # Only proceed if the counter actually has this specific item
-            if hasattr(tile, 'item') and tile.item == item_to_pick:
-                # Special case: Agent has plate and counter has cut ingredient -> make salad
-                if (agent.item == 'plate' and item_to_pick.endswith('_cut')):
-                    tile.item = item_to_pick.split('_')[0] + '_salad'
-                    if hasattr(tile, 'salad_item'):
-                        tile.salad_item = tile.item
-                    agent.item = None  # Agent does not pick up the salad
+    valid_salad_items = ['tomato_cut', 'pumpkin_cut', 'cabbage_cut']
+
+    if hasattr(tile, 'item') or agent.item is not None:
+        # Special case: Agent has plate and counter has cut ingredient -> make salad
+        if (agent.item == 'plate' and tile.item in valid_salad_items):
+            tile.item = tile.item.split('_')[0] + '_salad'
+            if hasattr(tile, 'salad_item'):
+                tile.salad_item = tile.item
+            agent.item = None  # Agent does not pick up the salad
                     
-                # Special case: Agent has cut ingredient and counter has plate -> make salad  
-                elif (agent.item and agent.item.endswith('_cut') and item_to_pick == 'plate'):
-                    salad_item = agent.item.split('_')[0] + '_salad'
-                    tile.item = salad_item
-                    if hasattr(tile, 'salad_item'):
-                        tile.salad_item = salad_item
-                    agent.item = None  # Agent does not pick up the salad
+        # Special case: Agent has cut ingredient and counter has plate -> make salad  
+        elif (agent.item in valid_salad_items and tile.item == 'plate'):
+            tile.item = agent.item.split('_')[0] + '_salad'
+            if hasattr(tile, 'salad_item'):
+                tile.salad_item = tile.item
+            agent.item = None  # Agent does not pick up the salad
                     
-                # Normal item exchange
-                else:
-                    temp_item = tile.item
-                    tile.item = agent.item
-                    agent.item = temp_item
-            # If counter doesn't have the requested item, do nothing (action should have been blocked earlier)
-    
-    elif action_name.startswith('put_down_item_on_free_counter'):
-        # Only proceed if counter is actually free (empty)
-        if not hasattr(tile, 'item') or tile.item is None:
-            # Place item on the free counter
+        # Normal item exchange
+        else:
+            temp_item = tile.item
             tile.item = agent.item
-            agent.item = None
-        # If counter is not free, do nothing (action should have been blocked earlier)
-            
+            agent.item = temp_item
+
     # Position agent next to counter (counters are not walkable)
     agent.path = []
     agent.path_index = 0
 
-def handle_cutting_board_action(self, agent, tile, action_data):
+def handle_cutting_board_action(agent, tile):
     """Handle cutting actions on cutting board."""
-    if agent.item in ['tomato', 'pumpkin', 'cabbage']:
+    valid_cutting_items = ['tomato', 'pumpkin', 'cabbage']
+
+    if agent.item in valid_cutting_items:
         # Instantly complete cutting action (as per original intent behavior)
         original_item = agent.item
         cut_item = f"{original_item}_cut"
@@ -177,11 +238,11 @@ def handle_cutting_board_action(self, agent, tile, action_data):
     agent.path = []
     agent.path_index = 0
 
-def handle_delivery_action(self, agent, tile, action_data):
+def handle_delivery_action(self, agent, tile):
     """Handle delivery actions."""
-    valid_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
+    valid_delivery_items = ['tomato_salad', 'pumpkin_salad', 'cabbage_salad']
     
-    if agent.item in valid_items:
+    if agent.item in valid_delivery_items:
         # Set delivery metadata
         if hasattr(tile, 'delivered_by'):
             tile.delivered_by = agent.id
@@ -218,7 +279,6 @@ def setup_agent_path(self, agent, tile_index):
         goal_node = Node(x, y)
     else:
         # For non-walkable tiles, find nearest walkable neighbor
-        from engine.extensions.topDownGridWorld.a_star import get_neighbors
         target_node = Node(x, y)
         neighbors = get_neighbors(self.game.grid, target_node, include_diagonal=False)
         
