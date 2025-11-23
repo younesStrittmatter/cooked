@@ -67,7 +67,7 @@ TRAIN_BATCH_SIZE = 4000  # Increased for better GPU utilization (NUM_ENVS * roll
 SGD_MINIBATCH_SIZE = 500  # Optimized minibatch size for GPU
 NUM_SGD_ITER = 10  # Number of SGD iterations per training batch
 SHOW_EVERY_N_EPOCHS = 1
-SAVE_EVERY_N_EPOCHS = 500
+SAVE_EVERY_N_EPOCHS = 100
 PAYOFF_MATRIX = [1,1,-2]
 
 # Neural network architecture

@@ -41,6 +41,7 @@ from .simulation_utils import (
 # Meaningful actions analysis
 from .meaningful_actions import (
     analyze_meaningful_actions,
+    analyze_meaningful_actions_simplified,
     analyze_meaningful_actions_from_files
 )
 
@@ -80,6 +81,7 @@ __all__ = [
     
     # Meaningful actions analysis
     'analyze_meaningful_actions',
+    'analyze_meaningful_actions_simplified',
     'analyze_meaningful_actions_from_files',
     
     # Human-like data extraction

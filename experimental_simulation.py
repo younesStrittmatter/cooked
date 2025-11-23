@@ -51,7 +51,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from spoiled_broth.simulations import (
     setup_simulation_argument_parser, 
     main_simulation_pipeline,
-    analyze_meaningful_actions,
+    analyze_meaningful_actions_simplified,
     generate_agent_position_files,
     generate_agent_action_files
 )
@@ -156,8 +156,7 @@ def main():
             print("=" * 50)
             
             try:
-                # Read the generated CSV files
-                actions_df = pd.read_csv(output_paths['action_csv'])
+                # Read the generated CSV files (no actions.csv needed for simplified analysis)
                 simulation_df = pd.read_csv(output_paths['state_csv'])
                 counters_df = pd.read_csv(output_paths['counter_csv'])
                 
@@ -181,15 +180,13 @@ def main():
                 except Exception as obs_e:
                     print(f"\nWarning: Could not load observation data: {obs_e}") 
                 
-                # Analyze meaningful actions using the new modular function
-                meaningful_df = analyze_meaningful_actions(
-                    actions_df, 
+                # Analyze meaningful actions using the simplified function (no actions.csv needed)
+                meaningful_df = analyze_meaningful_actions_simplified(
                     simulation_df, 
                     counters_df,
-                    args.map_nr, 
-                    output_paths['simulation_dir'],
-                    engine_tick_rate=args.tick_rate,
-                    cutting_speeds=cutting_speeds
+                    map_nr=args.map_nr,
+                    output_dir=output_paths['simulation_dir'],
+                    engine_tick_rate=args.tick_rate
                 )
                 
                 if not meaningful_df.empty:

@@ -15,7 +15,11 @@ import math
 import re
 from pathlib import Path
 
-def is_near_target(agent_x, agent_y, target_x, target_y, max_distance=1.5):
+def is_adjacent_to(agent_x, agent_y, target_x, target_y):
+    """Check if agent is adjacent to target (Manhattan distance <= 1)"""
+    return abs(agent_x - target_x) + abs(agent_y - target_y) <= 1
+
+def is_near_target(agent_x, agent_y, target_x, target_y):
     """Check if agent is near the target tile (within max_distance tiles)
     
     Clickable tiles cannot be accessed diagonally, so we only allow orthogonal access.
@@ -67,7 +71,7 @@ def find_nearby_tiles(agent_x, agent_y, actions_df, tile_types):
 def get_action_category(action_type, item_change_type, previous_agent_item, current_agent_item, target_tile_type):
     """Map action type to action category"""
     actionMap = [
-        'put down plate on counter',           # 0
+        'put down on counter',           # 0
         'pick up tomato from dispenser',       # 1
         'pick up plate from dispenser',        # 2
         'start cutting tomato',                # 3
@@ -87,7 +91,7 @@ def get_action_category(action_type, item_change_type, previous_agent_item, curr
         'put down tomato_cut on dispenser',    # 17 (destructive)
         'put down tomato_salad on dispenser',  # 18 (destructive)
         'put down tomato on cuttingboard',     # 19
-        'put down tomato_salad on cuttingboard' # 20 (destructive)
+        'put down tomato_salad on cuttingboard', # 20 (destructive)
     ]
     
     # Map action types that include coordinates
@@ -111,6 +115,8 @@ def get_action_category(action_type, item_change_type, previous_agent_item, curr
             return 3, actionMap[3]  # 'start cutting tomato'
         elif item_change_type == "pickup":
             return 4, actionMap[4]  # 'pick up tomato_cut from cuttingboard'
+    elif action_type in["salad_assembly"]:
+        return 7, actionMap[7]  # 'assemble salad'
     elif action_type in ['use_delivery']:
         return 9, actionMap[9]  # 'deliver tomato_salad'
     elif action_type.startswith('put_down_item_on_free_counter'):
@@ -131,12 +137,591 @@ def get_action_category(action_type, item_change_type, previous_agent_item, curr
     elif action_type in ['pick_up_tomato_salad_from_counter_closest', 'pick_up_tomato_salad_from_counter_midpoint']:
         return 5, actionMap[5]  # 'pick up tomato_salad from counter'
 
-    # Special case for assembly
-    elif item_change_type == "assembly":
-        return 7, actionMap[7]  # 'assemble salad'
-
     # Fallback
     return -1, f"UNKNOWN: {item_change_type} {previous_agent_item} -> {current_agent_item} at {target_tile_type}"
+
+def get_map_tile_positions(map_nr):
+    """
+    Get tile positions for a specific map by reading the actual map file.
+    Returns a dictionary with tile types as keys and lists of positions/info as values.
+    """
+    
+    # Construct the path to the map file
+    map_file_path = f"/home/samuel_lozano/cooked/spoiled_broth/maps/{map_nr}.txt"
+    
+    try:
+        # Read the map file
+        with open(map_file_path, 'r') as f:
+            layout = [line.rstrip('\n') for line in f.readlines()]
+    except FileNotFoundError:
+        print(f"Warning: Map file '{map_file_path}' not found. Using empty layout.")
+        return {
+            'walls': [],
+            'counters': [],
+            'dispensers': [],
+            'cutting_boards': [],
+            'delivery_points': [],
+            'agent_spawns': []
+        }
+    except Exception as e:
+        print(f"Error reading map file '{map_file_path}': {e}. Using empty layout.")
+        return {
+            'walls': [],
+            'counters': [],
+            'dispensers': [],
+            'cutting_boards': [],
+            'delivery_points': [],
+            'agent_spawns': []
+        }
+    
+    # Initialize tile position lists
+    tile_positions = {
+        'walls': [],
+        'counters': [],
+        'dispensers': [],
+        'cutting_boards': [],
+        'delivery_points': [],
+        'agent_spawns': []
+    }
+    
+    # Parse the layout character by character
+    for y, row in enumerate(layout):
+        for x, char in enumerate(row):
+            pos = (x + 1, y + 1) # Add one to each coordinate to match tile indexing
+            
+            if char == 'W':
+                tile_positions['walls'].append(pos)
+            elif char == 'M':
+                # Counter (Material counter)
+                tile_positions['counters'].append(pos)
+            elif char == 'T':
+                # Tomato dispenser
+                tile_positions['dispensers'].append({
+                    'pos': pos,
+                    'item': 'tomato'
+                })
+            elif char == 'X':
+                # Plate dispenser
+                tile_positions['dispensers'].append({
+                    'pos': pos,
+                    'item': 'plate'
+                })
+            elif char == 'B':
+                # Cutting board
+                tile_positions['cutting_boards'].append(pos)
+            elif char == 'D':
+                # Delivery point
+                tile_positions['delivery_points'].append(pos)
+            elif char.isdigit():
+                # Agent spawn point
+                tile_positions['agent_spawns'].append({
+                    'pos': pos,
+                    'agent_id': int(char)
+                })
+            # ' ' (space) represents empty floor - no action needed
+    
+    print(f"Parsed map '{map_nr}':")
+    print(f"  Walls: {len(tile_positions['walls'])} positions")
+    print(f"  Counters: {len(tile_positions['counters'])} positions")
+    print(f"  Dispensers: {len(tile_positions['dispensers'])} positions")
+    print(f"  Cutting boards: {len(tile_positions['cutting_boards'])} positions")  
+    print(f"  Delivery points: {len(tile_positions['delivery_points'])} positions")
+    print(f"  Agent spawns: {len(tile_positions['agent_spawns'])} positions")
+    
+    return tile_positions
+
+def analyze_meaningful_actions_simplified(simulation_df, counter_df, map_nr, output_dir=None, engine_tick_rate=24):
+    """
+    Simplified meaningful actions analysis using only simulation.csv and counters.csv.
+    
+    This function detects meaningful actions based purely on game state changes without 
+    relying on actions.csv. It analyzes:
+    - Agent item changes (pickup/drop/item transitions)
+    - Counter state changes (items placed/removed/assembled)
+    - Cutting board operations (implicit from item changes)
+    - Delivery actions (item disappearing when score increases)
+    - Dispenser pickups (items appearing when near dispensers)
+    
+    Args:
+        simulation_df: DataFrame with agent state data (frame, agent_id, x, y, tile_x, tile_y, item, score)
+        counter_df: DataFrame with counter state data (frame, second, counter_x_y columns)
+        map_nr: Map identifier for context
+        output_dir: Directory to save results (optional)
+        engine_tick_rate: Engine FPS for time calculations (default 24)
+        
+    Returns:
+        DataFrame with detected meaningful actions
+    """
+    
+    # Read CSV files if paths are provided
+    if isinstance(simulation_df, (str, Path)):
+        print("Reading CSV files...")
+        simulation_df = pd.read_csv(simulation_df)
+        counter_df = pd.read_csv(counter_df)
+    
+    print(f"Simulation shape: {simulation_df.shape}")
+    print(f"Counter shape: {counter_df.shape}")
+    
+    # Sort by frame to ensure chronological processing
+    simulation_df = simulation_df.sort_values(['frame', 'agent_id']).reset_index(drop=True)
+    counter_df = counter_df.sort_values('frame').reset_index(drop=True)
+    
+    # Extract available counters from counter_df columns
+    available_counters = {}
+    counter_positions = []
+    for col in counter_df.columns[2:]:  # Skip 'frame' and 'second' columns
+        if col.startswith('counter_'):
+            parts = col.split('_')
+            if len(parts) == 3:  # counter_x_y format
+                x, y = int(parts[1]), int(parts[2])
+                counter_positions.append((x, y))
+                available_counters[col] = (x, y)
+    
+    print(f"Found {len(counter_positions)} counters at positions: {counter_positions}")
+    
+    # Get map-specific tile positions
+    map_tiles = get_map_tile_positions(map_nr)
+    
+    # Create lookup sets for efficient position checking
+    dispenser_positions = {dispenser['pos'] for dispenser in map_tiles['dispensers']}
+    cutting_board_positions = set(map_tiles['cutting_boards'])
+    delivery_positions = set(map_tiles['delivery_points'])
+    map_counter_positions = set(map_tiles['counters'])
+
+    # Combine counter positions from CSV and map (prefer CSV as it's actual game state)
+    all_counter_positions = set(counter_positions) | map_counter_positions
+    
+    print(f"Map-specific tile positions:")
+    print(f"  Dispensers: {sorted(dispenser_positions)}")
+    print(f"  Cutting boards: {sorted(cutting_board_positions)}")
+    print(f"  Delivery points: {sorted(delivery_positions)}")
+    print(f"  Counters (from CSV): {sorted(counter_positions)}")
+    print(f"  Counters (from map): {sorted(map_counter_positions)}")
+    
+    meaningful_actions = []
+    
+    # Track agent states
+    agent_states = {}
+    for agent_id in simulation_df['agent_id'].unique():
+        agent_states[agent_id] = {
+            'previous_item': None,
+            'previous_score': 0,
+            'previous_tile_x': None,
+            'previous_tile_y': None
+        }
+    
+    # Define tile type lookup based on map-specific positions
+    def get_tile_type_at_position(x, y, simulation_frame_data=None):
+        """Get tile type based on exact map positions"""
+        pos = (x, y)
+        
+        # Check exact positions from map data
+        if pos in dispenser_positions:
+            return 'dispenser'
+        elif pos in all_counter_positions:
+            return 'counter'
+        elif pos in cutting_board_positions:
+            return 'cuttingboard'
+        elif pos in delivery_positions:
+            return 'delivery'
+        else:
+            return 'floor'
+    
+    def get_dispenser_item_type(x, y):
+        """Get the item type for a dispenser at position (x, y)"""
+        pos = (x, y)
+        for dispenser in map_tiles['dispensers']:
+            if dispenser['pos'] == pos:
+                return dispenser['item']
+        return None
+    
+    def get_adjacent_clickable_tiles(agent_tile_x, agent_tile_y):
+        """Get clickable tiles adjacent to agent position (up, down, left, right)"""
+        adjacent_positions = [
+            (agent_tile_x, agent_tile_y - 1),  # Up
+            (agent_tile_x, agent_tile_y + 1),  # Down
+            (agent_tile_x - 1, agent_tile_y),  # Left
+            (agent_tile_x + 1, agent_tile_y),  # Right
+        ]
+        
+        clickable_tiles = []
+        for x, y in adjacent_positions:
+            tile_type = get_tile_type_at_position(x, y)
+            if tile_type in ['dispenser', 'counter', 'cuttingboard', 'delivery']:
+                tile_info = {'pos': (x, y), 'type': tile_type}
+                
+                # Add extra info for dispensers
+                if tile_type == 'dispenser':
+                    tile_info['item'] = get_dispenser_item_type(x, y)
+                
+                clickable_tiles.append(tile_info)
+        
+        return clickable_tiles
+    
+    def find_matching_clickable_tile(agent_tile_x, agent_tile_y, target_type, previous_agent_item=None, new_agent_item=None, salad_assembly=False):
+        """Find a specific type of clickable tile adjacent to agent"""
+        adjacent_tiles = get_adjacent_clickable_tiles(agent_tile_x, agent_tile_y)
+        print(f"        Adjacent tiles: {adjacent_tiles}")
+        
+        for tile in adjacent_tiles:
+            print(f"        Checking tile: {tile} with target_type: {target_type}, previous_agent_item: {previous_agent_item}, new_agent_item: {new_agent_item}, salad_assembly: {salad_assembly}")
+            print(f"        Tile type: {tile['type']} and target_type: {target_type}")
+            if tile['type'] == target_type:
+                if target_type == 'dispenser' and new_agent_item:
+                    if tile.get('item') == new_agent_item:
+                        return tile
+                elif target_type == 'counter' and salad_assembly:
+                    # Check if this counter position has changes and matches salad assembly pattern
+                    counter_change = counter_changes.get(tile['pos'])
+                    if (counter_change is not None and 
+                        counter_change.get('to') == 'tomato_salad' and 
+                        counter_change.get('from') in ['plate', 'tomato_cut', 'pumpkin_cut', 'cabbage_cut']):
+                        return tile
+                elif target_type == 'counter' and not salad_assembly:
+                    # Check if this counter position has changes that match the agent's item change
+                    counter_change = counter_changes.get(tile['pos'])
+                    if counter_change is not None:
+                        if ((previous_agent_item is not None and previous_agent_item == counter_change.get('to')) or 
+                            (new_agent_item is not None and new_agent_item == counter_change.get('from'))):
+                            return tile
+                else:
+                    return tile
+        
+        return None    
+    
+    # Process frame by frame
+    current_cutting_action = {agent_id: None for agent_id in agent_states.keys()}
+    for frame in sorted(simulation_df['frame'].unique()):
+        if frame == 0:
+            # Initialize agent states on first frame
+            frame_data = simulation_df[simulation_df['frame'] == frame]
+            for _, row in frame_data.iterrows():
+                agent_id = row['agent_id']
+                if agent_id in agent_states:
+                    agent_states[agent_id]['previous_item'] = row['item'] if pd.notna(row['item']) else None
+                    agent_states[agent_id]['previous_score'] = row['score']
+                    agent_states[agent_id]['previous_tile_x'] = row['tile_x'] if pd.notna(row['tile_x']) else None
+                    agent_states[agent_id]['previous_tile_y'] = row['tile_y'] if pd.notna(row['tile_y']) else None
+            counter_prev = counter_df[counter_df['frame'] == frame]
+            continue
+            
+        print(f"\n=== Processing Frame {frame}, Second {frame / engine_tick_rate:.2f} ===")
+        
+        frame_data = simulation_df[simulation_df['frame'] == frame]
+        counter_current = counter_df[counter_df['frame'] == frame]
+        
+        # Analyze counter changes first (for context)
+        counter_changes = {}
+        if not counter_prev.empty and not counter_current.empty:
+            for col, pos in available_counters.items():
+                prev_item = counter_prev[col].iloc[0] if not counter_prev[col].empty else None
+                curr_item = counter_current[col].iloc[0] if not counter_current[col].empty else None
+                prev_item = None if pd.isna(prev_item) or prev_item == '' else prev_item
+                curr_item = None if pd.isna(curr_item) or curr_item == '' else curr_item
+                
+                if prev_item != curr_item:
+                    counter_changes[pos] = {
+                        'from': prev_item,
+                        'to': curr_item,
+                        'type': 'appeared' if prev_item is None else ('disappeared' if curr_item is None else 'changed')
+                    }
+                    print(f"    Counter {pos}: {prev_item} -> {curr_item} ({counter_changes[pos]['type']})")
+                else:
+                    counter_changes[pos] = None
+        
+        # Process each agent in this frame
+        exchange_action = False
+        for _, row in frame_data.iterrows():
+            agent_id = row['agent_id']
+            current_item = row['item'] if pd.notna(row['item']) else None
+            current_score = row['score'] if pd.notna(row['score']) else 0
+            current_tile_x = row['tile_x'] if pd.notna(row['tile_x']) else None
+            current_tile_y = row['tile_y'] if pd.notna(row['tile_y']) else None
+            
+            if agent_id not in agent_states:
+                continue
+                
+            prev_state = agent_states[agent_id]
+            previous_item = prev_state['previous_item']
+            previous_score = prev_state['previous_score']
+            
+            # Skip if we don't have valid tile coordinates
+            if current_tile_x is None or current_tile_y is None:
+                print(f"    Agent {agent_id}: Invalid coordinates, skipping")
+                continue
+            
+            current_tile_x, current_tile_y = int(current_tile_x), int(current_tile_y)
+            
+            # Detect meaningful changes
+            item_changed = previous_item != current_item
+            score_changed = current_score > previous_score
+            
+            print(f"    Agent {agent_id}: {previous_item} -> {current_item}, score: {previous_score} -> {current_score} at ({current_tile_x}, {current_tile_y})")
+            
+            target_type = None
+            target_x = None
+            target_y = None
+            action_type = None
+            item_change_type = None
+            category_name = None
+            compound_action_part = 0
+
+            if current_cutting_action[agent_id] is not None:
+                print(f"      Skipping action detection due to ongoing cutting action")
+                if not current_cutting_action[agent_id]['cutting_started']:
+                    current_cutting_action[agent_id]['cutting_started'] = True
+                    target_type = 'cuttingboard'
+                    target_x = current_cutting_action[agent_id]['target_x']
+                    target_y = current_cutting_action[agent_id]['target_y']
+                    action_type = 'use_cutting_board'
+                    item_change_type = 'cutting'
+                    category_name = f'start cutting {current_cutting_action[agent_id]["previous_item"]}'
+                    compound_action_part = 2
+                    print(f"      Detected cutting on cutting board")
+                elif current_item in ['tomato_cut', 'pumpkin_cut', 'cabbage_cut']:
+                    target_type = 'cuttingboard'
+                    target_x = current_cutting_action[agent_id]['target_x']
+                    target_y = current_cutting_action[agent_id]['target_y']
+                    action_type = f'use_cutting_board'
+                    item_change_type = 'pickup'
+                    category_name = f'pickup {current_item} from cutting board'
+                    compound_action_part = 3
+                    print(f"      Detected pickup of cut item from cutting board")
+                    current_cutting_action[agent_id] = None  # Reset cutting action
+
+            elif item_changed or score_changed:
+                compound_action_part = 0
+                
+                print(f"      Detected item/score change")
+                print(f"        Previous item: {previous_item}, Current item: {current_item}")
+                print(f"        Previous score: {previous_score}, Current score: {current_score}")
+                print(f"        Previous item: {previous_item is None}, Current item: {current_item is None}")
+                # Case 1: Score increased
+                if previous_item in ['tomato_salad', 'pumpkin_salad', 'cabbage_salad'] and current_item is None:
+                    if score_changed:
+                        print(f"      Detected item disappearance with score increase, checking delivery")
+                        delivery_tile = find_matching_clickable_tile(current_tile_x, current_tile_y, 'delivery')
+                        if delivery_tile:
+                            target_type = 'delivery'
+                            target_x, target_y = delivery_tile['pos']
+                            action_type = 'use_delivery'
+                            category_name = f'deliver {previous_item}'
+                            item_change_type = 'drop'
+                            print(f"      Detected delivery")
+                        else:
+                            target_type = 'UNKNOWN'
+                            target_x, target_y = current_tile_x, current_tile_y
+                            action_type = 'UNKNOWN'
+                            item_change_type = 'drop'
+                            category_name = f'UNKNOWN: deliver {previous_item}'
+                            print(f"        Warning: Could not find adjacent delivery point for {previous_item} delivery")
+                    else:
+                        print(f"      Detected item disappearance without score increase, checking drop on counter")
+                        counter_tile = find_matching_clickable_tile(current_tile_x, current_tile_y, 'counter', previous_agent_item=previous_item)
+                        if counter_tile:
+                            target_type = 'counter'
+                            target_x, target_y = counter_tile['pos']
+                            action_type = 'put_down_item_on_free_counter'
+                            item_change_type = 'drop'
+                            category_name = f'put down {previous_item} on counter'
+                            print(f"      Detected drop on counter")
+                        else:
+                            target_type = 'UNKNOWN'
+                            target_x, target_y = current_tile_x, current_tile_y
+                            action_type = 'UNKNOWN'
+                            item_change_type = 'drop'
+                            category_name = f'UNKNOWN: put down {previous_item} on counter'
+                            print(f"        Warning: Could not find adjacent counter for dropping {previous_item}")
+
+                # Case 2: Salad assembly
+                elif previous_item in ['plate', 'tomato_cut', 'pumpkin_cut', 'cabbage_cut'] and current_item is None:
+                    print(f"      Detected item disappearance, checking salad assembly")
+                    counter_tile = find_matching_clickable_tile(current_tile_x, current_tile_y, 'counter', salad_assembly=True)
+                    if counter_tile:
+                        target_type = 'counter'
+                        target_x, target_y = counter_tile['pos']
+                        action_type = f'pick_up_{counter_changes[counter_tile["pos"]]}_from_counter'
+                        item_change_type = 'drop'
+                        category_name = f'assemble {previous_item.split("_")[0]}_salad'
+                        print(f"      Detected salad assembly")
+                    else:
+                        print(f"      No matching counter for salad assembly, checking drop on counter")
+                        counter_tile = find_matching_clickable_tile(current_tile_x, current_tile_y, 'counter', previous_agent_item=previous_item)
+                        if counter_tile:
+                            target_type = 'counter'
+                            target_x, target_y = counter_tile['pos']
+                            action_type = 'put_down_item_on_free_counter'
+                            item_change_type = 'drop'
+                            category_name = f'put down {previous_item} on counter'
+                            print(f"      Detected drop on counter")
+
+                        else:
+                            target_type = 'UNKNOWN'
+                            target_x, target_y = current_tile_x, current_tile_y
+                            action_type = 'UNKNOWN'
+                            item_change_type = 'drop'
+                            category_name = f'UNKNOWN: put down {previous_item} on counter'
+                            print(f"        Warning: Could not find adjacent counter for dropping {previous_item}")
+                                    
+                # Case 3: Using cutting board (cutting)
+                elif previous_item in ['tomato', 'pumpkin', 'cabbage'] and current_item is None:
+                    print(f"      Detected item disappearance, checking cutting action")
+                    counter_tile = find_matching_clickable_tile(current_tile_x, current_tile_y, 'counter', previous_agent_item=previous_item)
+                    if counter_tile:
+                        target_type = 'counter'
+                        target_x, target_y = counter_tile['pos']
+                        action_type = 'put_down_item_on_free_counter'
+                        item_change_type = 'drop'
+                        category_name = f'put down {previous_item} on counter'
+                        print(f"      Detected drop on counter")
+
+                    else:
+                        print(f"      No matching counter for cutting action, checking cutting boards")
+                        cutting_board_tile = find_matching_clickable_tile(current_tile_x, current_tile_y, 'cuttingboard')
+                        if cutting_board_tile:
+                            target_type = 'cuttingboard'
+                            target_x, target_y = cutting_board_tile['pos']
+                            action_type = 'use_cutting_board'
+                            item_change_type = 'drop'
+                            current_cutting_action[agent_id] = {'cutting_started': False, 'target_x': target_x, 'target_y': target_y, 'previous_item': previous_item}
+                            category_name = f'put down {previous_item} on cutting board'
+                            compound_action_part = 1
+                            print(f"      Detected drop on cutting board")
+                        else:
+                            target_type = 'UNKNOWN'
+                            target_x, target_y = current_tile_x, current_tile_y
+                            action_type = 'UNKNOWN'
+                            item_change_type = 'drop'
+                            category_name = f'UNKNOWN: put down {previous_item} on counter'
+                            print(f"        Warning: Could not find adjacent cutting board for cutting {previous_item}")
+                                
+                # Case 4: Item appeared (pickup)
+                elif current_item is not None:
+                    print(f"      Detected item appearance")
+                    counter_tile = find_matching_clickable_tile(current_tile_x, current_tile_y, 'counter', previous_agent_item=previous_item, new_agent_item=current_item)
+                    if counter_tile:
+                        if previous_item is None:
+                            target_type = 'counter'
+                            target_x, target_y = counter_tile['pos']
+                            action_type = f'pick_up_{current_item}_from_counter'
+                            item_change_type = 'pickup'
+                            category_name = f'pick up {current_item} from counter'
+                            print(f"      Detected pickup from counter")
+                        else:
+                            target_type = 'counter'
+                            target_x, target_y = counter_tile['pos']
+                            action_type = f'pick_up_{current_item}_from_counter'
+                            item_change_type = 'drop'
+                            category_name = f'put down {previous_item} on counter'
+                            exchange_action = True
+                            compound_action_part = 1
+                            prov_current_item = current_item
+                            current_item = None # For the drop part
+                            print(f"      Detected exchange on counter")
+                    
+                    else:
+                        print(f"      No matching counter for pickup, checking dispensers")
+                        dispenser_tile = find_matching_clickable_tile(current_tile_x, current_tile_y, 'dispenser', new_agent_item=current_item)
+                        print(f"        Dispenser tile found: {dispenser_tile}")
+                        if dispenser_tile:
+                            if previous_item is None:
+                                target_type = 'dispenser'
+                                target_x, target_y = dispenser_tile['pos']
+                                action_type = f'pick_up_{current_item}_from_dispenser'
+                                item_change_type = 'pickup'
+                                category_name = f'pick up {current_item} from dispenser'
+                                print(f"      Detected pickup from dispenser")
+                            else:
+                                target_type = 'dispenser'
+                                target_x, target_y = dispenser_tile['pos']
+                                action_type = f'pick_up_{current_item}_from_dispenser'
+                                item_change_type = 'drop'
+                                category_name = f'put down {previous_item} on dispenser'
+                                exchange_action = True
+                                compound_action_part = 1
+                                prov_current_item = current_item
+                                current_item = None # For the drop part
+                                print(f"      Detected destructive drop on dispenser")
+                
+                print(f"      Final detected action: {action_type}, item change: {item_change_type}, target: {target_type} at ({target_x}, {target_y})")
+
+                action = {
+                    'frame': frame,
+                    'agent_id': agent_id,
+                    'processed_action_type': action_type,
+                    'target_tile_type': target_type,
+                    'target_tile_x': target_x,
+                    'target_tile_y': target_y,
+                    'agent_tile_x': current_tile_x,
+                    'agent_tile_y': current_tile_y,
+                    'item_change_type': item_change_type,
+                    'previous_item': previous_item,
+                    'current_item': current_item,
+                    'agent_x': row['x'],
+                    'agent_y': row['y'],
+                    'action_category_name': category_name,
+                    'compound_action_part': compound_action_part
+                }
+                meaningful_actions.append(action)
+
+                if exchange_action:
+                    print(f"      Note: This action is part of an exchange (pickup + drop)")
+                    exchange_action = False
+                    action = {
+                        'frame': frame,
+                        'agent_id': agent_id,
+                        'processed_action_type': action_type,
+                        'target_tile_type': target_type,
+                        'target_tile_x': target_x,
+                        'target_tile_y': target_y,
+                        'agent_tile_x': current_tile_x,
+                        'agent_tile_y': current_tile_y,
+                        'item_change_type': 'pickup',
+                        'previous_item': None,
+                        'current_item': prov_current_item,
+                        'agent_x': row['x'],
+                        'agent_y': row['y'],
+                        'action_category_name': f'pick up {prov_current_item} from {target_type}',
+                        'compound_action_part': 2
+                    }
+                    meaningful_actions.append(action)
+                    current_item = prov_current_item
+            
+            # Update agent state
+            agent_states[agent_id]['previous_item'] = current_item
+            agent_states[agent_id]['previous_score'] = current_score
+            agent_states[agent_id]['previous_tile_x'] = current_tile_x
+            agent_states[agent_id]['previous_tile_y'] = current_tile_y
+            counter_prev = counter_current
+    
+    # Convert to DataFrame
+    meaningful_df = pd.DataFrame(meaningful_actions)
+    
+    if not meaningful_df.empty:
+        # Sort by frame to ensure chronological order
+        meaningful_df = meaningful_df.sort_values(['frame', 'agent_id']).reset_index(drop=True)
+        
+        print(f"\nFound {len(meaningful_df)} meaningful actions:")
+        print(meaningful_df[['frame', 'agent_id', 'target_tile_type', 'item_change_type', 'previous_item', 'current_item', 'action_category_name']])
+        
+        # Save the meaningful actions if output directory is provided
+        if output_dir is not None:
+            output_path = Path(output_dir) / 'meaningful_actions.csv'
+            meaningful_df.to_csv(output_path, index=False)
+            print(f"\nSaved meaningful actions to: {output_path}")
+    else:
+        print("\nNo meaningful actions found!")
+    
+    return meaningful_df
+
+
+
+
+
+
+# ----- LEGACY ----- #
+
+
 
 def analyze_meaningful_actions(actions_df, simulation_df, counter_df, map_nr, output_dir=None, engine_tick_rate=24, cutting_speeds=None):
     """Detect meaningful actions by finding item state changes and matching to actions.csv"""
