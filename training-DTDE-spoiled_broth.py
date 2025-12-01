@@ -31,7 +31,8 @@ SEED = int(sys.argv[8]) if len(sys.argv) > 8 else 0
 # Line 1: policy_id_to_be_loaded (policy_ai_rl_1, policy_ai_rl_2, etc.)
 # Line 2: checkpoint_number
 # Line 3: path_to_checkpoint
-CHECKPOINT_PATHS = sys.argv[9] if len(sys.argv) > 9 else "none"
+CHECKPOINT_PATHS = str(sys.argv[9]).lower() if len(sys.argv) > 9 else "none"
+REWARDS_ON_DELIVERY_ONLY = str(sys.argv[10]).lower() if len(sys.argv) > 10 else "true"
 
 with open(INPUT_PATH, "r") as f:
     lines = f.readlines()
@@ -67,7 +68,7 @@ TRAIN_BATCH_SIZE = 4000  # Increased for better GPU utilization (NUM_ENVS * roll
 SGD_MINIBATCH_SIZE = 500  # Optimized minibatch size for GPU
 NUM_SGD_ITER = 10  # Number of SGD iterations per training batch
 SHOW_EVERY_N_EPOCHS = 1
-SAVE_EVERY_N_EPOCHS = 100
+SAVE_EVERY_N_EPOCHS = 50
 PAYOFF_MATRIX = [1,1,-2]
 
 # Neural network architecture
@@ -82,14 +83,24 @@ PENALTIES_CFG = {
     "not_available": 2.0, # Penalty for trying to perform an action that is not available
 }
 
-REWARDS_CFG = {
-    "raw_food": 0.0,
-    "plate": 0.0,
-    "counter": 0.0,
-    "cut": 0.0,
-    "salad": 0.0,
-    "deliver": 10.0,
-}
+if REWARDS_ON_DELIVERY_ONLY == "true":
+    REWARDS_CFG = {
+        "raw_food": 0.0,
+        "plate": 0.0,
+        "counter": 0.0,
+        "cut": 0.0,
+        "salad": 0.0,
+        "deliver": 10.0,
+    }
+else:
+    REWARDS_CFG = {
+        "raw_food": 0.0,
+        "plate": 0.0,
+        "counter": 0.0,
+        "cut": 5.0,
+        "salad": 7.0,
+        "deliver": 10.0,
+    }
 
 # Dynamic rewards configuration - exponential decay [rewards_cfg = original_rewards_cfg * exp(-decay_rate * (episode - decay_start_episode))]
 DYNAMIC_REWARDS_CFG = {
