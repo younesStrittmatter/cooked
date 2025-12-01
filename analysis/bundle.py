@@ -1,13 +1,15 @@
 import os
 import pandas as pd
+from tqdm import tqdm
+
 
 def main():
     df_all = pd.DataFrame()
     df_all_with_history = pd.DataFrame()
-    for folder in os.listdir('./bundles'):
+    for folder in tqdm(os.listdir('./bundles')):
         if folder == '.DS_Store' or folder == 'maps':
             continue
-        for game_id in os.listdir(os.path.join('./bundles', folder)):
+        for game_id in tqdm(os.listdir(os.path.join('./bundles', folder))):
             if game_id == '.DS_Store':
                 continue
             # get the two csv files that end with _positions.csv

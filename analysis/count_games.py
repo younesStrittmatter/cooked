@@ -6,6 +6,7 @@ def main():
     for folder in os.listdir('./bundles'):
         if folder == '.DS_Store' or folder == 'maps':
             continue
+        print("{}:".format(folder), f"{len(os.listdir(os.path.join('./bundles', folder)))}")
         nr_games += len(os.listdir(os.path.join('./bundles', folder)))
     print(f'Found {nr_games} games')
 

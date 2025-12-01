@@ -1,5 +1,6 @@
 from pathlib import Path
 import pandas as pd
+from tqdm import tqdm
 
 ROOT = Path("./bundles")
 
@@ -213,7 +214,7 @@ def main():
         by_parent.setdefault(f.parent, []).append(f)
 
     # Iterate folders with exactly 2 action files
-    for folder, file_list in sorted(by_parent.items(), key=lambda kv: str(kv[0])):
+    for folder, file_list in tqdm(sorted(by_parent.items(), key=lambda kv: str(kv[0]))):
         if len(file_list) != 2:
             # Skip or warn; you can print if you want:
             # print(f"Skipping {folder} (found {len(file_list)} *_actions.csv files)")
@@ -221,14 +222,14 @@ def main():
 
         df1, df2 = load_actions_pair(file_list)
 
-        print(f"Processing folder: {folder}")
+        # print(f"Processing folder: {folder}")
         # --- CUSTOM PROCESSING (together) ---
         processed = process_together(df1, df2)
         # ------------------------------------
 
         out_path = folder / "actions_processed.csv"
         processed.to_csv(out_path, index=False)
-        print(f"Processed: {folder} -> {out_path.name}")
+        # print(f"Processed: {folder} -> {out_path.name}")
 
 
 if __name__ == "__main__":

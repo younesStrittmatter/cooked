@@ -19,6 +19,12 @@ In the folder `spoiled_broth/rl` you can find the training scripts.
 - `spoiled_broth/rl/game_env.py`: This is the "main" game environment used for training. It contains all the logic used for calculating rewards, stepping and so on.
 
 
+### To change maps:
+(1) In `games/spoiled_broth/static/index.html`: canvas has to be `tilesize * width x tilesize * height`
+(2) In `games/spoiled_broth/game.py` change width and height
+(3) Add map to `game/spoiled_broth/maps`
+
+MAKE SURE GAME_TIME is set correctly in wsgi in the game folder
 
 Python-Version: 3.13
 
@@ -51,6 +57,6 @@ gcloud config set project <project-id>
 ### Deploy
 
 ```shell
-gcloud app deploy
+dev-scripts/
 ```
 

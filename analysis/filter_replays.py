@@ -1,6 +1,8 @@
 import os
 import json
 
+from tqdm import tqdm
+
 REPLAY_FOLDER_RAW = './replays_raw/replays'
 REPLAY_FOLDER = './replays'
 
@@ -14,7 +16,7 @@ def main():
         'only_one_player_intent': [],
         'invalid_json': []
     }
-    for filename in os.listdir(REPLAY_FOLDER_RAW):
+    for filename in tqdm(os.listdir(REPLAY_FOLDER_RAW)):
         if filename.endswith('.json'):  # Process only JSON files
             filepath_in = os.path.join(REPLAY_FOLDER_RAW, filename)
             filepath_out = os.path.join(REPLAY_FOLDER, filename)
@@ -26,6 +28,14 @@ def main():
 
             agents = json_data["agents"]
             if not len(agents) == EXPECTED_NR_OF_AGENTS:
+                errors['unexpected_agent_count'].append(filename)
+                continue
+
+            _agents = [el['initial_state'] for el in agents.values()]
+            agent_pids = [el['url_params'].get('PROLIFIC_PID', [False])[0] for el in _agents]
+
+            # agent_pids_non_prolific = [el.startswith('non_prolific') for el in agent_pids]
+            if not all(agent_pids):
                 errors['unexpected_agent_count'].append(filename)
                 continue
 

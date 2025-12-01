@@ -3,6 +3,7 @@ import os
 import shutil
 
 import pandas as pd
+from tqdm import tqdm
 
 REPLAY_FOLDER = './replays'
 TICK_LOG_FOLDER = './tick_logs'
@@ -12,9 +13,12 @@ DELIVER_ABLE_ITEMS = ['tomato_salad']
 ASSEMBLE_ABLE_ITEMS = ['tomato_cut', 'plate']
 
 MIN_ACTIONS = 5
-FIRST_ACTION_MAX_TICK = 12 * 30  # 30 seconds at 12 ticks per second
-LAST_ACTION_MIN_TICK = 3 * 12 * 60 - FIRST_ACTION_MAX_TICK  # 3 minutes at 12 ticks per second, minus FIRST_ACTION_MAX_TICK
+MAX_DELAY = 24 * 30  # 30 seconds at 24 ticks per second
+# LAST_ACTION_MIN_TICK = 3 * 24 * 60 - FIRST_ACTION_MAX_TICK  # 3 minutes at 12 ticks per second, minus FIRST_ACTION_MAX_TICK
 
+EXCLUDE_LATE = True
+
+SKIP_EXISTING = False
 
 def bundle(
         replay_json,
@@ -52,8 +56,6 @@ def bundle(
         else:
             last_player_condition = player_conditions[p_c]
     if first_player_condition is None or last_player_condition is None:
-        print('Could not determine player conditions, skipping bundle')
-        print(player_conditions)
         raise
     first_player_str = f"[p{first_player_condition['start_pos']}_cs({first_player_condition['cutting_speed']})_ws({first_player_condition['walking_speed']})]"
     last_player_str = f"[p{last_player_condition['start_pos']}_cs({last_player_condition['cutting_speed']})_ws({last_player_condition['walking_speed']})]"
@@ -61,12 +63,22 @@ def bundle(
     additional_info = first_player_condition['additional_condition_info']
     condition_str = f'{first_player_str}_{last_player_str}_{additional_info}'
 
+    last_tick = int(list(tick_log_csv['tick'])[-1])
+
     path = f'./bundles/{map_name}_{condition_str}/{name}'
     if not os.path.exists(path):
         os.makedirs(path)
     else:
+        if SKIP_EXISTING:
+            return
         shutil.rmtree(path)
         os.makedirs(path)
+
+    if os.path.exists('excludes.json'):
+        with open('excludes.json') as f:
+            exclude_dict = json.load(f)
+    else:
+        exclude_dict = {}
 
 
     for player_id in agent_ids:
@@ -74,19 +86,37 @@ def bundle(
         player_data = PlayerData(intents, tick_log_csv, player_id, map_name, name, player_conditions[player_id], condition_str)
         player_datas.append(player_data)
         if player_data.total_actions < MIN_ACTIONS:
-            print(f"Skipping bundle for {name}, player {player_id} has only {player_data.total_actions} actions")
+            exclude_dict[name] = {
+                'additional_info': additional_info,
+                'condition_str': condition_str,
+            }
+            # store exclude dict
+            with open('excludes.json', 'w') as f:
+                json.dump(exclude_dict, f)
             shutil.rmtree(path)
             return
-        if player_data.first_action_tick is None or player_data.first_action_tick > FIRST_ACTION_MAX_TICK:
-            print(
-                f"Skipping bundle for {name}, player {player_id} has first action at tick {player_data.first_action_tick}")
-            shutil.rmtree(path)
-            return
-        if player_data.last_action_tick is None or player_data.last_action_tick < LAST_ACTION_MIN_TICK:
-            print(
-                f"Skipping bundle for {name}, player {player_id} has last action at tick {player_data.last_action_tick}")
-            shutil.rmtree(path)
-            return
+        if EXCLUDE_LATE:
+
+            if player_data.first_action_tick is None or player_data.first_action_tick > MAX_DELAY:
+                exclude_dict[name] = {
+                    'additional_info': additional_info,
+                    'condition_str': condition_str,
+                }
+                # store exclude dict
+                with open('excludes.json', 'w') as f:
+                    json.dump(exclude_dict, f)
+                shutil.rmtree(path)
+                return
+            if player_data.last_action_tick is None or player_data.last_action_tick < last_tick - MAX_DELAY:
+                exclude_dict[name] = {
+                    'additional_info': additional_info,
+                    'condition_str': condition_str,
+                }
+                # store exclude dict
+                with open('excludes.json', 'w') as f:
+                    json.dump(exclude_dict, f)
+                shutil.rmtree(path)
+                return
 
     for data in player_datas:
         data.csv_actions.to_csv(f'{path}/{data.player_id}_actions.csv', index=False)
@@ -103,7 +133,6 @@ def bundle(
 
 def get_player_stats(player_id, replay_json):
     agent_info = replay_json['agents'][f'{player_id}']['initial_state']
-    agent_url_params = agent_info['url_params']
     agent_url_params = agent_info["url_params"]
     if 'player_nr' in agent_info:
         player_nr = int(agent_info['player_nr'])
@@ -119,6 +148,11 @@ def get_player_stats(player_id, replay_json):
         player_starting_pos_y = int(agent_url_params[f'slot_y'][0])
         player_cutting_speed = float(agent_url_params[f'cutting_speed'][0])
         player_walking_speed = float(agent_url_params[f'walking_speed'][0])
+    prolific_id = None
+    if 'PROLIFIC_PID' in agent_url_params:
+        prolific_id = agent_url_params['PROLIFIC_PID']
+    elif 'pid' in agent_url_params:
+        prolific_id = agent_url_params['pid']
     additional_condition_info = 'default'
     if 'additional_condition_info' in agent_url_params:
         additional_condition_info = agent_url_params['additional_condition_info'][0]
@@ -133,6 +167,7 @@ def get_player_stats(player_id, replay_json):
             'cutting_speed': player_cutting_speed,
             'walking_speed': player_walking_speed,
             'additional_condition_info': additional_condition_info,
+            'prolific_id': prolific_id,
         }
     }
 
@@ -170,12 +205,20 @@ class PlayerData:
             column for column in tick_log_csv.columns
             if column.endswith('_score') and not 'player' in column
         ][0]
+        player_score_columns = [c for c in self.tick_log_csv.columns if 'player' in c and 'score' in c]
+        all_player_scores = [
+            self.tick_log_csv[p] for p in player_score_columns
+        ]
+        # add the columns
+        overall_scores = list(all_player_scores[0])
+        for p_scores in all_player_scores[1:]:
+            overall_scores = [_convert_score(o) + _convert_score(p) for o, p in zip(overall_scores, p_scores)]
+
         self.player_score_change_instances = []
         self.overall_score_change_instances = []
         self.init_score_change_instances()
         # get score at the end of the game
-        self.final_game_score = _convert_score(
-            tick_log_csv[self.overall_score_column_name].iloc[-1])
+        self.final_game_score = overall_scores[-1]
         self.final_player_score = _convert_score(
             tick_log_csv[self.player_score_column_name].iloc[-1]
         )
@@ -201,20 +244,44 @@ class PlayerData:
         self.csv_actions['player_id'] = self.player_id
         self.csv_actions['map_name'] = map_name
         self.csv_actions['game_id'] = game_id
+        if len(self.csv_actions) < 0:
 
+            return
+        if "phase" in tick_log_csv.columns:
+            try:
+                self.csv_actions['tick'] = self.csv_actions['tick'].astype(int)
+                self.tick_log_csv['tick'] = self.tick_log_csv['tick'].astype(int)
+                self.csv_actions = self.csv_actions.merge(
+                    self.tick_log_csv[['tick', 'phase']],
+                    on='tick',
+                    how='left'
+                )
+            except Exception:
+                pass
+
+        self.tick_log_csv['tick'] = self.tick_log_csv['tick'].astype(str)
         self.positions = {
             'x': list(self.tick_log_csv[f'{self.player_id}_x']),
             'y': list(self.tick_log_csv[f'{self.player_id}_y']),
             'tick': list(self.tick_log_csv['tick']),
         }
+        if "phase" in tick_log_csv.columns:
+            self.positions['phase'] = list(self.tick_log_csv['phase'])
+
 
         # add the cumulative distance walked
+
         self.positions['distance_walked'] = [0.0]
+
         for i in range(1, len(self.tick_log_csv)):
             prev_x = self.positions['x'][i - 1]
             prev_y = self.positions['y'][i - 1]
             current_x = self.positions['x'][i]
             current_y = self.positions['y'][i]
+
+            # if "phase" in tick_log_csv.columns and self.positions.get('phase', [None])[i] == "ready":
+            #     self.positions['distance_walked'].append(0.0)
+            #     continue
             if pd.isna(prev_x) or pd.isna(prev_y) or pd.isna(current_x) or pd.isna(current_y):
                 self.positions['distance_walked'].append(self.positions['distance_walked'][-1])
                 continue
@@ -226,13 +293,17 @@ class PlayerData:
         # for each row in the action dataframe, find the corresponding tick in the position dataframe
         tick_to_dist = dict(zip(self.positions["tick"], self.positions["distance_walked"]))
 
+        # self.csv_actions['tick'] = self.csv_actions['tick'].astype(str)
         if len(self.csv_actions):
 
+
             # add distance at the exact action tick (NaN if the tick isn't present)
+            # if not "phase" in tick_log_csv.columns:
             self.csv_actions["distance_walked"] = [
-                tick_to_dist.get(str(t) if pd.notna(t) else str(t), float("nan"))
-                for t in self.csv_actions["tick"]
-            ]
+                        tick_to_dist.get(str(t) if pd.notna(t) else str(t), float("nan"))
+                        for t in self.csv_actions["tick"]
+                    ]
+
             self.csv_actions["distance_walked_since_last_action"] = (
                 self.csv_actions["distance_walked"].diff().fillna(0.0)
             )
@@ -273,12 +344,14 @@ class PlayerData:
             self.csv_actions['walking_speed'] = player_condition['walking_speed']
             self.csv_actions['cutting_speed'] = player_condition['cutting_speed']
             self.csv_actions['start_pos'] = str(player_condition['start_pos'])
+            self.csv_actions['prolific_id'] = str(player_condition['prolific_id'][0])
             self.csv_actions['condition'] = condition
 
         self.csv_positions = pd.DataFrame(self.positions)
         self.csv_positions['walking_speed'] = player_condition['walking_speed']
         self.csv_positions['cutting_speed'] = player_condition['cutting_speed']
         self.csv_positions['start_pos'] = str(player_condition['start_pos'])
+        self.csv_positions['prolific_id'] = str(player_condition['prolific_id'][0])
 
         # total number of actions
         self.total_actions = len(self.csv_actions)
@@ -292,7 +365,18 @@ class PlayerData:
 
     def init_score_change_instances(self):
         player_scores = list(self.tick_log_csv[self.player_score_column_name])
-        overall_scores = list(self.tick_log_csv[self.overall_score_column_name])
+        # find player columns
+        player_score_columns = [c for c in self.tick_log_csv.columns if 'player' in c and 'score' in c]
+        all_player_scores = [
+            self.tick_log_csv[p] for p in player_score_columns
+        ]
+        # add the columns
+        overall_scores = list(all_player_scores[0])
+        for p_scores in all_player_scores[1:]:
+            overall_scores = [_convert_score(o) + _convert_score(p) for o,p in zip(overall_scores, p_scores)]
+
+
+        #overall_scores = list(self.tick_log_csv[self.overall_score_column_name])
 
         for i in range(1, len(player_scores)):
             prev_player_score = _convert_score(player_scores[i - 1])
@@ -462,7 +546,7 @@ def get_cutting_board_item_exchange_instance(item_prev, item_current, tick, cutt
 
 
 def main():
-    for filename in os.listdir(REPLAY_FOLDER):
+    for filename in tqdm(os.listdir(REPLAY_FOLDER)):
         if filename.endswith('.json'):  # Process only JSON files
             filepath_json = os.path.join(REPLAY_FOLDER, filename)
             filepath_csv = os.path.join(TICK_LOG_FOLDER, filename.replace('.json', '.csv'))
@@ -471,6 +555,7 @@ def main():
             if not os.path.exists(filepath_csv):
                 print(f"Tick log for {filename} not found, skipping...")
                 continue
+
             csv_data = pd.read_csv(
                 filepath_csv,
                 sep=None,  # auto-detect delimiter
@@ -479,12 +564,11 @@ def main():
                 encoding='utf-8',  # try 'latin-1' if this fails
                 dtype=str  # avoid dtype inference surprises
             )
-            # check if dir already exists
-            # if os.path.exists(f'./bundles/{filename}'):
-            #     print(f"Bundle for {filename} already exists, skipping...")
-            #     continue
 
-            bundle(json_data, csv_data, filename)
+            try:
+                bundle(json_data, csv_data, filename)
+            except Exception:
+                raise
 
 
 def _is_deliverable(item):

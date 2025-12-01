@@ -1,5 +1,5 @@
 from engine.base_game import BaseGame
-from coboxing.agent.base import Agent
+from template_game.agent.base import Agent
 
 
 class Game(BaseGame):

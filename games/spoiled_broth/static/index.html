@@ -1,0 +1,67 @@
+<style>
+    #scene {
+        position: fixed;
+        width: min(90vw, 90vh);
+        height: min(90vh, 90vw);
+        image-rendering: pixelated;
+        background-color: #000; /* Optional: Set a background color */
+        left: 50vw;
+        top: 50vh;
+        transform: translate(-50%, -50%);
+    }
+    #text_overlay {
+        position: fixed;
+        width: min(90vw, 90vh);
+        height: min(90vh, 90vw);
+
+        background-color: #0000; /* Optional: Set a background color */
+        left: 50vw;
+        top: 50vh;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+<canvas id="scene" width="160" height="160"></canvas>
+<canvas id="text_overlay" width="1024" height="1024"></canvas>
+
+
+<!-- (Optional but recommended for perf) -->
+<link rel="preconnect" href="https://storage.googleapis.com">
+<link rel="dns-prefetch" href="https://storage.googleapis.com">
+
+<script>
+    const projectId = 'cooked-455218';
+    const gameName = 'spoiled_broth';
+
+    const ASSET_BUCKET = `${projectId}-${gameName}-assets`;
+    const ASSET_BASE_URL=`https://storage.googleapis.com/${ASSET_BUCKET}/`
+    window.ASSET_BASE_URL = ASSET_BASE_URL;
+</script>
+
+<script type="module">
+    import { renderScene } from "/extensions/renderer2d/static/renderer_ui.js";
+    import { setStateUpdateHandler } from "/engine/static/engine_ui.js";
+
+    let previousState = null;
+    let currentState = null;
+    let lastUpdateTime = 0;
+    const tickInterval = 1000 / 24; // 24 FPS logic
+
+    setStateUpdateHandler((state) => {
+        previousState = currentState;
+        currentState = state;
+        lastUpdateTime = performance.now();
+    });
+
+    function renderLoop(now) {
+        if (previousState && currentState) {
+            const t = Math.min(1, (now - lastUpdateTime) / tickInterval);
+            renderScene(previousState, currentState, t);
+        }
+        requestAnimationFrame(renderLoop);
+    }
+
+    requestAnimationFrame(renderLoop);
+</script>

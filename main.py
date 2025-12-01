@@ -13,21 +13,20 @@ import logging
 log = logging.getLogger('werkzeug')
 log.disabled = True
 
-path_root = Path(__file__).resolve().parent / "spoiled_broth"
-
+path_root = Path(__file__).resolve().parent / "games/spoiled_broth"
 
 
 engine_app = SessionApp(
     game_factory=Game,
     ui_modules=[Renderer2DModule()],
-    # agent_map={"ai_1": LLMController('ai_1')},
     path_root=path_root,
     tick_rate=params_both['tick_rate'],
     ai_tick_rate=.5,
     n_players=params_online['n_players'],
     is_max_speed=params_online['is_max_speed'],
     max_game_time=params_both['max_game_time'],
-    redirect_link='https://google.com'
+    redirect_link='https://google.com',
+    is_served_locally=True
 )
 
 app = engine_app.app

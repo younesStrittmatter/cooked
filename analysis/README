@@ -1,0 +1,6 @@
+(1) run download.sh
+(2) run filter_replays.py
+(3) in parent, run main_replay.py or auto_replay_loop.py (fire and forget)
+(4) run create_bundles.py
+(5) run create_item_touches.py
+(6) run bundle.py

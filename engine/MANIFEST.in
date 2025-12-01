@@ -1,0 +1,1 @@
+recursive-include src/engine *.json *.yaml *.yml *.txt *.csv *.png *.jpg *.jpeg *.gif *.svg *.js *.css

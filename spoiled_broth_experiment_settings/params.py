@@ -1,6 +1,6 @@
 params_both = {
-    'tick_rate': 12,
-    'max_game_time': 60 * 3,
+    'tick_rate': 24,
+    'max_game_time': 60 * 5 + 5,
 }
 
 params_online = {
@@ -11,5 +11,4 @@ params_online = {
 params_replay = {
     'n_players': 0,
     'is_max_speed': True,
-
 }
