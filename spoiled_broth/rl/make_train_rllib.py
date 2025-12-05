@@ -51,7 +51,14 @@ def make_train_rllib(config):
 
     # --- Dynamic policy setup ---
     num_agents = config.get("NUM_AGENTS", 2)
-    agent_ids = [f"ai_rl_{i+1}" for i in range(num_agents)]
+    agent_to_train = config.get("AGENT_TO_TRAIN", None)
+    
+    # Create agent IDs - for single agent training, use the specific agent to train
+    if num_agents == 1 and agent_to_train is not None:
+        agent_ids = [f"ai_rl_{agent_to_train}"]
+    else:
+        agent_ids = [f"ai_rl_{i+1}" for i in range(num_agents)]
+    
     policies = {}
     policies_to_train = []
     for agent_id in agent_ids:
@@ -76,6 +83,7 @@ def make_train_rllib(config):
 
     start_episode = 0
     checkpoint_episodes = []
+    checkpoint_log_lines = []  # Initialize early for error handling
     if config["CHECKPOINTS"] is not None: 
         for agent_id, checkpoint_info in config["CHECKPOINTS"].items():
             if checkpoint_info and "path" in checkpoint_info:
@@ -193,7 +201,6 @@ def make_train_rllib(config):
         print(f"Dynamic PPO parameters enabled with config: {dynamic_ppo_params_cfg}")
         print(f"Initial PPO params: clip_eps={initial_ppo_params['clip_eps']}, ent_coef={initial_ppo_params['ent_coef']}")
 
-    checkpoint_log_lines = []
     # Load pretrained policies individually if specified in config
     if config["CHECKPOINTS"] is not None:        
         checkpoint_log_lines.append(f"Loading individual policies from checkpoints:\n{config['CHECKPOINTS']}")

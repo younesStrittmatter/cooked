@@ -167,6 +167,8 @@ if CHECKPOINT_PATHS != "none":
     pretrained_policies = {}
     with open(input_path, "r") as f:
         lines = f.readlines()
+        # Note: Debug script doesn't support agent_to_train parameter yet
+        # This assumes standard agent numbering for now
         for i in range(NUM_AGENTS):
             policy_id = str(lines[i]).strip()
             CHECKPOINT_PATH = str(lines[i+1]).strip()
@@ -291,7 +293,9 @@ if episode_data_summary:
         print(f"\nCaptured {len(episode_data_summary)} episodes")
         if len(episode_data_summary) > 0:
             print("Episode Statistics:")
-            for agent_id in [f"ai_rl_{i+1}" for i in range(NUM_AGENTS)]:
+            # Use actual agent IDs from reward_weights to avoid hardcoded numbering
+            agent_ids = list(reward_weights.keys()) if reward_weights else [f"ai_rl_{i+1}" for i in range(NUM_AGENTS)]
+            for agent_id in agent_ids:
                 if f"total_actions_{agent_id}" in summary_df.columns:
                     agent_actions = summary_df[f"total_actions_{agent_id}"]
                     print(f"  {agent_id} actions per episode: avg={agent_actions.mean():.1f}, min={agent_actions.min()}, max={agent_actions.max()}")

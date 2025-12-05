@@ -56,7 +56,13 @@ def make_train_rllib_debug(config):
 
     # --- Dynamic policy setup ---
     num_agents = config.get("NUM_AGENTS", 2)
-    agent_ids = [f"ai_rl_{i+1}" for i in range(num_agents)]
+    agent_to_train = config.get("AGENT_TO_TRAIN", None)
+    
+    # Create agent IDs - for single agent training, use the specific agent to train
+    if num_agents == 1 and agent_to_train is not None:
+        agent_ids = [f"ai_rl_{agent_to_train}"]
+    else:
+        agent_ids = [f"ai_rl_{i+1}" for i in range(num_agents)]
     policies = {}
     policies_to_train = []
     for agent_id in agent_ids:

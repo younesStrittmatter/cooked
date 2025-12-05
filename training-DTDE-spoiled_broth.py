@@ -34,9 +34,21 @@ SEED = int(sys.argv[8]) if len(sys.argv) > 8 else 0
 CHECKPOINT_PATHS = str(sys.argv[9]).lower() if len(sys.argv) > 9 else "none"
 REWARDS_ON_DELIVERY_ONLY = str(sys.argv[10]).lower() if len(sys.argv) > 10 else "true"
 
+# Optional when number of agents = 1:
+# Decide which agent to train (1 or 2)
+if NUM_AGENTS == 1:
+    agent_to_train = 1  # Default to agent 1
+    if len(sys.argv) > 11:
+        agent_to_train = int(sys.argv[11])
+        if agent_to_train not in [1, 2]:
+            raise ValueError("When NUM_AGENTS=1, agent_to_train must be 1 or 2")
+
+######### ----------------------------------------------------------------- #########
+######### -------------- Code below this line is automatic ---------------- #########
+
 with open(INPUT_PATH, "r") as f:
     lines = f.readlines()
-    for i in range(NUM_AGENTS):
+    for i in range(lines.__len__() // 2):
         globals()[f"alpha_{i+1}"], globals()[f"beta_{i+1}"] = [round(float(x), 4) for x in lines[2*i].strip().split()]
         globals()[f"walking_speed_{i+1}"], globals()[f"cutting_speed_{i+1}"] = [round(float(x), 4) for x in lines[2*i + 1].strip().split()]
 
@@ -68,7 +80,7 @@ TRAIN_BATCH_SIZE = 4000  # Increased for better GPU utilization (NUM_ENVS * roll
 SGD_MINIBATCH_SIZE = 500  # Optimized minibatch size for GPU
 NUM_SGD_ITER = 10  # Number of SGD iterations per training batch
 SHOW_EVERY_N_EPOCHS = 1
-SAVE_EVERY_N_EPOCHS = 50
+SAVE_EVERY_N_EPOCHS = 20
 PAYOFF_MATRIX = [1,1,-2]
 
 # Neural network architecture
@@ -124,15 +136,16 @@ DYNAMIC_PPO_PARAMS_CFG = {
 
 WAIT_FOR_ACTION_COMPLETION = True  # Flag to ensure actions complete before next step
 
+reward_weights, walking_speeds, cutting_speeds = {}, {}, {}
+
 # Path definitions
 if NUM_AGENTS == 1:
     save_dir = f'{local}/data/samuel_lozano/cooked/pretraining/{GAME_VERSION}/map_{MAP_NR}'
-    reward_weights = {"ai_rl_1": (globals()[f"alpha_1"], globals()[f"beta_1"])}
-    walking_speeds = {"ai_rl_1": globals()[f"walking_speed_1"]}
-    cutting_speeds = {"ai_rl_1": globals()[f"cutting_speed_1"]}
+    reward_weights[f"ai_rl_{agent_to_train}"] = (globals()[f"alpha_{agent_to_train}"], globals()[f"beta_{agent_to_train}"])
+    walking_speeds[f"ai_rl_{agent_to_train}"] = globals()[f"walking_speed_{agent_to_train}"]
+    cutting_speeds[f"ai_rl_{agent_to_train}"] = globals()[f"cutting_speed_{agent_to_train}"]
 else: 
     save_dir = f'{local}/data/samuel_lozano/cooked/{GAME_VERSION}/map_{MAP_NR}'
-    reward_weights, walking_speeds, cutting_speeds = {}, {}, {}
     for i in range(1, NUM_AGENTS + 1):
         reward_weights[f"ai_rl_{i}"] = (globals()[f"alpha_{i}"], globals()[f"beta_{i}"])
         walking_speeds[f"ai_rl_{i}"] = globals()[f"walking_speed_{i}"]
@@ -146,14 +159,25 @@ if CHECKPOINT_PATHS != "none":
     pretrained_policies = {}
     with open(CHECKPOINT_PATHS, "r") as f:
         lines = f.readlines()
-        for i in range(NUM_AGENTS):
-            policy_id = str(lines[3*i]).strip()
-            checkpoint_number = str(lines[3*i + 1]).strip()
-            checkpoint_path = str(lines[3*i + 2]).strip()
+        if NUM_AGENTS == 1:
+            # For single agent training, use the specific agent to train
+            policy_id = str(lines[0]).strip()
+            checkpoint_number = str(lines[1]).strip()
+            checkpoint_path = str(lines[2]).strip()
             if policy_id.lower() != "none" and checkpoint_number.lower() != "none" and checkpoint_path.lower() != "none":
-                pretrained_policies[f"ai_rl_{i+1}"] = {"source_policy_id": policy_id, "checkpoint_number": checkpoint_number, "path": checkpoint_path}
+                pretrained_policies[f"ai_rl_{agent_to_train}"] = {"source_policy_id": policy_id, "checkpoint_number": checkpoint_number, "path": checkpoint_path}
             else:
-                pretrained_policies[f"ai_rl_{i+1}"] = None
+                pretrained_policies[f"ai_rl_{agent_to_train}"] = None
+        else:
+            # For multi-agent training, use the standard loop
+            for i in range(NUM_AGENTS):
+                policy_id = str(lines[3*i]).strip()
+                checkpoint_number = str(lines[3*i + 1]).strip()
+                checkpoint_path = str(lines[3*i + 2]).strip()
+                if policy_id.lower() != "none" and checkpoint_number.lower() != "none" and checkpoint_path.lower() != "none":
+                    pretrained_policies[f"ai_rl_{i+1}"] = {"source_policy_id": policy_id, "checkpoint_number": checkpoint_number, "path": checkpoint_path}
+                else:
+                    pretrained_policies[f"ai_rl_{i+1}"] = None
 
 # Determine grid size from map file (text format)
 map_txt_path = os.path.join(os.path.dirname(__file__), 'spoiled_broth', 'maps', f'{MAP_NR}.txt')
@@ -176,38 +200,41 @@ config = {
     "NUM_SGD_ITER": NUM_SGD_ITER,
     "NUM_EPOCHS": NUM_EPOCHS,
     "NUM_AGENTS": NUM_AGENTS,
+    "AGENT_TO_TRAIN": agent_to_train if NUM_AGENTS == 1 else None,
     "SHOW_EVERY_N_EPOCHS": SHOW_EVERY_N_EPOCHS,
     "SAVE_EVERY_N_EPOCHS": SAVE_EVERY_N_EPOCHS,
     "LR": LR,
     "MAP_NR": MAP_NR,
     "REWARD_WEIGHTS": reward_weights,
     "GAME_VERSION": GAME_VERSION,
+    "GRID_SIZE": GRID_SIZE,
     "PAYOFF_MATRIX": PAYOFF_MATRIX,
     "WALKING_SPEEDS": walking_speeds,
     "CUTTING_SPEEDS": cutting_speeds,
     "INITIAL_SEED": SEED,
+    "WAIT_FOR_COMPLETION": WAIT_FOR_ACTION_COMPLETION,
+    "SAVE_DIR": save_dir,
+    "CHECKPOINTS": pretrained_policies,  # Add pretrained policies configuration
+    # Reward and penalty configurations
     "PENALTIES_CFG": PENALTIES_CFG,
     "REWARDS_CFG": REWARDS_CFG,
     "DYNAMIC_REWARDS_CFG": DYNAMIC_REWARDS_CFG,
     "DYNAMIC_PPO_PARAMS_CFG": DYNAMIC_PPO_PARAMS_CFG,
-    "WAIT_FOR_COMPLETION": WAIT_FOR_ACTION_COMPLETION,
-    "SAVE_DIR": save_dir,
-    "CHECKPOINTS": pretrained_policies,  # Add pretrained policies configuration
-    # RLlib specific parameters - Optimized for GPU
-    "NUM_ENV_WORKERS": NUM_ENV_WORKERS,  # Parallel environment workers (CPU)
-    "NUM_LEARNER_WORKERS": NUM_LEARNER_WORKERS,  # GPU learner workers
+    # Hyperparameters
     "NUM_UPDATES": NUM_SGD_ITER,  # Number of SGD iterations per batch
-    "GAMMA": 0.975,      # Discount factor for future rewards (close to 1 = long-term, lower = short-term)
-    "GAE_LAMBDA": 0.95, # Lambda for Generalized Advantage Estimation (controls bias-variance tradeoff in advantage calculation)
-    "ENT_COEF": 0.07,   # Entropy coefficient (controls exploration: higher = more random actions)
+    "GAMMA": 0.99,     # Discount factor for future rewards (close to 1 = long-term, lower = short-term)
+    "GAE_LAMBDA": 0.99, # Lambda for Generalized Advantage Estimation (controls bias-variance tradeoff in advantage calculation)
+    "ENT_COEF": 0.05,   # Entropy coefficient (controls exploration: higher = more random actions)
     "CLIP_EPS": 0.2,    # PPO clip parameter (limits how much the policy can change at each update; stabilizes training)
     "VF_COEF": 0.5,     # Value function loss coefficient (relative weight of value loss vs. policy loss)
-    "GRID_SIZE": GRID_SIZE,
     "FCNET_HIDDENS": MLP_LAYERS,  # Hidden layer sizes for MLP
     "FCNET_ACTIVATION": "tanh",  # Activation function for MLP ("tanh", "relu", etc.)
     # Resource allocation
     "NUM_CPUS": NUM_CPUS,
     "NUM_GPUS": NUM_GPUS,
+    # RLlib specific parameters - Optimized for GPU
+    "NUM_ENV_WORKERS": NUM_ENV_WORKERS,  # Parallel environment workers (CPU)
+    "NUM_LEARNER_WORKERS": NUM_LEARNER_WORKERS,  # GPU learner workers
     # Performance optimizations
     "ROLLOUT_FRAGMENT_LENGTH": 200,  # Steps per rollout fragment
     "BATCH_MODE": "complete_episodes",  # Collect complete episodes for better learning

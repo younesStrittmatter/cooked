@@ -49,7 +49,7 @@ class DataProcessor:
             r"'([^']+)':\s*\(\s*([-\d\.eE+]+),\s*([-\d\.eE+]+)\)"
         )
     
-    def setup_directories(self, experiment_type: str, map_name: str, cluster: str = 'cuenca') -> Dict[str, str]:
+    def setup_directories(self, experiment_type: str, map_name: str, cluster: str = 'cuenca', study_name: str = None) -> Dict[str, str]:
         """
         Set up directory structure for analysis.
         
@@ -57,6 +57,7 @@ class DataProcessor:
             experiment_type: Type of experiment ('classic', 'competition', 'pretrained')
             map_name: Map name identifier  
             cluster: Cluster type ('brigit', 'cuenca', 'local')
+            study_name: Study name for specific study folders (optional)
             
         Returns:
             Dictionary containing all relevant paths
@@ -65,13 +66,20 @@ class DataProcessor:
             raise ValueError(f"Invalid cluster '{cluster}'. Choose from {list(self.config.cluster_paths.keys())}")
         
         local_path = self.config.cluster_paths[cluster]
-        raw_dir = f"{local_path}/data/samuel_lozano/cooked/{experiment_type}/map_{map_name}"
+        
+        if study_name:
+            # Use study_name folder structure: /data/samuel_lozano/cooked/{experiment_type}/map_{map_name}/{study_name}/
+            raw_dir = f"{local_path}/data/samuel_lozano/cooked/{experiment_type}/map_{map_name}/{study_name}"
+        else:
+            # Default structure: /data/samuel_lozano/cooked/{experiment_type}/map_{map_name}/
+            raw_dir = f"{local_path}/data/samuel_lozano/cooked/{experiment_type}/map_{map_name}"
         
         paths = {
             'raw_dir': raw_dir,
             'output_path': f"{raw_dir}/training_results.csv",
             'figures_dir': f"{raw_dir}/training_figures/",
-            'smoothed_figures_dir': f"{raw_dir}/training_figures/smoothed_{self.config.smoothing_factor}/"
+            'smoothed_figures_dir': f"{raw_dir}/training_figures/smoothed_{self.config.smoothing_factor}/",
+            'study_name': study_name
         }
         
         # Create directories
@@ -114,6 +122,10 @@ class DataProcessor:
             print(f"Learning rate not found in {folder_path}")
             return None
         lr = float(lr_match.group(1))
+        
+        # Extract seed if present
+        seed_match = re.search(r"INITIAL_SEED:\s*([0-9]+)", config_contents)
+        seed = int(seed_match.group(1)) if seed_match else None
         
         # Load and clean CSV data
         with open(csv_path, 'r') as f:
@@ -286,15 +298,22 @@ class DataProcessor:
         
         df.insert(len(matches) * 2 + 1, "lr", lr)
         
+        # Add seed if found in config
+        if seed is not None:
+            df.insert(len(matches) * 2 + 2, "seed", seed)
+        
         # Debug: Print DataFrame info
         print(f"Parsed training folder {folder_path}:")
         print(f"  NUM_ENVS detected: {num_envs}")
+        print(f"  SEED detected: {seed if seed is not None else 'None'}")
         print(f"  DataFrame shape: {df.shape}")
         print(f"  Columns: {list(df.columns)}")
         if len(df) > 0:
             print(f"  Episodes range: {df['episode'].min()} to {df['episode'].max()}")
             print(f"  Sample data for first episode:")
             print(f"    Episode: {df.iloc[0]['episode']}")
+            if 'seed' in df.columns:
+                print(f"    Seed: {df.iloc[0]['seed']}")
             # Show some key metrics if they exist
             key_metrics = ['pure_reward_ai_rl_1', 'deliver_ai_rl_1', 'cut_ai_rl_1', 'salad_ai_rl_1']
             for metric in key_metrics:
@@ -304,11 +323,86 @@ class DataProcessor:
             print("  WARNING: DataFrame is empty!")
         
         return df
+        
+    def _average_across_seeds(self, df: pd.DataFrame, num_agents: int) -> pd.DataFrame:
+        """
+        Average data across different seeds for the same experimental conditions.
+        
+        Args:
+            df: DataFrame containing data from multiple seeds
+            num_agents: Number of agents
+            
+        Returns:
+            DataFrame with data averaged across seeds
+        """
+        print("Averaging data across seeds...")
+        
+        # Define grouping columns (experimental conditions that should be the same across seeds)
+        group_cols = ['episode']
+        
+        # Add agent parameters to grouping
+        for i in range(1, num_agents + 1):
+            if f'alpha_{i}' in df.columns:
+                group_cols.append(f'alpha_{i}')
+            if f'beta_{i}' in df.columns:
+                group_cols.append(f'beta_{i}')
+        
+        # Add learning rate if present
+        if 'lr' in df.columns:
+            group_cols.append('lr')
+            
+        print(f"Grouping by: {group_cols}")
+        
+        # Get columns to average (numeric columns except grouping columns)
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        cols_to_average = [col for col in numeric_cols if col not in group_cols and col != 'seed']
+        
+        print(f"Columns to average: {len(cols_to_average)} columns")
+        print(f"Example columns: {cols_to_average[:10]}..." if len(cols_to_average) > 10 else f"Columns: {cols_to_average}")
+        
+        # Check how many seeds we have
+        unique_seeds = df['seed'].nunique()
+        print(f"Found {unique_seeds} different seeds")
+        
+        if unique_seeds == 1:
+            print("Only one seed found, no averaging needed")
+            return df
+        
+        # Perform grouping and averaging
+        grouped = df.groupby(group_cols)
+        
+        # Calculate means for numeric columns
+        averaged_data = grouped[cols_to_average].mean().reset_index()
+        
+        # Add back non-numeric columns (take first value from each group)
+        non_numeric_cols = [col for col in df.columns if col not in numeric_cols and col not in group_cols and col != 'seed']
+        if non_numeric_cols:
+            first_values = grouped[non_numeric_cols].first().reset_index()
+            averaged_data = averaged_data.merge(first_values, on=group_cols, how='left')
+        
+        # Add seed information
+        seed_counts = grouped['seed'].agg(['count', 'nunique']).reset_index()
+        seed_counts.rename(columns={'count': 'total_episodes', 'nunique': 'seeds_averaged'}, inplace=True)
+        averaged_data = averaged_data.merge(seed_counts[group_cols + ['seeds_averaged']], on=group_cols, how='left')
+        
+        # Create a representative timestamp (use first timestamp but mark as averaged)
+        if 'timestamp' in df.columns:
+            first_timestamp = df['timestamp'].iloc[0]
+            averaged_data['timestamp'] = f"{first_timestamp}_averaged_{unique_seeds}_seeds"
+        
+        print(f"Averaging complete:")
+        print(f"  Original data: {len(df)} rows")
+        print(f"  Averaged data: {len(averaged_data)} rows")
+        print(f"  Seeds per condition: {averaged_data['seeds_averaged'].iloc[0] if len(averaged_data) > 0 else 'N/A'}")
+        
+        return averaged_data
     
     def load_experiment_data(self, paths: Dict[str, str], 
                            num_agents: int = 1) -> pd.DataFrame:
         """
         Load all experiment data from the raw directory.
+        Supports both direct training folders and study_name folder structure.
+        When study_name is used, averages across different seeds for the same experiment.
         
         Args:
             paths: Dictionary containing directory paths
@@ -317,27 +411,89 @@ class DataProcessor:
         Returns:
             Combined DataFrame with all experiment data
         """
-        all_dfs = []
-        
         raw_dir = paths['raw_dir']
-        print("Loading experiment data from directory:", raw_dir)
+        study_name = paths.get('study_name')
+        
+        print(f"Loading experiment data from directory: {raw_dir}")
+        if study_name:
+            print(f"Using study name: {study_name}")
 
         if not os.path.exists(raw_dir):
+            # If study_name is specified but directory doesn't exist, try to find available study names
+            if study_name:
+                parent_dir = os.path.dirname(raw_dir)
+                if os.path.exists(parent_dir):
+                    available_studies = [d for d in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, d))]
+                    print(f"Directory {raw_dir} does not exist.")
+                    print(f"Available study names in {parent_dir}: {available_studies}")
+                    if available_studies:
+                        print(f"Try using one of these study names: {', '.join(available_studies)}")
             raise ValueError(f"Data directory does not exist: {raw_dir}")
             
+        all_dfs = []
         folders_found = []
         folders_processed = []
         
-        for folder in os.listdir(raw_dir):
-            folder_path = os.path.join(raw_dir, folder)
-            if not os.path.isdir(folder_path):
-                continue
+        # Check if we have study_name folders or direct training folders
+        items_in_dir = os.listdir(raw_dir)
+        training_folders = [item for item in items_in_dir if item.startswith('Training_') and os.path.isdir(os.path.join(raw_dir, item))]
+        
+        if study_name is None and training_folders:
+            # Direct training folders mode (legacy)
+            print("Direct training folders detected")
+            for folder in training_folders:
+                folder_path = os.path.join(raw_dir, folder)
+                folders_found.append(folder)
+                df = self.parse_training_folder(folder_path, num_agents)
+                if df is not None:
+                    all_dfs.append(df)
+                    folders_processed.append(folder)
+        
+        elif study_name is None:
+            # Auto-detect study names and ask user to specify
+            study_dirs = [item for item in items_in_dir if os.path.isdir(os.path.join(raw_dir, item)) and not item.startswith('training_')]
+            if study_dirs:
+                print(f"Found multiple study directories: {study_dirs}")
+                print("Please specify a study_name parameter. Example usage:")
+                print(f"  python analysis_pretrained.py {os.path.basename(raw_dir).replace('map_', '')} --study-name {study_dirs[0]}")
+                raise ValueError(f"Multiple study directories found. Please specify --study-name parameter from: {study_dirs}")
+            else:
+                # No training folders and no study folders - try direct processing
+                print("No training folders or study folders found, trying to process directory directly")
+                for folder in items_in_dir:
+                    folder_path = os.path.join(raw_dir, folder)
+                    if not os.path.isdir(folder_path):
+                        continue
+                    folders_found.append(folder)
+                    df = self.parse_training_folder(folder_path, num_agents)
+                    if df is not None:
+                        all_dfs.append(df)
+                        folders_processed.append(folder)
+        
+        else:
+            # Study name mode - process all training folders and average seeds
+            print(f"Processing study: {study_name}")
+            print(f"Looking for Training_ folders in: {raw_dir}")
             
-            folders_found.append(folder)
-            df = self.parse_training_folder(folder_path, num_agents)
-            if df is not None:
-                all_dfs.append(df)
-                folders_processed.append(folder)
+            # Find all training folders
+            for folder in items_in_dir:
+                folder_path = os.path.join(raw_dir, folder)
+                if not os.path.isdir(folder_path) or not folder.startswith('Training_'):
+                    continue
+                    
+                folders_found.append(folder)
+                df = self.parse_training_folder(folder_path, num_agents)
+                if df is not None:
+                    # Add study_name information
+                    df['study_name'] = study_name
+                    
+                    # Seed should already be extracted from config.txt during parse_training_folder
+                    # If not present, use timestamp as a unique identifier
+                    if 'seed' not in df.columns:
+                        df['seed'] = df['timestamp'].iloc[0] if len(df) > 0 else 'unknown'
+                    
+                    all_dfs.append(df)
+                    folders_processed.append(folder)
         
         print(f"Found {len(folders_found)} folders, successfully processed {len(folders_processed)}")
         if folders_found:
@@ -346,10 +502,19 @@ class DataProcessor:
             print(f"Folders processed: {folders_processed}")
         
         if not all_dfs:
-            raise ValueError(f"No valid training data found in {raw_dir}. Check that config.txt and training_stats.csv files exist in training folders.")
+            error_msg = f"No valid training data found in {raw_dir}. "
+            if study_name:
+                error_msg += f"Check that Training_* folders exist in the study directory '{study_name}' and contain config.txt and training_stats.csv files."
+            else:
+                error_msg += "Check that config.txt and training_stats.csv files exist in training folders."
+            raise ValueError(error_msg)
         
         # Combine all dataframes
         final_df = pd.concat(all_dfs, ignore_index=True)
+        
+        # If we have seeds, perform averaging across seeds for same experimental conditions
+        if 'seed' in final_df.columns and study_name:
+            final_df = self._average_across_seeds(final_df, num_agents)
         
         # Remove existing output file and save new one
         if os.path.exists(paths['output_path']):
@@ -875,13 +1040,20 @@ def setup_argument_parser(experiment_type: str) -> argparse.ArgumentParser:
         default='no',
         help='Generate individual figures for each training ID (yes/no)'
     )
+
+    parser.add_argument(
+        '--study-name',
+        type=str,
+        default=None,
+        help='Study name for specific study folders (optional)'
+    )
     
     return parser
 
 
 def main_analysis_pipeline(experiment_type: str, map_name: str,
                           cluster: str = 'cuenca', smoothing_factor: int = 15, 
-                          num_agents: Optional[int] = None) -> Dict:
+                          num_agents: Optional[int] = None, study_name: Optional[str] = None) -> Dict:
     """
     Main analysis pipeline that can be used by all experiment types.
     
@@ -891,6 +1063,7 @@ def main_analysis_pipeline(experiment_type: str, map_name: str,
         cluster: Cluster type
         smoothing_factor: Smoothing factor for plots
         num_agents: Number of agents (default: 2 for classic/competition, 1 for pretrained)
+        study_name: Study name for specific study folders (optional)
         
     Returns:
         Dictionary containing processed data and paths
@@ -903,7 +1076,7 @@ def main_analysis_pipeline(experiment_type: str, map_name: str,
     plotter = PlotGenerator(config)
     
     # Set up directories and load data
-    paths = processor.setup_directories(experiment_type, map_name, cluster)
+    paths = processor.setup_directories(experiment_type, map_name, cluster, study_name)
     
     # Determine number of agents based on experiment type
     if num_agents is None:

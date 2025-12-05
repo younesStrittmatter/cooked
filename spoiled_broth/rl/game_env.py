@@ -195,10 +195,12 @@ class GameEnv(ParallelEnv):
         if self.game_mode == "competition":
             self.total_agent_events = {agent_id: {"deliver_own": 0, "deliver_other": 0, "salad_own": 0, "salad_other": 0, "cut_own": 0, "cut_other": 0, "plate": 0, "raw_food_own": 0, "raw_food_other": 0, "counter": 0} for agent_id in self.agents}
             self.action_obs_mapping = ACTIONS_OBSERVATION_MAPPING_COMPETITION
+            # Assign food types dynamically based on actual agents
+            food_types = ["tomato", "pumpkin"]
             self.agent_food_type = {
-                "ai_rl_1": "tomato",
-                "ai_rl_2": "pumpkin",
-                }
+                agent_id: food_types[i % len(food_types)] 
+                for i, agent_id in enumerate(sorted(self.agents))
+            }
         elif self.game_mode == "classic":
             self.total_agent_events = {agent_id: {"deliver": 0, "salad": 0, "cut": 0, "plate": 0, "raw_food": 0, "counter": 0} for agent_id in self.agents}
             self.action_obs_mapping = ACTIONS_OBSERVATION_MAPPING_CLASSIC
@@ -277,10 +279,7 @@ class GameEnv(ParallelEnv):
 
         if self.game_mode == "competition":
             self.total_agent_events = {agent_id: {"deliver_own": 0, "deliver_other": 0, "salad_own": 0, "salad_other": 0, "cut_own": 0, "cut_other": 0, "plate": 0, "raw_food_own": 0, "raw_food_other": 0, "counter": 0} for agent_id in self.agents}
-            self.agent_food_type = {
-                "ai_rl_1": "tomato",
-                "ai_rl_2": "pumpkin",
-                }
+            # Agent food type already set in __init__, no need to reassign
         elif self.game_mode == "classic":
             self.total_agent_events = {agent_id: {"deliver": 0, "salad": 0, "cut": 0, "plate": 0, "raw_food": 0, "counter": 0} for agent_id in self.agents}
             self.agent_food_type = None

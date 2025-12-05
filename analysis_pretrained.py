@@ -24,19 +24,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from spoiled_broth.analysis.utils import (
     setup_argument_parser, main_analysis_pipeline, MetricDefinitions
 )
-from spoiled_broth.analysis.individual_training_classic_plots import (
-    generate_individual_basic_metrics_plots,
-    generate_individual_combined_reward_plots,
-    generate_individual_combined_delivery_cut_plots,
-    generate_individual_meaningful_actions_combined,
-    generate_individual_combined_plots
-)
-from spoiled_broth.analysis.multi_training_classic_plots import (
-    generate_combined_plots,
-    generate_meaningful_actions_combined,
-    generate_combined_reward_plots,
-    generate_combined_delivery_cut_plots
-)
 
 
 def generate_pretrained_plots(analysis_results):
@@ -426,6 +413,7 @@ def main():
     print(f"Map: {args.map_name}")
     print(f"Cluster: {args.cluster}")
     print(f"Smoothing factor: {args.smoothing_factor}")
+    print(f"Study name: {args.study_name}")
     print(f"Individual trainings: {individual_trainings}")
     
     try:
@@ -435,7 +423,8 @@ def main():
             map_name=args.map_name,
             cluster=args.cluster,
             smoothing_factor=args.smoothing_factor,
-            num_agents=1  # Pretrained experiments use only 1 agent
+            num_agents=1,  # Pretrained experiments use only 1 agent
+            study_name=args.study_name
         )
         
         # Add individual_trainings flag to results

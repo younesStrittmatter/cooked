@@ -95,6 +95,7 @@ def main():
     print(f"Map: {args.map_name}")
     print(f"Cluster: {args.cluster}")
     print(f"Smoothing factor: {args.smoothing_factor}")
+    print(f"Study name: {args.study_name}")
     
     try:
         # Run main analysis pipeline
@@ -102,7 +103,8 @@ def main():
             experiment_type='competition',
             map_name=args.map_name,
             cluster=args.cluster,
-            smoothing_factor=args.smoothing_factor
+            smoothing_factor=args.smoothing_factor,
+            study_name=args.study_name
             )
         
         # Generate competition-specific plots

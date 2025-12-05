@@ -9,7 +9,7 @@ Usage:
 nohup python analysis_classic.py <map_name> [options] > analysis_classic.log 2>&1 &
 
 Example:
-nohup python analysis_classic.py baseline_division_of_labor > analysis_classic.log 2>&1 &
+nohup python analysis_classic.py baseline_division_of_labor --study-name speeds > analysis_classic.log 2>&1 &
 """
 
 import sys
@@ -216,6 +216,7 @@ def main():
     print(f"Map: {args.map_name}")
     print(f"Cluster: {args.cluster}")
     print(f"Smoothing factor: {args.smoothing_factor}")
+    print(f"Study name: {args.study_name}")
 
     try:
         # Run main analysis pipeline
@@ -223,7 +224,8 @@ def main():
             experiment_type='classic',
             map_name=args.map_name,
             cluster=args.cluster,
-            smoothing_factor=args.smoothing_factor
+            smoothing_factor=args.smoothing_factor,
+            study_name=args.study_name
         )
 
         # Generate classic-specific plots
