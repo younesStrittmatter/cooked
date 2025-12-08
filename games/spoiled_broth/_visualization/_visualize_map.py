@@ -86,10 +86,11 @@ asset_map = {
 if __name__ == "__main__":
     root = Path(__file__).parent.parent
     maps = [
-        "baseline_division_of_labor.png",
-        "encouraged_division_of_labor.png",
+        # "baseline_division_of_labor_large.png",
+        # "encouraged_division_of_labor_large.png",
         "forced_division_of_labor.png",
-        "encouraged_division_of_labor_v2.png"
+        "encouraged_division_of_labor_v2.png",
+        "baseline_division_of_labor_v2.png",
     ]
     for m in maps:
         img_path = Path(__file__).parent / "maps" / f"{m}"
