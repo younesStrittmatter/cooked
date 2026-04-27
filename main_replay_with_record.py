@@ -91,6 +91,10 @@ def get_next_replay_path() -> str | None:
     return None
 
 
+
+
+
+
 def build_engine_app(replay_path: str) -> tuple[SessionApp, dict]:
     with open(replay_path, "r") as f:
         log.info(f"Using replay: {replay_path}")
@@ -270,7 +274,8 @@ def get_player_stats(player_id, replay_json):
 
 
 def main():
-    replay_path = get_next_replay_path()
+    #replay_path = get_next_replay_path()
+    replay_path = Path('analysis/replays/36972814f3bcd9b0.json')
     if not replay_path:
         print("No pending replay JSON found.")
         return

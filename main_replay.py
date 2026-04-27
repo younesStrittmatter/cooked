@@ -17,20 +17,29 @@ log.disabled = True
 path_root = Path(__file__).resolve().parent / "games/spoiled_broth"
 
 
-def get_next_replay_path():
+def get_next_replay_path(filename=None):
     replay_folder = './analysis/replays'
     # replay_folder = './replays'
     import os
-    for filename in os.listdir(replay_folder):
-        print(filename)
-        if filename.endswith(".json"):
-            csv_file = f'analysis/tick_logs/{filename.split(".")[0]}.csv'
-            if not Path(csv_file).exists():
-                return replay_folder + '/' + filename
+    if not filename:
+        for filename in os.listdir(replay_folder):
+            print(filename)
+            if filename.endswith(".json"):
+                csv_file = f'analysis/tick_logs/{filename.split(".")[0]}.csv'
+                if not Path(csv_file).exists():
+                    return replay_folder + '/' + filename
+    else:
+        csv_file = f'analysis/tick_logs/{filename.split(".")[0]}.csv'
+        if Path(csv_file).exists():
+            print(f"CSV file {csv_file} already exists. Skipping replay {filename}.")
+            return None
+        return replay_folder + '/' + filename
     return None
 
 
-replay_path = get_next_replay_path()
+#replay_path = get_next_replay_path()
+replay_path = get_next_replay_path('2e78f56a34e06665.json')
+print(replay_path)
 
 
 
