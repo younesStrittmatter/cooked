@@ -60,3 +60,46 @@ gcloud config set project <project-id>
 dev-scripts/
 ```
 
+### Giving a collaborator access (collect data + deploy new versions)
+
+Everything lives in one Google Cloud project: **`cooked-455218`** (region `us-central1`).
+A collaborator needs to be able to (1) download/manage replay data in
+`gs://replay_files/replays/` and (2) build + deploy new versions (Cloud Build,
+Artifact Registry, Cloud Run, and the asset/state buckets).
+
+The simplest way to cover all of that — including deleting/purging replays and the
+one-time IAM bindings the deploy script sets — is to add them as a project **Owner**.
+
+**1) Owner grants them access to everything (run this yourself):**
+
+```shell
+COLLAB="colleague@gmail.com"          # their Google account
+gcloud projects add-iam-policy-binding cooked-455218 \
+  --member="user:${COLLAB}" \
+  --role="roles/owner"
+```
+
+`roles/owner` already includes Storage admin (so `analysis/PURGE_PRUNED_PIDS.py`
+can delete from GCS), Service Usage (so the `-u cooked-455218` billing flag in
+`analysis/download.sh` works), and all Cloud Build / Artifact Registry / Cloud Run /
+`iam.serviceAccountUser` permissions needed by `dev-scripts/_deploy.sh`.
+
+**2) The collaborator logs in on their machine:**
+
+```shell
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project cooked-455218
+```
+
+After that they can run `analysis/download.sh` to collect data and
+`dev-scripts/deploy.sh <game>` to ship new versions.
+
+> Prefer least-privilege instead of Owner? Grant these project roles instead:
+> `roles/storage.admin`, `roles/serviceusage.serviceUsageConsumer`,
+> `roles/run.admin`, `roles/cloudbuild.builds.editor`,
+> `roles/artifactregistry.writer`, and `roles/iam.serviceAccountUser`.
+> Note the deploy script's `gcloud projects add-iam-policy-binding` steps need
+> `roles/resourcemanager.projectIamAdmin`; since they're idempotent one-time setup,
+> run one deploy yourself first so the collaborator won't need that role.
+

@@ -20,6 +20,8 @@ class RLController(Controller):
 
     def choose_action(self, observation: dict):
         # agent will be assigned by SessionApp, so we can access the game through it
+
+        
         obs_vector = game_to_vector(self.agent.game, self.agent_id)
         action, _ = self.model.predict(obs_vector, deterministic=True)
 

@@ -1,11 +1,18 @@
 import eventlet
 
 eventlet.monkey_patch()
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent
+for path in (REPO_ROOT / "engine" / "src", REPO_ROOT / "games", REPO_ROOT):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
 from engine.app.session_app import SessionApp
 from spoiled_broth.game import SpoiledBroth as Game
 from spoiled_broth.llm.llm_controler import LLMController
 from engine.extensions.renderer2d.renderer_ui import Renderer2DModule
-from pathlib import Path
 
 from spoiled_broth_experiment_settings.params import params_both, params_online
 

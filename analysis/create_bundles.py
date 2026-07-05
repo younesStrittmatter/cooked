@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import traceback
 
 import pandas as pd
 from tqdm import tqdm
@@ -13,10 +14,6 @@ DELIVER_ABLE_ITEMS = ['tomato_salad']
 ASSEMBLE_ABLE_ITEMS = ['tomato_cut', 'plate']
 
 MIN_ACTIONS = 5
-MAX_DELAY = 24 * 30  # 30 seconds at 24 ticks per second
-# LAST_ACTION_MIN_TICK = 3 * 24 * 60 - FIRST_ACTION_MAX_TICK  # 3 minutes at 12 ticks per second, minus FIRST_ACTION_MAX_TICK
-
-EXCLUDE_LATE = True
 
 SKIP_EXISTING = False
 
@@ -63,8 +60,6 @@ def bundle(
     additional_info = first_player_condition['additional_condition_info']
     condition_str = f'{first_player_str}_{last_player_str}_{additional_info}'
 
-    last_tick = int(list(tick_log_csv['tick'])[-1])
-
     path = f'./bundles/{map_name}_{condition_str}/{name}'
     if not os.path.exists(path):
         os.makedirs(path)
@@ -95,28 +90,6 @@ def bundle(
                 json.dump(exclude_dict, f)
             shutil.rmtree(path)
             return
-        if EXCLUDE_LATE:
-
-            if player_data.first_action_tick is None or player_data.first_action_tick > MAX_DELAY:
-                exclude_dict[name] = {
-                    'additional_info': additional_info,
-                    'condition_str': condition_str,
-                }
-                # store exclude dict
-                with open('excludes.json', 'w') as f:
-                    json.dump(exclude_dict, f)
-                shutil.rmtree(path)
-                return
-            if player_data.last_action_tick is None or player_data.last_action_tick < last_tick - MAX_DELAY:
-                exclude_dict[name] = {
-                    'additional_info': additional_info,
-                    'condition_str': condition_str,
-                }
-                # store exclude dict
-                with open('excludes.json', 'w') as f:
-                    json.dump(exclude_dict, f)
-                shutil.rmtree(path)
-                return
 
     for data in player_datas:
         data.csv_actions.to_csv(f'{path}/{data.player_id}_actions.csv', index=False)
@@ -182,6 +155,17 @@ class PlayerData:
                  player_condition, condition):
 
         self.intents = intents
+
+        click_ticks = [
+            intent['tick'] for intent in self.intents
+            if intent.get('action', {}).get('type') == 'click'
+        ]
+        if click_ticks:
+            self.first_click_tick = int(min(click_ticks))
+            self.last_click_tick = int(max(click_ticks))
+        else:
+            self.first_click_tick = None
+            self.last_click_tick = None
 
         self.tick_log_csv = tick_log_csv
         self.player_id = player_id
@@ -546,6 +530,7 @@ def get_cutting_board_item_exchange_instance(item_prev, item_current, tick, cutt
 
 
 def main():
+    errors = {}
     for filename in tqdm(os.listdir(REPLAY_FOLDER)):
         if filename.endswith('.json'):  # Process only JSON files
             filepath_json = os.path.join(REPLAY_FOLDER, filename)
@@ -567,8 +552,18 @@ def main():
 
             try:
                 bundle(json_data, csv_data, filename)
-            except Exception:
-                raise
+            except Exception as exc:
+                errors[filename] = {
+                    "error": repr(exc),
+                    "traceback": traceback.format_exc(limit=6),
+                }
+                print(f"Bundle failed for {filename}: {exc}. Skipping...")
+                continue
+
+    if errors:
+        with open('bundle_errors.json', 'w') as f:
+            json.dump(errors, f, indent=4)
+        print(f"Skipped {len(errors)} malformed replay/tick-log pairs. See bundle_errors.json.")
 
 
 def _is_deliverable(item):

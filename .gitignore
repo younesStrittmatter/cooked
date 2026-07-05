@@ -1,2 +1,8 @@
 .venv
 .idea
+.claude/memory/
+
+analysis/
+analysis/replays/
+analysis/tick_logs/
+analysis/*
