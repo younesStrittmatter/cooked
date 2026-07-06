@@ -1,0 +1,51 @@
+NUM_ENVS: 8
+INNER_SECONDS: 180
+TRAIN_BATCH_SIZE: 4000
+SGD_MINIBATCH_SIZE: 500
+NUM_SGD_ITER: 10
+NUM_EPOCHS: 1000
+NUM_AGENTS: 2
+AGENT_TO_TRAIN: None
+SHOW_EVERY_N_EPOCHS: 1
+SAVE_EVERY_N_EPOCHS: 375
+LR: 0.0003
+MAP_NR: encouraged_division_of_labor_large
+REWARD_WEIGHTS: {'ai_rl_1': (1.0, 0.0), 'ai_rl_2': (1.0, 0.0)}
+GAME_VERSION: classic
+COLLISION_ENABLED: True
+GRID_SIZE: (10, 10)
+PAYOFF_MATRIX: [1, 1, -2]
+WALKING_SPEEDS: {'ai_rl_1': 0.4, 'ai_rl_2': 1.0}
+CUTTING_SPEEDS: {'ai_rl_1': 1.0, 'ai_rl_2': 0.2}
+INITIAL_SEED: 0
+WAIT_FOR_COMPLETION: True
+RANDOM_INITIAL_STATE: false
+SAVE_DIR: /mnt/lustre/home/samuloza/data/samuel_lozano/cooked/classic_collision/empty_init/map_encouraged_division_of_labor_large/synergy_1.35/specialized_0.25
+CHECKPOINTS: None
+PENALTIES_CFG: {'do_nothing': 1.0, 'useless_action': 5.0, 'destructive_action': 10.0, 'inaccessible_tile': 10.0, 'blocked': 5.0, 'collision': 0.0, 'specialization_penalty_scale': 0.3517063297879501, 'specialization_theta': 3.0, 'collision_harshness': 10.0}
+REWARDS_CFG: {'raw_food': 1.0, 'plate': 1.0, 'counter': 0.0, 'cut': 4.0, 'salad': 5.0, 'deliver': 10.0}
+REFERENCE_REWARD_CFG: {'enabled': True, 'synergy_scaling_factor': 1.35, 'base_synergy_scaling_factor': 1.35, 'cooperation_factor': 1.4068253191518003, 'kappa': 4.8, 'activate_synergy_positive': False}
+INTERMEDIATE_REWARD_DECAY_CFG: {'enabled': False, 'decay_start_episode': 200, 'alpha': 0.05, 'intermediate_rewards': ['raw_food', 'plate', 'counter', 'cut', 'salad']}
+SOLO_BASELINES: {'ai_rl_1': 11.965811965811971, 'ai_rl_2': 10.256410256410259}
+ALLOW_BLOCKED: False
+NUM_UPDATES: 10
+GAMMA: 0.9
+GAE_LAMBDA: 0.95
+ENT_COEF: 0.001
+CLIP_EPS: 0.3
+VF_COEF: 1.0
+GRAD_CLIP: 0.5
+FCNET_HIDDENS: [1024, 512, 256]
+FCNET_ACTIVATION: tanh
+NUM_CPUS: 24
+NUM_GPUS: 1.0
+NUM_ENV_WORKERS: 8
+NUM_LEARNER_WORKERS: 1
+ROLLOUT_FRAGMENT_LENGTH: auto
+BATCH_MODE: complete_episodes
+COMPRESS_OBSERVATIONS: False
+NUM_CPUS_PER_WORKER: 1
+NUM_GPUS_PER_WORKER: 0
+NUM_CPUS_FOR_DRIVER: 1
+PATH: /mnt/lustre/home/samuloza/data/samuel_lozano/cooked/classic_collision/empty_init/map_encouraged_division_of_labor_large/synergy_1.35/specialized_0.25/Training_2026-05-12_23-01-18
+NUM_EPISODES: 1999
