@@ -1,0 +1,1 @@
+No checkpoint specified, training from scratch.
